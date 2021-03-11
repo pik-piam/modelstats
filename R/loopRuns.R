@@ -19,7 +19,7 @@ loopRuns <- function(dir) {
   
   a <- file.info(dir)
   a <- a[a[,"isdir"]==TRUE,]
-  dir <- rownames(a[order(a[,"mtime"],decreasing = T),])
+  dir <- rownames(a[order(a[,"mtime"],decreasing = F),])
   
   for (i in dir ) {
     
