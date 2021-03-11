@@ -11,8 +11,16 @@
 
 loopRuns <- function(dir) {
 
-  cat("Folder                                       Conv                Last10             Iter              modelstat        RunType\n")
-
+  if (!file.exists("/p")) {
+    cat("Folder                                       Conv                Last10             Iter              modelstat        RunType\n")
+  } else {
+    cat("Folder                                       Conv                 Last10              Iter               modelstat         RunType          JobInSlurm \n")
+  }
+  
+  a <- file.info(dir)
+  a <- a[a[,"isdir"]==TRUE,]
+  dir <- rownames(a[order(a[,"mtime"],decreasing = T),])
+  
   for (i in dir ) {
     
     out <- printOutput(getRunStatus(i))
