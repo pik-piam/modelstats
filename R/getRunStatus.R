@@ -22,7 +22,7 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
     
     out[i,"jobInSLURM"] <- foundInSlurm(i)
     
-    if (!out[i,"JobinSLURM"] & onlyrunning) {
+    if (!out[i,"jobInSLURM"] & onlyrunning) {
      out <- out[setdiff(rownames(out),i),]
      next
     }
