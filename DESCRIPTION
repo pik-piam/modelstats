@@ -1,0 +1,24 @@
+Package: modelstats
+Type: Package
+Title: Run Analysis Tools
+Version: 0.0.1
+Date: 2021-03-02
+Authors@R: c(person("Anastasis", "Giannousakis", email = "giannou@pik-potsdam.de", role = c("aut","cre")))
+Description: A collection of tools which allow to analyze model runs.
+Imports: 
+    dplyr,
+    quitte,
+    crayon,
+    desc,
+    gdx,
+    iamc,
+    lucode2,
+    usethis
+Suggests: 
+    magclass,
+    covr
+URL: https://github.com/pik-piam/modelstats
+BugReports: https://github.com/pik-piam/modelstats/issues
+Encoding: UTF-8
+License: LGPL-3
+RoxygenNote: 7.1.0

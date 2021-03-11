@@ -1,0 +1,8 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.git$
+^.*\.zenodo.json$
+^\.buildlibrary$
+^\.github$
+^codecov\.yml$
+R/updateReadme.R
