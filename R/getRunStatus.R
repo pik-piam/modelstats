@@ -36,8 +36,8 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
     
     if (file.exists(fle)) {
       load(fle)
-      if(any(grepl("config",names(stats)))) out[i,"RunType"] <- stats["config"]["gms"]["optimization"]
-      if(any(grepl("modelstat",names(stats)))) out[i,"modelstat"] <- stats["modelstat"]
+      if(any(grepl("config",names(stats)))) out[i,"RunType"] <- stats[["config"]][["gms"]][["optimization"]]
+      if(any(grepl("modelstat",names(stats)))) out[i,"modelstat"] <- stats[["modelstat"]]
     } else {
       if (file.exists(gdx)) out[i,"modelstat"] <- as.numeric(readGDX(gdx,"o_modelstat", format="first_found"))
     }
