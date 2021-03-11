@@ -12,14 +12,14 @@
 loopRuns <- function(dir) {
 
   if (!file.exists("/p")) {
-    cat("Folder                                       Conv                Last10             Iter              modelstat        RunType\n")
+    cat("Folder                                       Conv                     Iter              modelstat        RunType\n")
   } else {
-    cat("Folder                                       Conv                 Last10              Iter               modelstat         RunType          JobInSlurm \n")
+    cat("Folder                                            Conv                Iter               modelstat         RunType          JobInSlurm \n")
   }
   
   a <- file.info(dir)
   a <- a[a[,"isdir"]==TRUE,]
-  dir <- rownames(a[order(a[,"mtime"],decreasing = F),])
+  dir <- rownames(a[order(a[,"atime"],decreasing = T),])
   
   for (i in dir ) {
     
@@ -28,6 +28,8 @@ loopRuns <- function(dir) {
       cat(red(out))
     } else if (grepl(" converged",out)){
       cat(green(out))
+    } else if (all(grepl(" NA ",out) & grepl("FALSE",out))) {
+      cat(red(out))
     } else {
       cat(blue(out))
     } 

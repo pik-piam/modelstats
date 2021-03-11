@@ -26,7 +26,7 @@ printOutput<-function(string){
   for (i in 1:length(string)) {
     out <- paste0(formatstr(unname(string)[[i]],i+15),out)
   }
- return(paste0(formatstr(rownames(string),45),out,"\n")) 
+ return(paste0(formatstr(rownames(string),50),out,"\n")) 
 #  if(is.data.frame(string)) print(unname(string))
 
   

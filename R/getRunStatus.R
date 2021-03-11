@@ -45,7 +45,7 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
       load(fle)
       if(any(grepl("config",names(stats)))) {
         out[i,"RunType"] <- stats[["config"]][["gms"]][["optimization"]]
-      } else {
+      } else if (file.exists(fulllst)) {
         out[i,"RunType"] <- sub("         !! def = nash","",sub("^ .*.ion  ","",system(paste0("grep 'setGlobal optimization  ' ",fulllst),intern=TRUE)))
       }
       if(any(grepl("modelstat",names(stats)))) out[i,"modelstat"] <- stats[["modelstat"]]
@@ -67,13 +67,15 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
         totNoOfIter <- tail(system(paste0("grep 'cm_iteration_max = [1-9].*.;$' ",fulllst),intern=TRUE),n=1)
         if (length(totNoOfIter)>0) out[i,"Iter"] <- paste0(out[i,"Iter"],"/",sub(";","",sub("^.*.= ","",totNoOfIter)))
         
-        iters <- suppressWarnings(system(paste0("grep 'PARAMETER o_modelstat          =           ' ",fulllst),intern=TRUE))
-        out[i,"Last10"]<-substrRight(paste(as.numeric(sub("critical solver status for solution","",sub("^.*.=","",iters))),collapse=""),10)
+#        iters <- suppressWarnings(system(paste0("grep 'PARAMETER o_modelstat          =           ' ",fulllst),intern=TRUE))
+#        out[i,"Last10"]<-substrRight(paste(as.numeric(sub("critical solver status for solution","",sub("^.*.=","",iters))),collapse=""),10)
         
         if (length(system(paste0("grep 'Convergence threshold' ",fulllst),intern=TRUE))>1) {
           out[i,"Conv"] <- "converged"
-        } else {
+        } else if (length(system(paste0("grep 'Nash did NOT' ",fulllst),intern=TRUE))>1) {
           out[i,"Conv"] <- "not_converged"
+        } else {
+          out[i,"Conv"] <- "NA"
         } 
       } else {
         out[i,"Conv"] <- "NA"
