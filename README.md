@@ -1,15 +1,12 @@
-# Code Manipulation and Analysis Tools
+# Run Analysis Tools
 
-R package **modelstats**, version **0.10.0**
+R package **modelstats**, version **0.0.1.9001**
 
-
-<!-- badges: start -->
-[![CRAN status](https://www.r-pkg.org/badges/version/modelstats)](https://cran.r-project.org/package=modelstats) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4389418.svg)](https://doi.org/10.5281/zenodo.4389418)  [![R build status](https://github.com/pik-piam/modelstats/workflows/check/badge.svg)](https://github.com/pik-piam/modelstats/actions) [![Codecov test coverage](https://codecov.io/gh/pik-piam/modelstats/branch/master/graph/badge.svg)](https://codecov.io/gh/pik-piam/modelstats?branch=master)
-<!-- badges: end -->
+[![CRAN status](https://www.r-pkg.org/badges/version/modelstats)](https://cran.r-project.org/package=modelstats)   [![R build status](https://github.com/pik-piam/modelstats/workflows/check/badge.svg)](https://github.com/pik-piam/modelstats/actions) [![codecov](https://codecov.io/gh/pik-piam/modelstats/branch/master/graph/badge.svg)](https://codecov.io/gh/pik-piam/modelstats)
 
 ## Purpose and Functionality
 
-A collection of tools which allow to manipulate and analyze code.
+A collection of tools which allow to analyze model runs.
 
 
 ## Installation
@@ -35,24 +32,22 @@ update.packages()
 
 ## Questions / Problems
 
-In case of questions / problems please contact Jan Philipp Dietrich <dietrich@pik-potsdam.de>.
+In case of questions / problems please contact Anastasis Giannousakis <giannou@pik-potsdam.de>.
 
 ## Citation
 
 To cite package **modelstats** in publications use:
 
-Dietrich J, Klein D, Giannousakis A, Bonsch M, Bodirsky B, Baumstark L (2021). _modelstats: Code Manipulation and Analysis Tools_. doi:
-10.5281/zenodo.4389418 (URL: https://doi.org/10.5281/zenodo.4389418), R package version 0.10.0, <URL: https://github.com/pik-piam/modelstats>.
+Giannousakis A (2021). _modelstats: Run Analysis Tools_. R package version 0.0.1.9001, <URL: https://github.com/pik-piam/modelstats>.
 
 A BibTeX entry for LaTeX users is
 
  ```latex
 @Manual{,
-  title = {modelstats: Code Manipulation and Analysis Tools},
-  author = {Jan Philipp Dietrich and David Klein and Anastasis Giannousakis and Markus Bonsch and Benjamin Leon Bodirsky and Lavinia Baumstark},
+  title = {modelstats: Run Analysis Tools},
+  author = {Anastasis Giannousakis},
   year = {2021},
-  note = {R package version 0.10.0},
-  doi = {10.5281/zenodo.4389418},
+  note = {R package version 0.0.1.9001},
   url = {https://github.com/pik-piam/modelstats},
 }
 ```

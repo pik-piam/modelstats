@@ -3,6 +3,8 @@
 #' Returns the current status of a run or a vector of runs
 #'
 #' @param dir Path to the folder(s) where the run(s) is(are) performed
+#' @param sort how to sort (nf=newest first)
+#' @param onlyrunning show only currently running runs
 #'
 #'
 #' @author Anastasis Giannousakis
@@ -30,10 +32,12 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
     fulllst <- paste0(i,"/full.lst")
     fulllog <- paste0(i,"/full.log")
     
+    stats <- NULL
+    
     if (file.exists(fle)) {
       load(fle)
-      if(any(grepl("config",names(stats)))) out[i,"RunType"] <- stats$config$gms$optimization
-      if(any(grepl("modelstat",names(stats)))) out[i,"modelstat"] <- stats$modelstat
+      if(any(grepl("config",names(stats)))) out[i,"RunType"] <- stats["config"]["gms"]["optimization"]
+      if(any(grepl("modelstat",names(stats)))) out[i,"modelstat"] <- stats["modelstat"]
     } else {
       if (file.exists(gdx)) out[i,"modelstat"] <- as.numeric(readGDX(gdx,"o_modelstat", format="first_found"))
     }

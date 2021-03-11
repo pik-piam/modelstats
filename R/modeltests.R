@@ -28,6 +28,7 @@ modeltests<-function(dir=".",gitdir=NULL, model=NULL,user=NULL){
     fulllst <- paste0(dir,"full.lst")
     out <- NULL
 
+    stats<-NULL
     if (file.exists(fle)) {
       load(fle)
       if(exists("stats")) out <- stats$modelstat
