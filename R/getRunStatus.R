@@ -50,7 +50,7 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
     }
       
     if (file.exists(fulllst)) {
-      if (!is.na(out[i,"RunType"]))
+      if (length(out[i,"RunType"])>0)
       if (out[i,"RunType"]=="nash") {
         if (length(system(paste0("grep 'Convergence threshold' ",fulllst),intern=TRUE))>1) {
           out[i,"Conv"] <- "converged"
