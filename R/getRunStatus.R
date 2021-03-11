@@ -9,9 +9,15 @@
 #'
 #' @author Anastasis Giannousakis
 #' @importFrom gdx readGDX
+#' @importFrom utils tail
 #' @export
 getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
   
+  substrRight <- function(x, n){
+    substr(x, nchar(x)-n+1, nchar(x))
+  }
+  
+  onCluster <- file.exists("/p")
   out<-data.frame()
   
   a <- file.info(dir)
@@ -20,9 +26,9 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
   
   for (i in dir) {
     
-    out[i,"jobInSLURM"] <- foundInSlurm(i)
+    if (onCluster) out[i,"jobInSLURM"] <- foundInSlurm(i)
     
-    if (!out[i,"jobInSLURM"] & onlyrunning) {
+    if (onCluster) if (!out[i,"jobInSLURM"] & onlyrunning) {
      out <- out[setdiff(rownames(out),i),]
      next
     }
@@ -51,7 +57,14 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
       
     if (file.exists(fulllst)) {
       if (length(out[i,"RunType"])>0)
-      if (out[i,"RunType"]=="nash") {
+      if (out[i,"RunType"]=="nash" & !is.na(out[i,"RunType"])) {
+        
+        totNoOfIter <- tail(system(paste0("grep 'cm_iteration_max = [1-9].*.;$' ",fulllst),intern=TRUE),n=1)
+        if (length(totNoOfIter)>0) out[i,"Iter"] <- paste0(out[i,"Iter"],"/",sub(";","",sub("^.*.= ","",totNoOfIter)))
+        
+        iters <- suppressWarnings(system(paste0("grep 'PARAMETER o_modelstat          =           ' ",fulllst),intern=TRUE))
+        out[i,"Last10"]<-substrRight(paste(as.numeric(sub("critical solver status for solution","",sub("^.*.=","",iters))),collapse=""),10)
+        
         if (length(system(paste0("grep 'Convergence threshold' ",fulllst),intern=TRUE))>1) {
           out[i,"Conv"] <- "converged"
         } else {
