@@ -23,6 +23,11 @@ printOutput<-function(string){
   
   if (length(string)==0) return("")
   out<-""
+  templ <- data.frame("RunType"="NA", "modelstat"="NA",   "Iter"="NA",      "Conv"="NA",stringsAsFactors = F)
+  if (file.exists("/p")) templ[,"JobInSlurm"] <- "NA" 
+  templ[,names(string)]<-string
+  rownames(templ) <- rownames(string)
+  string <- templ
   for (i in 1:length(string)) {
     out <- paste0(formatstr(unname(string)[[i]],i+15),out)
   }
