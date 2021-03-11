@@ -39,10 +39,15 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
     fulllog <- paste0(i,"/full.log")
     
     stats <- NULL
+    runtype <- NULL
     
     if (file.exists(fle)) {
       load(fle)
-      if(any(grepl("config",names(stats)))) out[i,"RunType"] <- stats[["config"]][["gms"]][["optimization"]]
+      if(any(grepl("config",names(stats)))) {
+        out[i,"RunType"] <- stats[["config"]][["gms"]][["optimization"]]
+      } else {
+        out[i,"RunType"] <- sub("         !! def = nash","",sub("^ .*.ion  ","",system(paste0("grep 'setGlobal optimization  ' ",fulllst),intern=TRUE)))
+      }
       if(any(grepl("modelstat",names(stats)))) out[i,"modelstat"] <- stats[["modelstat"]]
     } else {
       if (file.exists(gdx)) out[i,"modelstat"] <- as.numeric(readGDX(gdx,"o_modelstat", format="first_found"))
@@ -56,7 +61,7 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
     }
       
     if (file.exists(fulllst)) {
-      if (length(out[i,"RunType"])>0)
+      if (length(out[i,"RunType"])>0) 
       if (out[i,"RunType"]=="nash" & !is.na(out[i,"RunType"])) {
         
         totNoOfIter <- tail(system(paste0("grep 'cm_iteration_max = [1-9].*.;$' ",fulllst),intern=TRUE),n=1)
