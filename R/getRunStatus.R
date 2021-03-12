@@ -48,22 +48,25 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
 #      if(any(grepl("config",names(stats)))) {
         out[i,"RunType"] <- cfg[["gms"]][["optimization"]]
         if (cfg[["gms"]][["CES_parameters"]]=="calibrate") out[i,"RunType"]<-paste0("Calib_",out[i,"RunType"])
+        totNoOfIter <- cfg[["gms"]][["cm_iteration_max"]]
       } else if (file.exists(fulllst)) {
         out[i,"RunType"] <- sub("         !! def = nash","",sub("^ .*.ion  ","",system(paste0("grep 'setGlobal optimization  ' ",fulllst),intern=TRUE)))
         chck <- sub("       !! def = load","",sub("^ .*.ers  ","",system(paste0("grep 'setglobal CES_parameters  ' ",fulllst),intern=TRUE)))
         if (chck=="calibrate") out[i,"RunType"]<-paste0("Calib_",out[i,"RunType"])
       }
       
-      if (file.exists(fle)) {
-        if(any(grepl("modelstat",names(stats)))) out[i,"modelstat"] <- stats[["modelstat"]]
-      } else {
+    # modelstat
+    if (file.exists(fle)) {
+      if(any(grepl("modelstat",names(stats)))) out[i,"modelstat"] <- stats[["modelstat"]]
+    } else {
       if (file.exists(gdx)) out[i,"modelstat"] <- as.numeric(readGDX(gdx,"o_modelstat", format="first_found"))
-      }
+    }
     
-    
+    # Iter
     if (file.exists(fulllog)) {
       suppressWarnings(try(loop <- sub("^.*.= ","",system(paste0("grep 'LOOPS' ",fulllog," | tail -1"),intern=TRUE)),silent = TRUE))
       if (length(loop)>0) out[i,"Iter"] <- loop
+      if (out[i,"RunType"]!="nash" & length(totNoOfIter)>0) out[i,"Iter"] <- paste0(out[i,"Iter"],"/",sub(";","",sub("^.*.= ","",totNoOfIter)))
     } else {
       out[i,"Iter"] <- "NA"
     }
