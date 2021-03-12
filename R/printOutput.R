@@ -12,6 +12,7 @@
 printOutput<-function(string){
 
   formatstr <- function(x,len) {
+    if (nchar(x))
     if (nchar(x) > len) {
       return(substr(x,1,len))
     } else {
@@ -24,7 +25,7 @@ printOutput<-function(string){
   if (length(string)==0) return("")
   out<-""
   templ <- data.frame("RunType"="NA", "modelstat"="NA",   "Iter"="NA",      "Conv"="NA",stringsAsFactors = F)
-  if (file.exists("/p")) templ <- data.frame("RunType"="NA", "modelstat"="NA",   "Iter"="NA",   "Conv"="NA","JobInSlurm" = "NA" ,stringsAsFactors = F)
+  if (file.exists("/p")) templ <- data.frame("RunType"="NA", "modelstat"="NA",   "Iter"="NA",   "Conv"="NA","JobInSLURM" = "NA" ,stringsAsFactors = F)
   templ[,names(string)] <- string
   rownames(templ) <- rownames(string)
   string <- templ

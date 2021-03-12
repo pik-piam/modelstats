@@ -72,24 +72,24 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
       out[i,"Iter"] <- "NA"
     }
     
+    # Conv  
+    if (file.exists(fulllst)) {      if (length(out[i,"RunType"])>0)
       
-    if (file.exists(fulllst)) {
-      if (length(out[i,"RunType"])>0) 
       if (grepl("nash",out[i,"RunType"]) & !is.na(out[i,"RunType"])) {
         
         totNoOfIter <- tail(system(paste0("grep 'cm_iteration_max = [1-9].*.;$' ",fulllst),intern=TRUE),n=1)
         if (length(totNoOfIter)>0) out[i,"Iter"] <- paste0(out[i,"Iter"],"/",sub(";","",sub("^.*.= ","",totNoOfIter)))
-        
-#        iters <- suppressWarnings(system(paste0("grep 'PARAMETER o_modelstat          =           ' ",fulllst),intern=TRUE))
-#        out[i,"Last10"]<-substrRight(paste(as.numeric(sub("critical solver status for solution","",sub("^.*.=","",iters))),collapse=""),10)
         
         if (length(system(paste0("grep 'Convergence threshold' ",fulllst),intern=TRUE))>1) {
           out[i,"Conv"] <- "converged"
         } else if (length(system(paste0("grep 'Nash did NOT' ",fulllst),intern=TRUE))>1) {
           out[i,"Conv"] <- "not_converged"
         } else {
-          out[i,"Conv"] <- "NA"
-        } 
+#          iters <- suppressWarnings(system(paste0("grep -A 15 'PARAMETER p80_repy  sum' ",fulllst),intern=TRUE))
+#          iters <- grep("^$|--|modelstat",iters,invert = TRUE,value=TRUE)
+#          iters <- gsub("7","2",iters)
+#          out[i,"Conv"]<-substrRight(paste(as.numeric(sub("critical solver status for solution","",sub("^.*.=","",iters))),collapse=""),10)
+        }
       } else {
         out[i,"Conv"] <- "NA"
       }
