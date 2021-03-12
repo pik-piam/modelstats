@@ -12,7 +12,7 @@
 printOutput<-function(string){
 
   formatstr <- function(x,len) {
-    if (nchar(x))
+    if (is.na(x)) return("")
     if (nchar(x) > len) {
       return(substr(x,1,len))
     } else {
