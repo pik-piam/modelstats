@@ -17,6 +17,9 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
     substr(x, nchar(x)-n+1, nchar(x))
   }
   
+  p3<-function(x) paste(x[[3]])
+  rem<-function(x) return(x[-which(x=="")])
+  
   onCluster <- file.exists("/p")
   out<-data.frame()
   
@@ -45,7 +48,6 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
     # RunType
     if (file.exists(cfgf)) {
       load(cfgf)
-#      if(any(grepl("config",names(stats)))) {
         out[i,"RunType"] <- cfg[["gms"]][["optimization"]]
         if (cfg[["gms"]][["CES_parameters"]]=="calibrate") out[i,"RunType"]<-paste0("Calib_",out[i,"RunType"])
         totNoOfIter <- cfg[["gms"]][["cm_iteration_max"]]
@@ -85,10 +87,17 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
         } else if (length(system(paste0("grep 'Nash did NOT' ",fulllst),intern=TRUE))>1) {
           out[i,"Conv"] <- "not_converged"
         } else {
-#          iters <- suppressWarnings(system(paste0("grep -A 15 'PARAMETER p80_repy  sum' ",fulllst),intern=TRUE))
-#          iters <- grep("^$|--|modelstat",iters,invert = TRUE,value=TRUE)
-#          iters <- gsub("7","2",iters)
-#          out[i,"Conv"]<-substrRight(paste(as.numeric(sub("critical solver status for solution","",sub("^.*.=","",iters))),collapse=""),10)
+          iters <- suppressWarnings(system(paste0("grep -A 15 'PARAMETER p80_repy  sum' ",fulllst),intern=TRUE))
+          if (length(iters)>0) {
+            iters <- grep("^$|--|modelstat",iters,invert = TRUE,value=TRUE)
+     
+              iters<-tail(sapply(iters, strsplit, split = " "),n=120)
+              
+              b<-paste0(sapply(iters,rem)[3,],collapse="")
+              iters<-gsub(" |0|\\.","",b[[1]])
+              out[i,"Conv"]<-substr(iters,nchar(iters)-15,nchar(iters)) # a function is needed that extracts a summary of each iteration, not just the last one
+             
+          }
         }
       } else {
         out[i,"Conv"] <- "NA"
