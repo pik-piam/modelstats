@@ -66,7 +66,7 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
     if (file.exists(fulllog)) {
       suppressWarnings(try(loop <- sub("^.*.= ","",system(paste0("grep 'LOOPS' ",fulllog," | tail -1"),intern=TRUE)),silent = TRUE))
       if (length(loop)>0) out[i,"Iter"] <- loop
-      if (out[i,"RunType"]!="nash" & length(totNoOfIter)>0) out[i,"Iter"] <- paste0(out[i,"Iter"],"/",sub(";","",sub("^.*.= ","",totNoOfIter)))
+      if (!out[i,"RunType"]%in%c("nash","Calib_nash") & length(totNoOfIter)>0) out[i,"Iter"] <- paste0(out[i,"Iter"],"/",sub(";","",sub("^.*.= ","",totNoOfIter)))
     } else {
       out[i,"Iter"] <- "NA"
     }
@@ -74,7 +74,7 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
       
     if (file.exists(fulllst)) {
       if (length(out[i,"RunType"])>0) 
-      if (out[i,"RunType"]=="nash" & !is.na(out[i,"RunType"])) {
+      if (grepl("nash",out[i,"RunType"]) & !is.na(out[i,"RunType"])) {
         
         totNoOfIter <- tail(system(paste0("grep 'cm_iteration_max = [1-9].*.;$' ",fulllst),intern=TRUE),n=1)
         if (length(totNoOfIter)>0) out[i,"Iter"] <- paste0(out[i,"Iter"],"/",sub(";","",sub("^.*.= ","",totNoOfIter)))
