@@ -24,8 +24,8 @@ printOutput<-function(string){
   if (length(string)==0) return("")
   out<-""
   templ <- data.frame("RunType"="NA", "modelstat"="NA",   "Iter"="NA",      "Conv"="NA",stringsAsFactors = F)
-  if (file.exists("/p")) templ <- data.frame("RunType"="NA", "modelstat"="NA",   "Iter"="NA",      "Conv"="NA","JobInSlurm" = "NA" ,stringsAsFactors = F)
-  templ[,names(string)]<-string
+  if (file.exists("/p")) templ <- data.frame("RunType"="NA", "modelstat"="NA",   "Iter"="NA",   "Conv"="NA","JobInSlurm" = "NA" ,stringsAsFactors = F)
+  templ[,names(string)] <- string
   rownames(templ) <- rownames(string)
   string <- templ
   for (i in 1:length(string)) {

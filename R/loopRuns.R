@@ -12,11 +12,11 @@
 loopRuns <- function(dir) {
 
   if (!file.exists("/p")) {
-    cat("Folder                                            Conv              Iter               modelstat        RunType\n")
+    cat("Folder                                            Conv               Iter              modelstat        RunType\n")
   } else {
-    cat("Folder                                            Conv                Iter               modelstat         RunType          JobInSlurm \n")
+    cat("Folder                                            JobInSlurm     NoClueWhatThisColumnIs    Conv               Iter              modelstat        RunType \n")
   }
-  
+ 
   a <- file.info(dir)
   a <- a[a[,"isdir"]==TRUE,]
   dir <- rownames(a[order(a[,"atime"],decreasing = T),])
