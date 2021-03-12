@@ -33,6 +33,7 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
      next
     }
     
+    cfgf <- paste0(i,"/config.Rdata")
     fle <- paste0(i,"/runstatistics.rda")
     gdx <- paste0(i,"/fulldata.gdx")
     fulllst <- paste0(i,"/full.lst")
@@ -41,17 +42,24 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
     stats <- NULL
     runtype <- NULL
     
-    if (file.exists(fle)) {
-      load(fle)
-      if(any(grepl("config",names(stats)))) {
-        out[i,"RunType"] <- stats[["config"]][["gms"]][["optimization"]]
+    # RunType
+    if (file.exists(cfgf)) {
+      load(cfgf)
+#      if(any(grepl("config",names(stats)))) {
+        out[i,"RunType"] <- cfg[["gms"]][["optimization"]]
+        if (cfg[["gms"]][["CES_parameters"]]=="calibrate") out[i,"RunType"]<-paste0("Calib_",out[i,"RunType"])
       } else if (file.exists(fulllst)) {
         out[i,"RunType"] <- sub("         !! def = nash","",sub("^ .*.ion  ","",system(paste0("grep 'setGlobal optimization  ' ",fulllst),intern=TRUE)))
+        chck <- sub("       !! def = load","",sub("^ .*.ers  ","",system(paste0("grep 'setglobal CES_parameters  ' ",fulllst),intern=TRUE)))
+        if (chck=="calibrate") out[i,"RunType"]<-paste0("Calib_",out[i,"RunType"])
       }
-      if(any(grepl("modelstat",names(stats)))) out[i,"modelstat"] <- stats[["modelstat"]]
-    } else {
+      
+      if (file.exists(fle)) {
+        if(any(grepl("modelstat",names(stats)))) out[i,"modelstat"] <- stats[["modelstat"]]
+      } else {
       if (file.exists(gdx)) out[i,"modelstat"] <- as.numeric(readGDX(gdx,"o_modelstat", format="first_found"))
-    }
+      }
+    
     
     if (file.exists(fulllog)) {
       suppressWarnings(try(loop <- sub("^.*.= ","",system(paste0("grep 'LOOPS' ",fulllog," | tail -1"),intern=TRUE)),silent = TRUE))
@@ -59,6 +67,7 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
     } else {
       out[i,"Iter"] <- "NA"
     }
+    
       
     if (file.exists(fulllst)) {
       if (length(out[i,"RunType"])>0) 
@@ -84,8 +93,8 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
     }
     
   }
-   return(out)
-
+  
+  return(out)
 
 }
 
