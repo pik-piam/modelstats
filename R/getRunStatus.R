@@ -2,7 +2,7 @@
 #'
 #' Returns the current status of a run or a vector of runs
 #'
-#' @param dir Path to the folder(s) where the run(s) is(are) performed
+#' @param mydir Path to the folder(s) where the run(s) is(are) performed
 #' @param sort how to sort (nf=newest first)
 #' @param onlyrunning show only currently running runs
 #'
@@ -11,7 +11,7 @@
 #' @importFrom gdx readGDX
 #' @importFrom utils tail
 #' @export
-getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
+getRunStatus<-function(mydir=dir(),sort="nf",onlyrunning=FALSE){
   
   substrRight <- function(x, n){
     substr(x, nchar(x)-n+1, nchar(x))
@@ -20,14 +20,19 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
   p3<-function(x) paste(x[[3]])
   rem<-function(x) return(x[-which(x=="")])
   
+  mydir <- normalizePath(mydir)
+  
   onCluster <- file.exists("/p")
   out<-data.frame()
   
-  a <- file.info(dir)
+  a <- file.info(mydir)
   a <- a[a[,"isdir"]==TRUE,]
-  if (sort=="nf") dir <- rownames(a[order(a[,"mtime"],decreasing = T),])
+  if (sort=="nf") mydir <- rownames(a[order(a[,"mtime"],decreasing = T),])
   
-  for (i in dir) {
+  for (i in mydir) {
+    
+    ii <- i
+    i <- sub(paste0(dirname(i),"/"),"",i)
     
     if (onCluster) out[i,"jobInSLURM"] <- foundInSlurm(i)
     
@@ -36,11 +41,11 @@ getRunStatus<-function(dir=".",sort="nf",onlyrunning=FALSE){
      next
     }
     
-    cfgf <- paste0(i,"/config.Rdata")
-    fle <- paste0(i,"/runstatistics.rda")
-    gdx <- paste0(i,"/fulldata.gdx")
-    fulllst <- paste0(i,"/full.lst")
-    fulllog <- paste0(i,"/full.log")
+    cfgf <- paste0(ii,"/config.Rdata")
+    fle <- paste0(ii,"/runstatistics.rda")
+    gdx <- paste0(ii,"/fulldata.gdx")
+    fulllst <- paste0(ii,"/full.lst")
+    fulllog <- paste0(ii,"/full.log")
     
     stats <- NULL
     runtype <- NULL
