@@ -6,7 +6,7 @@
 #'
 #'
 #' @author Anastasis Giannousakis
-#' @importFrom crayon red blue green
+#' @importFrom crayon red blue green underline
 #' @export
 
 loopRuns <- function(mydir) {
@@ -29,7 +29,7 @@ loopRuns <- function(mydir) {
     if (grepl("not_converged",out)) {
       cat(red(out))
     } else if (grepl(" converged",out)){
-      cat(green(out))
+      cat(underline(green(out)))
     } else if (all(grepl(" NA ",out) & grepl("FALSE",out))) {
       cat(red(out))
     } else {
