@@ -30,14 +30,7 @@ choose_folder <- function(folder,title="Please choose a folder") {
     cat("\nInsert the search pattern or the regular expression: ")
     pattern <- get_line()
     id <- grep(pattern=pattern, dirs[-1])
-    # lists all chosen directories and ask for the confirmation of the made choice
-    cat("\n\nYou have chosen the following directories:\n")
-    cat(paste(1:length(id), dirs[id+1], sep=": "), sep="\n")
-    cat("\nAre you sure these are the right directories? (y/n): ")
-    answer <- get_line()
-    if(answer=="y"){
-      return(dirs[id+1])
-    } else choose_folder(folder,title)
+    return(dirs[id+1])
     # 
   } else if(length(identifier==1) && identifier==(length(dirs)+2)){
     return("exit")

@@ -6,8 +6,6 @@
 #'
 #'
 #' @author Anastasis Giannousakis
-#' @importFrom gdx readGDX
-#' @importFrom utils tail
 #' @export
 printOutput<-function(string){
 
@@ -25,7 +23,7 @@ printOutput<-function(string){
   if (length(string)==0) return("")
   out<-""
   templ <- data.frame("RunType"="NA", "modelstat"="NA",   "Iter"="NA",      "Conv"="NA",stringsAsFactors = F)
-  if (file.exists("/p")) templ <- data.frame("RunType"="NA", "modelstat"="NA",   "Iter"="NA",   "Conv"="NA","JobInSLURM" = "NA" ,stringsAsFactors = F)
+  if (file.exists("/p")) templ <- data.frame("jobInSLURM" = "NA" ,"RunType"="NA", "modelstat"="NA",   "Iter"="NA",   "Conv"="NA", stringsAsFactors = F)
   templ[,names(string)] <- string
   rownames(templ) <- rownames(string)
   string <- templ
