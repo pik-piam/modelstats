@@ -12,7 +12,10 @@ foundInSlurm<-function(dir="."){
 
   if (grepl("^C_",dir) ) {
     dir <- sub("-rem-[1-9]$","",dir)
+  } else {
+    dir <- normalizePath(dir)
   }
+  
   
   if (any(grepl(dir,system(paste0("squeue -h -o '%T %j %Z'"),intern=TRUE) )) ) {
     return(TRUE)
