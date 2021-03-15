@@ -21,7 +21,7 @@ loopRuns <- function(mydir) {
   if (!file.exists("/p")) {
     cat("Folder                                            Conv               Iter              modelstat        RunType\n")
   } else {
-    cat("Folder                                            JobInSlurm      Conv               Iter              modelstat        RunType \n")
+    cat("Folder                                            JobInSlurm          Conv               Iter              modelstat        RunType \n")
   }
   for (i in mydir ) {
     
