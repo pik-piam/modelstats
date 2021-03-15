@@ -4,14 +4,13 @@
 #'
 #' @param mydir Path to the folder(s) where the run(s) is(are) performed
 #' @param sort how to sort (nf=newest first)
-#' @param onlyrunning show only currently running runs
 #'
 #'
 #' @author Anastasis Giannousakis
 #' @importFrom gdx readGDX
 #' @importFrom utils tail
 #' @export
-getRunStatus<-function(mydir=dir(),sort="nf",onlyrunning=FALSE){
+getRunStatus<-function(mydir=dir(),sort="nf"){
   
   substrRight <- function(x, n){
     substr(x, nchar(x)-n+1, nchar(x))
@@ -36,10 +35,10 @@ getRunStatus<-function(mydir=dir(),sort="nf",onlyrunning=FALSE){
     
     if (onCluster) out[i,"jobInSLURM"] <- foundInSlurm(ii)
     
-    if (onCluster) if (!out[i,"jobInSLURM"] & onlyrunning) {
-     out <- out[setdiff(rownames(out),i),]
-     next
-    }
+#    if (onCluster) if (!out[i,"jobInSLURM"] & onlyrunning) {
+#     out <- out[setdiff(rownames(out),i),]
+#     next
+#    }
     
     cfgf <- paste0(ii,"/config.Rdata")
     fle <- paste0(ii,"/runstatistics.rda")

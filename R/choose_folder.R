@@ -15,6 +15,7 @@ choose_folder <- function(folder,title="Please choose a folder") {
   cat("\n\n",title,":\n\n")
   cat(paste(1:length(dirs), dirs, sep=": " ),sep="\n")
   cat(paste(length(dirs)+1, "Search by the pattern.\n", sep=": "))
+  cat(paste(length(dirs)+2, "None.\n", sep=": "))
   cat("\nNumber: ")
   identifier <- get_line()
   identifier <- strsplit(identifier,",")[[1]]
@@ -38,6 +39,8 @@ choose_folder <- function(folder,title="Please choose a folder") {
       return(dirs[id+1])
     } else choose_folder(folder,title)
     # 
+  } else if(length(identifier==1) && identifier==(length(dirs)+2)){
+    return("exit")
   } else if(any(dirs[identifier] == "all")){
     identifier <- 2:length(dirs)
     return(dirs[identifier])

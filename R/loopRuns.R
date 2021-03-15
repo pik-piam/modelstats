@@ -11,7 +11,8 @@
 
 loopRuns <- function(mydir) {
 
- 
+  if (mydir[[1]]=="exit") return(NULL)
+  
   a <- file.info(mydir)
   a <- a[a[,"isdir"]==TRUE,]
   mydir <- rownames(a[order(a[,"atime"],decreasing = T),])
