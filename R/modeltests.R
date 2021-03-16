@@ -37,9 +37,10 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL){
     if(!any(grepl(runcode,system(paste0("squeue -u ",user," -h -o '%i %q %T %C %M %j %V %L %e %Z'"),intern=TRUE) ))) break
   }
 
-  paths<-grep(runcode,dir("output/"),v=T)
+  setwd("output/")
+  paths<-grep(runcode,dir(),v=T)
   myfile<-paste0(tempdir(),"/README.md")
-  write("Folder                                                           Conv               Iter              modelstat        RunType",myfile)
+  write("Folder                                                          Mif              Conv                Iter               modelstat        RunType            jobInSlurm",myfile)
   for (i in paths) {
     write(printOutput(getRunStatus(i)),myfile,append = T)  
   }
