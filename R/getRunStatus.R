@@ -45,7 +45,7 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
     gdx <- paste0(ii,"/fulldata.gdx")
     fulllst <- paste0(ii,"/full.lst")
     fulllog <- paste0(ii,"/full.log")
-    
+
     stats <- NULL
     runtype <- NULL
     
@@ -115,9 +115,10 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
     
     # MIF
     miffile <- paste0(ii,"/REMIND_generic_",cfg[["title"]],".mif")
+    out[i,"Mif"] <- FALSE
     if (file.exists(miffile)) {
-      out[i,"Mif"] <- TRUE
-    } else out[i,"Mif"] <- FALSE
+      if (file.info(miffile)[["size"]]>99999) out[i,"Mif"] <- TRUE
+    }
     
     
   } # END DIR LOOP
