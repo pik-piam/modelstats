@@ -30,6 +30,8 @@ loopRuns <- function(mydir) {
       cat(red(out))
     } else if (grepl(" converged",out)){
       cat(underline(green(out)))
+    } else if (all(grepl(" NA ",out) & grepl("FALSE.*.TRUE",out))) {
+      cat(blue(out))
     } else if (all(grepl(" NA ",out) & grepl("FALSE",out))) {
       cat(red(out))
     } else {
