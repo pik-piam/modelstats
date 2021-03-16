@@ -83,7 +83,11 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
       
       if (grepl("nash",out[i,"RunType"]) & !is.na(out[i,"RunType"])) {
         
-        totNoOfIter <- tail(system(paste0("grep 'cm_iteration_max = [1-9].*.;$' ",fulllst),intern=TRUE),n=1)
+        if (cfg[["gms"]][["cm_nash_autoconverge"]]==1) {
+          totNoOfIter <- tail(system(paste0("grep 'cm_iteration_max = [1-9].*.;$' ",fulllst),intern=TRUE),n=1) 
+        } else {
+          totNoOfIter <- cfg[["gms"]][["cm_iteration_max"]]
+        }
         if (length(totNoOfIter)>0) out[i,"Iter"] <- paste0(out[i,"Iter"],"/",sub(";","",sub("^.*.= ","",totNoOfIter)))
         
         if (length(system(paste0("grep 'Convergence threshold' ",fulllst),intern=TRUE))>1) {
@@ -107,9 +111,16 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
         out[i,"Conv"] <- "NA"
       }
       
-    }
+    } # END Conv
     
-  }
+    # MIF
+    miffile <- paste0(ii,"/REMIND_generic_",cfg[["title"]],".mif")
+    if (file.exists(miffile)) {
+      out[i,"Mif"] <- TRUE
+    } else out[i,"Mif"] <- FALSE
+    
+    
+  } # END DIR LOOP
   
   return(out)
 

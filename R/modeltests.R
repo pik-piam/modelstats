@@ -24,7 +24,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL){
   if (is.null(model)) stop("Model cannot be NULL")
 
   setwd(mydir)
-#  system("git reset --hard origin/develop && git pull")
+  system("git reset --hard origin/develop && git pull")
   argv <- "config/scenario_config_AMT.csv"
   slurmConfig <- "--qos=priority --nodes=1 --tasks-per-node=12"
   source("start.R",local=TRUE)
@@ -44,7 +44,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL){
     write(printOutput(getRunStatus(i)),myfile,append = T)  
   }
 
-  sendmail(path=gitdir,file=myfile,commitmessage="Test Results",remote=TRUE,reset=TRUE)
+  sendmail(path=gitdir,file=myfile,commitmessage="Automated Test Results",remote=TRUE,reset=TRUE)
 }
 
 
