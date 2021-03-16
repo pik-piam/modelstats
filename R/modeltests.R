@@ -40,7 +40,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL){
   setwd("output/")
   paths<-grep(runcode,dir(),v=T)
   myfile<-paste0(tempdir(),"/README.md")
-  write("Folder                                                          Mif              Conv                Iter               modelstat        RunType            jobInSlurm",myfile)
+  write("Folder                                                           Mif                  Conv                Iter               modelstat         RunType            jobInSlurm",myfile)
   for (i in paths) {
     write(printOutput(getRunStatus(i)),myfile,append = T)  
   }
