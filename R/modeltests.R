@@ -16,7 +16,7 @@
 #' @author Anastasis Giannousakis
 #' @seealso \code{\link{package2readme}}
 #' @importFrom utils read.csv2
-#' @importFrom iamc iamCheck
+#' @importFrom piamModelTests iamCheck
 #' @importFrom quitte read.quitte
 #' @importFrom lucode2 sendmail
 #' @export

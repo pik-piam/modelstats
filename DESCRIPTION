@@ -11,7 +11,7 @@ Imports:
     crayon,
     desc,
     gdx,
-    iamc,
+    piamModelTests,
     lucode2,
     usethis,
     utils
