@@ -46,6 +46,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL){
     }
   }
   
+  
   setwd("output/")
   paths<-grep(runcode,dir(),v=T)
   myfile<-paste0(tempdir(),"/README.md")
@@ -56,6 +57,12 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL){
     write(printOutput(getRunStatus(i)),myfile,append = TRUE)
   }
 
+  if (length(paths)>0) {
+   a <- read.quitte(mifs)
+   out[["iamCheck"]] <- iamCheck(a,model)
+  }
+
+  
   sendmail(path=gitdir,file=myfile,commitmessage="Automated Test Results",remote=TRUE,reset=TRUE)
 }
 
