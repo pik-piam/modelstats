@@ -39,11 +39,13 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL){
   out<-list()
   modelinerror = FALSE
 
-  runcode<- paste0("-AMT-.*.202[1-9]-[0-1][0-9]-",format(Sys.Date(),"%d"))
-  if (!test) repeat {
-    if(!any(grepl(runcode,system(paste0("squeue -u ",user," -h -o '%i %q %T %C %M %j %V %L %e %Z'"),intern=TRUE) ))) break
+  if (!test) {
+    runcode<- paste0("-AMT-.*.202[1-9]-[0-1][0-9]-",format(Sys.Date(),"%d"))
+    repeat {
+      if(!any(grepl(runcode,system(paste0("squeue -u ",user," -h -o '%i %q %T %C %M %j %V %L %e %Z'"),intern=TRUE) ))) break
+    }
   }
-
+  
   setwd("output/")
   paths<-grep(runcode,dir(),v=T)
   myfile<-paste0(tempdir(),"/README.md")
