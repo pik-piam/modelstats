@@ -32,7 +32,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL){
   if (!test) {
     system("git reset --hard origin/develop && git pull")
     argv <- "config/scenario_config_AMT.csv"
-    slurmConfig <- "--qos=priority --nodes=1 --tasks-per-node=12"
+    slurmConfig <- "--qos=priority --time=06:00:00 --nodes=1 --tasks-per-node=12"
     source("start.R",local=TRUE)
   }
 
