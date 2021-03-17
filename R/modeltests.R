@@ -10,6 +10,7 @@
 #' @param gitdir path to the git clone that sends the report via email
 #' @param user the user that starts the job and commits the changes
 #' @param model Model name
+#' @param test Use this option to run a test of the workflow (no runs will be submitted)
 #'
 #'
 #' @author Anastasis Giannousakis
@@ -19,21 +20,27 @@
 #' @importFrom quitte read.quitte
 #' @importFrom lucode2 sendmail
 #' @export
-modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL){
+modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL){
 
+  if (!is.null(test)) {
+    runcode <- paste0("-AMT-.*.202[1-9]-",test)
+    test <- TRUE
+  }
   if (is.null(model)) stop("Model cannot be NULL")
 
   setwd(mydir)
-  system("git reset --hard origin/develop && git pull")
-  argv <- "config/scenario_config_AMT.csv"
-  slurmConfig <- "--qos=priority --nodes=1 --tasks-per-node=12"
-  source("start.R",local=TRUE)
+  if (!test) {
+    system("git reset --hard origin/develop && git pull")
+    argv <- "config/scenario_config_AMT.csv"
+    slurmConfig <- "--qos=priority --nodes=1 --tasks-per-node=12"
+    source("start.R",local=TRUE)
+  }
 
   out<-list()
   modelinerror = FALSE
 
   runcode<- paste0("-AMT-.*.202[1-9]-[0-1][0-9]-",format(Sys.Date(),"%d"))
-  repeat {
+  if (!test) repeat {
     if(!any(grepl(runcode,system(paste0("squeue -u ",user," -h -o '%i %q %T %C %M %j %V %L %e %Z'"),intern=TRUE) ))) break
   }
 
