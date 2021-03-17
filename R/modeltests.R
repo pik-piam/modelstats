@@ -49,12 +49,15 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL){
   setwd("output/")
   paths<-grep(runcode,dir(),v=T)
   myfile<-paste0(tempdir(),"/README.md")
-  write("Folder                                                           Mif                  Conv                Iter               modelstat         RunType          jobInSlurm",myfile)
+  write(paste0("This is the result of the automated REMIND testing suite. Tested commit: ",system("git log -1",intern=TRUE)[[1]]),myfile)
+  write(paste0("Date: ",date(),". Path to runs: /p/projects/remind/modeltests/output/ . If 'Mif' is FALSE the reporting has failed, possible error in pik-piam/remind2"),myfile,append=TRUE)
+  write("Scenario                                                         Mif                  Conv                Iter               modelstat         RunType          jobInSlurm",myfile,append=TRUE)
   for (i in paths) {
-    write(printOutput(getRunStatus(i)),myfile,append = T)  
+    write(printOutput(getRunStatus(i)),myfile,append = TRUE)
   }
 
   sendmail(path=gitdir,file=myfile,commitmessage="Automated Test Results",remote=TRUE,reset=TRUE)
 }
+
 
 
