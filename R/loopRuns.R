@@ -6,13 +6,15 @@
 #'
 #'
 #' @author Anastasis Giannousakis
-#' @importFrom crayon red blue green underline
+#' @import crayon
 #' @export
 
 loopRuns <- function(mydir) {
 
   if (mydir[[1]]=="exit") return(NULL)
-  
+
+  red<-make_style("orangered")
+
   a <- file.info(mydir)
   a <- a[a[,"isdir"]==TRUE,]
   mydir <- rownames(a[order(a[,"atime"],decreasing = T),])
@@ -31,11 +33,11 @@ loopRuns <- function(mydir) {
     } else if (grepl(" converged",out)){
       cat(underline(green(out)))
     } else if (all(grepl(" NA ",out) & grepl("FALSE.*.TRUE",out))) {
-      cat(blue(out))
+      cat(cyan(out))
     } else if (all(grepl(" NA ",out) & grepl("FALSE",out))) {
       cat(red(out))
     } else {
-      cat(blue(out))
+      cat(cyan(out))
     } 
   }
   
