@@ -48,6 +48,7 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
 
     stats <- NULL
     runtype <- NULL
+    cfg<-NULL
     
     # RunType
     if (file.exists(cfgf)) {

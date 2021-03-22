@@ -1,20 +1,12 @@
 choose_folder <- function(folder,title="Please choose a folder") {
   dirs <- NULL
-  
-  # Detect all output folders containing fulldata.gdx
-  # For coupled runs please use the outcommented text block below
-  
+
   dirs <- list.dirs(folder,recursive = FALSE)
-  
-  # DK: The following outcommented lines are specially made for listing results of coupled runs
-  #runs <- findCoupledruns(folder)
-  #dirs <- findIterations(runs,modelpath=folder,latest=TRUE)
-  #dirs <- sub("./output/","",dirs)
   
   dirs <- c("all",dirs)
   cat("\n\n",title,":\n\n")
   cat(paste(1:length(dirs), dirs, sep=": " ),sep="\n")
-  cat(paste(length(dirs)+1, "Search by the pattern.\n", sep=": "))
+  cat(paste(length(dirs)+1, "Search by a pattern.\n", sep=": "))
   cat(paste(length(dirs)+2, "None.\n", sep=": "))
   cat("\nNumber: ")
   identifier <- get_line()

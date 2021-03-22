@@ -48,7 +48,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL){
   
   
   setwd("output/")
-  paths<-grep(runcode,dir(),v=T)
+  paths<-grep(runcode,dir(),value = TRUE)
   paths <- file.info(paths)
   paths <- rownames(paths[paths[,"isdir"]==TRUE,])
 
