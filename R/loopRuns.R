@@ -28,15 +28,14 @@ loopRuns <- function(mydir) {
   a <- file.info(mydir)
   a <- a[a[,"isdir"]==TRUE,]
   mydir <- rownames(a[order(a[,"atime"],decreasing = T),])
+  len <- max(nchar(mydir))
   
   cat("\n")
   if (!file.exists("/p")) {
-    cat("Folder                                                              Mif             Conv           Iter          modelstat    RunType\n")
+    cat(paste0("Folder",paste0(rep(" ",len-5),collapse=""),"Mif             Conv           Iter          modelstat    RunType\n"))
   } else {
-    cat("Folder                                                              runInAppResults   Mif              Conv            Iter           modelstat     RunType      JobInSlurm \n")
+    cat(paste0("Folder",paste0(rep(" ",len-5),collapse=""),"runInAppResults   Mif              Conv            Iter           modelstat     RunType      JobInSlurm \n"))
   }
-  
-  len <- max(nchar(mydir))
   
   for (i in mydir ) {
     
