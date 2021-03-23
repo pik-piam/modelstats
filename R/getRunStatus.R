@@ -7,6 +7,14 @@
 #'
 #'
 #' @author Anastasis Giannousakis
+#' @examples 
+#' 
+#' \dontrun{ 
+#' 
+#' a <- getRunStatus(dir())
+#' 
+#' }
+#' 
 #' @importFrom gdx readGDX
 #' @importFrom utils tail
 #' @export

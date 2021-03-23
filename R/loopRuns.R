@@ -2,12 +2,22 @@
 #'
 #' Returns the output for getRunStatus nicely
 #'
-#' @param mydir mydir or vector of dirs
+#' @param mydir a dir or vector of dirs
 #'
 #'
 #' @author Anastasis Giannousakis
 #' @import crayon
 #' @export
+#' @examples 
+#' 
+#' \dontrun{ 
+#' 
+#' loopRuns(dir())
+#' 
+#' }
+#' 
+#' 
+#' 
 
 loopRuns <- function(mydir) {
 
