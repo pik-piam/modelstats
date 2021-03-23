@@ -3,11 +3,11 @@
 #' Returns the output for getRunStatus nicely
 #'
 #' @param string String to print
-#'
+#' @param len1stcol length of first column
 #'
 #' @author Anastasis Giannousakis
 #' @export
-printOutput<-function(string){
+printOutput<-function(string,len1stcol=67){
 
   formatstr <- function(x,len) {
     if (is.na(x)) return("                 ")
@@ -30,7 +30,7 @@ printOutput<-function(string){
   for (i in 1:length(string)) {
     out <- paste0(formatstr(unname(string)[[i]],i+11),out)
   }
- return(paste0(formatstr(rownames(string),67)," ",out,"\n")) 
+ return(paste0(formatstr(rownames(string),len1stcol)," ",out,"\n")) 
 #  if(is.data.frame(string)) print(unname(string))
 
   

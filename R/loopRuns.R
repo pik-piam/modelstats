@@ -35,9 +35,12 @@ loopRuns <- function(mydir) {
   } else {
     cat("Folder                                                              runInAppResults   Mif              Conv            Iter           modelstat     RunType      JobInSlurm \n")
   }
+  
+  len <- max(nchar(mydir))
+  
   for (i in mydir ) {
     
-    out <- printOutput(getRunStatus(i))
+    out <- printOutput(getRunStatus(i),len1stcol=len)
     if (grepl("not_converged",out)) {
       cat(red(out))
     } else if (grepl(" converged",out)){
