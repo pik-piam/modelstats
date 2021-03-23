@@ -72,7 +72,7 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
       }
       
     # modelstat & runInAppResults
-    out[i,"runInAppResults"] <- "NA"
+    if (onCluster) out[i,"runInAppResults"] <- "NA"
     if (file.exists(fle)) {
       load(fle)
       if(any(grepl("modelstat",names(stats)))) out[i,"modelstat"] <- stats[["modelstat"]]
@@ -81,7 +81,9 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
         id <- paste0(ovdir,stats[["id"]],".rds")
         if (file.exists(id) && all(file.info(Sys.glob(paste0(ovdir,"overview.rds")))$mtime>file.info(id)$mtime)) 
           out[i,"runInAppResults"] <- TRUE
-      } else out[i,"runInAppResults"] <- FALSE
+      } else {
+        if (onCluster) out[i,"runInAppResults"] <- FALSE
+        }
     } else {
       if (file.exists(gdx)) out[i,"modelstat"] <- as.numeric(readGDX(gdx,"o_modelstat", format="first_found"))
     }

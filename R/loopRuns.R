@@ -31,7 +31,7 @@ loopRuns <- function(mydir) {
   
   cat("\n")
   if (!file.exists("/p")) {
-    cat("Folder                                                              Mif                 Conv               Iter              modelstat        RunType\n")
+    cat("Folder                                                              Mif             Conv           Iter          modelstat    RunType\n")
   } else {
     cat("Folder                                                              runInAppResults   Mif              Conv            Iter           modelstat     RunType      JobInSlurm \n")
   }
@@ -42,6 +42,8 @@ loopRuns <- function(mydir) {
       cat(red(out))
     } else if (grepl(" converged",out)){
       cat(underline(green(out)))
+    } else if (grepl(" 2 ",out)){
+      cat(green(out))
     } else if (all(grepl(" NA ",out) & grepl("FALSE.*.TRUE",out))) {
       cat(cyan(out))
     } else if (all(grepl(" NA ",out) & grepl("FALSE",out))) {
