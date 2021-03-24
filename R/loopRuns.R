@@ -41,6 +41,7 @@ loopRuns <- function(mydir) {
   
   for (i in mydir ) {
     
+    if (!file.exists(paste0(i,"/config.Rdata"))) next # do not report on folders that don't contain runs
     out <- printOutput(getRunStatus(i),len1stcol=len)
     if (grepl("not_converged",out)) {
       cat(red(out))
