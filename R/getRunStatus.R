@@ -54,7 +54,8 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
     gdx <- paste0(ii,"/fulldata.gdx")
     fulllst <- paste0(ii,"/full.lst")
     fulllog <- paste0(ii,"/full.log")
-
+    logtxt <- paste0(ii,"/log.txt")
+    
     stats <- NULL
     runtype <- NULL
     cfg<-NULL
@@ -107,7 +108,7 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
         } else {
           totNoOfIter <- cfg[["gms"]][["cm_iteration_max"]]
         }
-        if (length(totNoOfIter)>0) out[i,"Iter"] <- paste0(out[i,"Iter"],"/",sub(";","",sub("^.*.= ","",totNoOfIter)))
+        if (length(totNoOfIter)>0 & !cfg[["gms"]][["cm_iteration_max"]] > out[i,"Iter"]) out[i,"Iter"] <- paste0(out[i,"Iter"],"/",sub(";","",sub("^.*.= ","",totNoOfIter)))
         
         if (length(suppressWarnings(system(paste0("grep 'Convergence threshold' ",fulllst),intern=TRUE)))>1) {
           out[i,"Conv"] <- "converged"
@@ -131,6 +132,12 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
       }
       
     } # END Conv
+    
+    # Calib Iter
+    if (file.exists(logtxt)) {
+      calibiter <- length(suppressWarnings(system(paste0("grep 'CES calibration iteration' ",logtxt),intern=TRUE)))
+      if (calibiter>0) out[i,"Iter"]<-paste0(out[i,"Iter"]," ","Clb: ",calibiter)
+    }
     
     # MIF
     if (file.exists(cfgf)) {
