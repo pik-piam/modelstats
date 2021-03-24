@@ -90,12 +90,11 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
     }
     
     # Iter
+    out[i,"Iter"] <- "NA"
     if (file.exists(fulllog)) {
       suppressWarnings(try(loop <- sub("^.*.= ","",system(paste0("grep 'LOOPS' ",fulllog," | tail -1"),intern=TRUE)),silent = TRUE))
       if (length(loop)>0) out[i,"Iter"] <- loop
       if (!out[i,"RunType"]%in%c("nash","Calib_nash") & length(totNoOfIter)>0) out[i,"Iter"] <- paste0(out[i,"Iter"],"/",sub(";","",sub("^.*.= ","",totNoOfIter)))
-    } else {
-      out[i,"Iter"] <- "NA"
     }
     
     # Conv  
