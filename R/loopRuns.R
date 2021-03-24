@@ -28,7 +28,9 @@ loopRuns <- function(mydir) {
   a <- file.info(mydir)
   a <- a[a[,"isdir"]==TRUE,]
   mydir <- rownames(a[order(a[,"atime"],decreasing = T),])
-  len <- max(nchar(mydir))
+  len <- max(c(15,nchar(mydir)))
+  len <- min(67,len)
+
   
   cat("\n")
   if (!file.exists("/p")) {
@@ -44,7 +46,7 @@ loopRuns <- function(mydir) {
       cat(red(out))
     } else if (grepl(" converged",out)){
       cat(underline(green(out)))
-    } else if (grepl(" 2 ",out)){
+    } else if (grepl(" 2 ",out) && !grepl("nash ",out)){
       cat(green(out))
     } else if (all(grepl(" NA ",out) & grepl("FALSE.*.TRUE",out))) {
       cat(cyan(out))
