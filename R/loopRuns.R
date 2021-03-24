@@ -45,7 +45,7 @@ loopRuns <- function(mydir) {
     out <- printOutput(getRunStatus(i),len1stcol=len)
     if (grepl("not_converged",out)) {
       cat(red(out))
-    } else if (grepl(" converged",out)){
+    } else if (grepl(" converged|Clb_converged",out)){
       cat(underline(green(out)))
     } else if (grepl(" 2 ",out) && !grepl("nash ",out)){
       cat(green(out))

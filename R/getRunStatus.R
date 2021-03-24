@@ -136,7 +136,7 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
     if (file.exists(logtxt) & grepl("Calib",out[i,"RunType"])) {
       calibiter <- length(suppressWarnings(system(paste0("grep 'CES calibration iteration' ",logtxt),intern=TRUE)))
       if (calibiter>0) out[i,"Iter"]<-paste0(out[i,"Iter"]," ","Clb: ",calibiter)
-      if (!is.null(out[i,"Conv"])) if (out[i,"Conv"]=="converged" & length(system(paste0("find ",i," -name 'input_*.gdx'"),intern = TRUE))>10) out[i,"Conv"]<-paste0("Clb","_converged")
+      if (!is.null(out[i,"Conv"])) if (out[i,"Conv"]=="converged" & length(system(paste0("find ",i," -name 'input_*.gdx'"),intern = TRUE))>10) out[i,"Conv"]<-"Clb_converged"
     }
     
     # MIF
