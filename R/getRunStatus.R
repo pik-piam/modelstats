@@ -108,7 +108,7 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
         } else {
           totNoOfIter <- cfg[["gms"]][["cm_iteration_max"]]
         }
-        if (length(totNoOfIter)>0 & !cfg[["gms"]][["cm_iteration_max"]] > out[i,"Iter"]) out[i,"Iter"] <- paste0(out[i,"Iter"],"/",sub(";","",sub("^.*.= ","",totNoOfIter)))
+        if (exists("totNoOfIter") && any(grepl("cm_iteration_max",cfg))) if (length(totNoOfIter)>0 & !cfg[["gms"]][["cm_iteration_max"]] > out[i,"Iter"]) out[i,"Iter"] <- paste0(out[i,"Iter"],"/",sub(";","",sub("^.*.= ","",totNoOfIter)))
         
         if (length(suppressWarnings(system(paste0("grep 'Convergence threshold' ",fulllst),intern=TRUE)))>1) {
           out[i,"Conv"] <- "converged"
