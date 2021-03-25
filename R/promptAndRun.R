@@ -7,8 +7,8 @@ promptAndRun<-function(mydir=".") {
   } else if (mydir=="-f") {
     loopRuns(dir())
   } else if (mydir=="-cr") {
-    myruns<-system(paste0("squeue -u ","hilaire"," -h -o '%Z'"),intern=TRUE)
-    runnames<-system(paste0("squeue -u ","hilaire"," -h -o '%j'"),intern=TRUE)
+    myruns<-system(paste0("squeue -u ",Sys.info()[["user"]]," -h -o '%Z'"),intern=TRUE)
+    runnames<-system(paste0("squeue -u ",Sys.info()[["user"]]," -h -o '%j'"),intern=TRUE)
     coupled<-NULL
     for (i in 1:length(runnames)) {
       if (grepl(runnames[[i]],myruns[[i]])) {
