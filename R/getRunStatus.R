@@ -41,7 +41,7 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
     ii <- i
     i <- sub(paste0(dirname(i),"/"),"",i)
     
-    if (onCluster) out[i,"jobInSLURM"] <- foundInSlurm(ii)
+    if (onCluster) out[i,"jobInSLURM"] <- foundInSlurm(i)
     
 #    if (onCluster) if (!out[i,"jobInSLURM"] & onlyrunning) {
 #     out <- out[setdiff(rownames(out),i),]
