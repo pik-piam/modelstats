@@ -13,7 +13,7 @@ foundInSlurm<-function(dir="."){
   if (grepl("^C_",dir) ) {
     dir <- sub("-rem-[1-9]$","",dir)
   } else {
-    dir <- normalizePath(dir)
+    suppressWarnings(dir <- normalizePath(dir))
   }
   
   
