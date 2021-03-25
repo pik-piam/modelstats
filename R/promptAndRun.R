@@ -27,9 +27,11 @@ promptAndRun<-function(mydir=".",user=NULL) {
         rem <- c(rem,i)
       }
     }
-    myruns<-myruns[-rem] # remove coupled parent-job
-    myruns <- c(myruns,coupled) # add coupled paths
-    myruns<-myruns[file.exists(myruns)] # keep only existing paths
+    if (!is.null(rem)) {
+      myruns<-myruns[-rem] # remove coupled parent-job
+      myruns <- c(myruns,coupled) # add coupled paths
+      myruns<-myruns[file.exists(myruns)] # keep only existing paths
+    }
     
     options(width=150)
     getRunStatus(myruns)
