@@ -1,0 +1,37 @@
+---
+title: "REMIND run statistics"
+author: "Anastasis Giannousakis"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{REMIND run statistics}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, echo = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+The `rs2` tool gives you quick, easy, and handy access to a number of info and statistics (status, type, convergence, reporting, etc. -- the list is extended continuously) for your model runs. This document provides a short tutorial on how to make the most out of `rs2`. 
+
+## 5 common use cases:
+
+
+
+1. You have just started a session on the cluster and want a quick overview of all your recent jobs (_regardless where they are_):  
+```  rs2 -cr  ```  
+If you want to do the same for the jobs of someone else:  
+`rs2 -cr username`
+2. You go into a run folder (e.g. by using `cdf`) and want to see its status:  
+```rs2 .```
+3. You are in an `output` folder containing many run folders and want to see their status (or of some of them):  
+`rs2`  
+and then filter by pattern, e.g. `^C_` for all coupled runs, or `03-25` for all runs on Mar 25
+4. You are in a hurry and want to see immediately what is going on in the run folders of your current directory:  
+`rs2 -f`
+5. You want to collect information about your runs and store/process it in R:  
+`modelstats::getRunStatus()`  
+returns a data.frame with the job information.
+
+Note that for coupled runs the `RUNNAME-rem-#` runs will be appearing as `TRUE` in the `jobInSlurm` column until the parent-job has finished running.

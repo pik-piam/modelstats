@@ -29,3 +29,5 @@ vignettes/*.pdf
 inst/doc
 R/updateReadme.R
 
+doc
+Meta
