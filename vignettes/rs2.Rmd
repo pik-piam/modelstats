@@ -22,14 +22,18 @@ The `rs2` tool gives you quick, easy, and handy access to a number of info and s
 1. You have just started a session on the cluster and want a quick overview of all your recent jobs (_regardless where they are_):  
 ```  rs2 -cr  ```  
 If you want to do the same for the jobs of someone else:  
-`rs2 -cr username`
+`rs2 -cr username`  
+
 2. You go into a run folder (e.g. by using `cdf`) and want to see its status:  
-```rs2 .```
+```rs2 .```  
+
 3. You are in an `output` folder containing many run folders and want to see their status (or of some of them):  
 `rs2`  
-and then filter by pattern, e.g. `^C_` for all coupled runs, or `03-25` for all runs on Mar 25
+and then filter by pattern, e.g. `^C_` for all coupled runs, or `03-25` for all runs on Mar 25  
+
 4. You are in a hurry and want to see immediately what is going on in the run folders of your current directory:  
-`rs2 -f`
+`rs2 -f`  
+
 5. You want to collect information about your runs and store/process it in R:  
 `modelstats::getRunStatus()`  
 returns a data.frame with the job information.
