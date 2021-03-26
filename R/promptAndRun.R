@@ -1,5 +1,7 @@
 promptAndRun<-function(mydir=".",user=NULL) {
   if (is.null(user)) user <- Sys.info()[["user"]]
+  if (user=="") user <- Sys.info()[["user"]]
+
   if (mydir==".") {
     loopRuns(".")
   } else if (mydir=="") {
@@ -9,6 +11,14 @@ promptAndRun<-function(mydir=".",user=NULL) {
   } else if (mydir=="-cr") {
     myruns<-system(paste0("squeue -u ",user," -h -o '%Z'"),intern=TRUE)
     runnames<-system(paste0("squeue -u ",user," -h -o '%j'"),intern=TRUE)
+ 
+    myruns2<-system(paste0("sacct -u ",user," -s cd,f -E ",format(Sys.Date(),"%Y-%m-%d")," -S ",as.Date(format(Sys.Date(),"%Y-%m-%d"))-10," --format WorkDir -P -n"),intern=T)
+    myruns2<-myruns2[!grepl("^$",myruns2)]
+    myruns<-c(myruns,myruns2)
+    runnames2<-system(paste0("sacct -u ",user," -s cd,f -E ",format(Sys.Date(),"%Y-%m-%d")," -S ",as.Date(format(Sys.Date(),"%Y-%m-%d"))-10," --format JobName -P -n"),intern=T)
+    runnames2<-runnames2[!grepl("^batch$",runnames2)]
+    runnames<-c(runnames,runnames2)
+
     coupled<-rem<-NULL
     for (i in 1:length(runnames)) {
       if (grepl(runnames[[i]],myruns[[i]])) {
@@ -33,7 +43,7 @@ promptAndRun<-function(mydir=".",user=NULL) {
       myruns<-myruns[file.exists(myruns)] # keep only existing paths
     }
     
-    options(width=150)
+    options(width=200)
     getRunStatus(myruns)
     
   } else {
