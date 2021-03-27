@@ -12,7 +12,7 @@
 
 <meta name="author" content="Anastasis Giannousakis" />
 
-<meta name="date" content="2021-03-26" />
+<meta name="date" content="2021-03-27" />
 
 <title>REMIND run statistics</title>
 
@@ -241,7 +241,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <h1 class="title toc-ignore">REMIND run statistics</h1>
 <h4 class="author">Anastasis Giannousakis</h4>
-<h4 class="date">2021-03-26</h4>
+<h4 class="date">2021-03-27</h4>
 
 
 
@@ -249,20 +249,20 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <div id="common-use-cases" class="section level2">
 <h2>5 common use cases:</h2>
 <ol style="list-style-type: decimal">
-<li>You have just started a session on the cluster and want a quick overview of all your recent jobs (<em>regardless where they are</em>):<br />
+<li><p>You have just started a session on the cluster and want a quick overview of all your recent jobs (<em>regardless where they are</em>):<br />
 <code>rs2 -cr</code><br />
 If you want to do the same for the jobs of someone else:<br />
-<code>rs2 -cr username</code></li>
-<li>You go into a run folder (e.g. by using <code>cdf</code>) and want to see its status:<br />
-<code>rs2 .</code></li>
-<li>You are in an <code>output</code> folder containing many run folders and want to see their status (or of some of them):<br />
+<code>rs2 -cr username</code></p></li>
+<li><p>You go into a run folder (e.g. by using <code>cdf</code>) and want to see its status:<br />
+<code>rs2 .</code></p></li>
+<li><p>You are in an <code>output</code> folder containing many run folders and want to see their status (or of some of them):<br />
 <code>rs2</code><br />
-and then filter by pattern, e.g. <code>^C_</code> for all coupled runs, or <code>03-25</code> for all runs on Mar 25</li>
-<li>You are in a hurry and want to see immediately what is going on in the run folders of your current directory:<br />
-<code>rs2 -f</code></li>
-<li>You want to collect information about your runs and store/process it in R:<br />
+and then filter by pattern, e.g. <code>^C_</code> for all coupled runs, or <code>03-25</code> for all runs on Mar 25</p></li>
+<li><p>You are in a hurry and want to see immediately what is going on in the run folders of your current directory:<br />
+<code>rs2 -f</code></p></li>
+<li><p>You want to collect information about your runs and store/process it in R:<br />
 <code>modelstats::getRunStatus()</code><br />
-returns a data.frame with the job information.</li>
+returns a data.frame with the job information.</p></li>
 </ol>
 <p>Note that for coupled runs the <code>RUNNAME-rem-#</code> runs will be appearing as <code>TRUE</code> in the <code>jobInSlurm</code> column until the parent-job has finished running.</p>
 </div>

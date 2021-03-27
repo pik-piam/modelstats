@@ -42,7 +42,7 @@ promptAndRun<-function(mydir=".",user=NULL) {
       myruns <- c(myruns,coupled) # add coupled paths
       myruns<-myruns[file.exists(myruns)] # keep only existing paths
     }
-    
+    if (length(myruns)>5) message("Please wait while I gather information on your current and recently complelted runs")
     options(width=200)
     getRunStatus(myruns)
     
