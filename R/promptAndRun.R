@@ -18,7 +18,7 @@ promptAndRun<-function(mydir=".",user=NULL) {
     runnames2<-system(paste0("sacct -u ",user," -s cd,f -E ",format(Sys.Date(),"%Y-%m-%d")," -S ",as.Date(format(Sys.Date(),"%Y-%m-%d"))-10," --format JobName -P -n"),intern=T)
     runnames2<-runnames2[!grepl("^batch$",runnames2)]
     runnames<-c(runnames,runnames2)
-    if (length(myruns)==0) return("no runs found for this user")
+    if (length(myruns)==0) return("No runs found for this user")
     coupled<-rem<-NULL
     for (i in 1:length(runnames)) {
       if (grepl(runnames[[i]],myruns[[i]])) {
