@@ -24,7 +24,6 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
     substr(x, nchar(x)-n+1, nchar(x))
   }
   
-  p3<-function(x) paste(x[[3]])
   rem<-function(x) return(x[-which(x=="")])
   
   mydir <- normalizePath(mydir)
@@ -48,7 +47,7 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
 #     next
 #    }
 
- 
+    # Gather files
     cfgf <- paste0(ii,"/config.Rdata")
     fle <- paste0(ii,"/runstatistics.rda")
     gdx <- paste0(ii,"/fulldata.gdx")
@@ -56,21 +55,13 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
     fulllog <- paste0(ii,"/full.log")
     logtxt <- paste0(ii,"/log.txt")
     
+    # Initialize objects
     stats <- NULL
     runtype <- NULL
     cfg<-NULL
     
     # RunType
-    if (file.exists(cfgf)) {
-      load(cfgf)
-        out[i,"RunType"] <- cfg[["gms"]][["optimization"]]
-        if (cfg[["gms"]][["CES_parameters"]]=="calibrate") out[i,"RunType"]<-paste0("Calib_",out[i,"RunType"])
-        totNoOfIter <- cfg[["gms"]][["cm_iteration_max"]]
-      } else if (file.exists(fulllst)) {
-        out[i,"RunType"] <- sub("         !! def = nash","",sub("^ .*.ion  ","",system(paste0("grep 'setGlobal optimization  ' ",fulllst),intern=TRUE)))
-        chck <- sub("       !! def = load","",sub("^ .*.ers  ","",system(paste0("grep 'setglobal CES_parameters  ' ",fulllst),intern=TRUE)))
-        if (chck=="calibrate") out[i,"RunType"]<-paste0("Calib_",out[i,"RunType"])
-      }
+    out[i,"RunType"] <- colRunType(ii)
       
     # modelstat & runInAppResults
     if (onCluster) out[i,"runInAppResults"] <- "NA"
@@ -90,6 +81,7 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
     }
     
     # Iter
+    if (file.exists(cfgf)) totNoOfIter <- cfg[["gms"]][["cm_iteration_max"]]
     out[i,"Iter"] <- "NA"
     if (file.exists(fulllog)) {
       suppressWarnings(try(loop <- sub("^.*.= ","",system(paste0("grep 'LOOPS' ",fulllog," | tail -1"),intern=TRUE)),silent = TRUE))
@@ -97,7 +89,8 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
       if (!out[i,"RunType"]%in%c("nash","Calib_nash") & length(totNoOfIter)>0) out[i,"Iter"] <- paste0(out[i,"Iter"],"/",sub(";","",sub("^.*.= ","",totNoOfIter)))
     }
     
-    # Conv  
+    # Conv
+    if (file.exists(cfgf)) load(cfgf)
     if (file.exists(fulllst)) {      if (length(out[i,"RunType"])>0)
       
       if (grepl("nash",out[i,"RunType"]) & !is.na(out[i,"RunType"])) {
