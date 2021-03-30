@@ -30,7 +30,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL,iamcc
 
   setwd(mydir)
   if (!test) {
-    system("git reset --hard origin/develop && git pull")
+    system("/p/system/packages/git/2.16.1/bin/git reset --hard origin/develop && /p/system/packages/git/2.16.1/bin/git pull")
     argv <- "config/scenario_config_AMT.csv"
     slurmConfig <- "--qos=priority --time=06:00:00 --nodes=1 --tasks-per-node=12"
     source("start.R",local=TRUE)
@@ -42,7 +42,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL,iamcc
   if (!test) {
     runcode<- paste0("-AMT-.*.202[1-9]-[0-1][0-9]-",format(Sys.Date(),"%d"))
     repeat {
-      if(!any(grepl(runcode,system(paste0("squeue -u ",user," -h -o '%i %q %T %C %M %j %V %L %e %Z'"),intern=TRUE) ))) break
+      if(!any(grepl(runcode,system(paste0("/p/system/slurm/bin/squeue -u ",user," -h -o '%i %q %T %C %M %j %V %L %e %Z'"),intern=TRUE) ))) break
     }
   }
   
@@ -55,7 +55,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL,iamcc
 
   myfile<-paste0(tempdir(),"/README.md")
   write("```",myfile)
-  write(paste0("This is the result of the automated REMIND testing suite. Tested commit: ",system("git log -1",intern=TRUE)[[1]],"\n"),myfile,append=TRUE)
+  write(paste0("This is the result of the automated REMIND testing suite. Tested commit: ",system("/p/system/packages/git/2.16.1/bin/git log -1",intern=TRUE)[[1]],"\n"),myfile,append=TRUE)
   write(paste0("Date: ",date(),". Path to the runs: /p/projects/remind/modeltests/output/ .","\n"),myfile,append=TRUE)
   write(paste0("If 'Mif' is FALSE the reporting has failed (possible error in pik-piam/remind2)","\n"),myfile,append=TRUE)
   write("                                   runInAppResults   Mif              Conv            Iter           modelstat     RunType      jobInSlurm",myfile,append=TRUE)
