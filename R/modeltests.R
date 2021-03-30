@@ -33,6 +33,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL,iamcc
     system("/p/system/packages/git/2.16.1/bin/git reset --hard origin/develop && /p/system/packages/git/2.16.1/bin/git pull")
     argv <- "config/scenario_config_AMT.csv"
     slurmConfig <- "--qos=priority --time=06:00:00 --nodes=1 --tasks-per-node=12"
+    system("find . -type f -exec sed -i 's/sbatch/\\/p\\/system\\/slurm\\/bin\\/sbatch/g' {} +")
     source("start.R",local=TRUE)
   }
 
