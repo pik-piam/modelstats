@@ -18,7 +18,7 @@ promptAndRun<-function(mydir=".",user=NULL) {
     runnames2<-system(paste0("sacct -u ",user," -s cd,f -E ",format(Sys.Date(),"%Y-%m-%d")," -S ",as.Date(format(Sys.Date(),"%Y-%m-%d"))-10," --format JobName -P -n"),intern=T)
     runnames2<-runnames2[!grepl("^batch$",runnames2)]
     runnames<-c(runnames,runnames2)
-
+    if (length(myruns)==0) return("No runs found for this user")
     coupled<-rem<-NULL
     for (i in 1:length(runnames)) {
       if (grepl(runnames[[i]],myruns[[i]])) {
@@ -42,7 +42,7 @@ promptAndRun<-function(mydir=".",user=NULL) {
       myruns <- c(myruns,coupled) # add coupled paths
       myruns<-myruns[file.exists(myruns)] # keep only existing paths
     }
-    if (length(myruns)>5) message("Please wait while I gather information on your current and recently complelted runs")
+    if (length(myruns)>5) message("Please wait while I gather information on your current and recently completed runs")
     options(width=200)
     getRunStatus(myruns)
     
