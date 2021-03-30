@@ -47,7 +47,7 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
 #     next
 #    }
 
-    # Gather files
+    # Define files
     cfgf <- paste0(ii,"/config.Rdata")
     fle <- paste0(ii,"/runstatistics.rda")
     gdx <- paste0(ii,"/fulldata.gdx")
@@ -56,18 +56,23 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
     logtxt <- paste0(ii,"/log.txt")
     
     # Initialize objects
-    stats <- NULL
-    runtype <- NULL
-    cfg<-NULL
+    stats <- runtype <- cfg <-NULL
     
     # RunType
     out[i,"RunType"] <- colRunType(ii)
       
-    # modelstat & runInAppResults
-    if (onCluster) out[i,"runInAppResults"] <- "NA"
+    # modelstat 
     if (file.exists(fle)) {
       load(fle)
       if(any(grepl("modelstat",names(stats)))) out[i,"modelstat"] <- stats[["modelstat"]]
+    } else {
+      if (file.exists(gdx)) out[i,"modelstat"] <- as.numeric(readGDX(gdx,"o_modelstat", format="first_found"))
+    }
+    
+    # runInAppResults
+    if (onCluster) out[i,"runInAppResults"] <- "NA"
+    if (file.exists(fle)) {
+      load(fle)
       if (onCluster && any(grepl("id",names(stats)))) {
         ovdir<-"/p/projects/rd3mod/models/results/remind/"
         id <- paste0(ovdir,stats[["id"]],".rds")
@@ -75,10 +80,8 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
           out[i,"runInAppResults"] <- TRUE
       } else {
         if (onCluster) out[i,"runInAppResults"] <- FALSE
-        }
-    } else {
-      if (file.exists(gdx)) out[i,"modelstat"] <- as.numeric(readGDX(gdx,"o_modelstat", format="first_found"))
-    }
+      }}
+      
     
     # Iter
     if (file.exists(cfgf)) totNoOfIter <- cfg[["gms"]][["cm_iteration_max"]]
