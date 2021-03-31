@@ -69,7 +69,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL,iamcc
      mifs <- paste0(paths,"/REMIND_generic_",sub("_20[0-9][0-9].*.$","",paths),".mif")
      mifs <- mifs[file.exists(mifs)]
      a <- read.quitte(mifs)
-     out[["iamCheck"]] <- iamCheck(a,model)
+     out[["iamCheck"]] <- iamCheck(a,cfg=model)
     }
   }
   
