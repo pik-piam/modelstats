@@ -44,13 +44,13 @@ loopRuns <- function(mydir) {
     
     if (!file.exists(paste0(i,"/config.Rdata"))) next # do not report on folders that don't contain runs
     out <- printOutput(getRunStatus(i),len1stcol=len)
-    if (grepl("not_converged|Execution erro",out)) {
+    if (grepl("not_converged|Execution erro|Compilation er|missing",out)) {
       cat(red(out))
     } else if (grepl(" converged|Clb_converged",out)){
       cat(underline(green(out)))
     } else if (grepl(" 2 ",out) && !grepl("nash ",out)){
       cat(green(out))
-    } else if (all(grepl(" NA ",out) & grepl("FALSE.*.TRUE",out))) {
+    } else if (grepl("Run in progress",out)) {
       cat(cyan(out))
     } else if (all(grepl(" NA ",out) & grepl("FALSE",out))) {
       cat(red(out))
