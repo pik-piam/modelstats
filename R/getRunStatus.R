@@ -73,10 +73,12 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
       }
       
     # modelstat & runInAppResults
+    out[i,"modelstat"] <- "NA"
     if (onCluster) out[i,"runInAppResults"] <- "NA"
     if (file.exists(fle)) {
       load(fle)
       if(any(grepl("modelstat",names(stats)))) out[i,"modelstat"] <- stats[["modelstat"]]
+      if(is.na(out[i,"modelstat"])) out[i,"modelstat"]<-"NA"
       if (onCluster && any(grepl("id",names(stats)))) {
         ovdir<-"/p/projects/rd3mod/models/results/remind/"
         id <- paste0(ovdir,stats[["id"]],".rds")
@@ -91,10 +93,15 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
     
     # Iter
     out[i,"Iter"] <- "NA"
+    out[i,"RunStatus"] <- "NA"
     if (file.exists(fulllog)) {
       suppressWarnings(try(loop <- sub("^.*.= ","",system(paste0("grep 'LOOPS' ",fulllog," | tail -1"),intern=TRUE)),silent = TRUE))
       if (length(loop)>0) out[i,"Iter"] <- loop
       if (!out[i,"RunType"]%in%c("nash","Calib_nash") & length(totNoOfIter)>0) out[i,"Iter"] <- paste0(out[i,"Iter"],"/",sub(";","",sub("^.*.= ","",totNoOfIter)))
+      suppressWarnings(try(out[i,"RunStatus"]<-substr(sub("\\*\\*\\* Status: ","",system(paste0("grep '*** Status: ' ", fulllog),intern =TRUE)),start=1,stop=14),silent = TRUE))
+      if (out[i,"RunStatus"]=="NA") out[i,"RunStatus"] <- "Run interrupted"
+    } else {
+      out[i,"RunStatus"] <- "No full.log file"
     }
     
     # Conv  
