@@ -21,6 +21,7 @@
 
 loopRuns <- function(mydir) {
 
+  if (length(mydir)==0) return("No runs found")
   if (mydir[[1]]=="exit") return(NULL)
 
   red<-make_style("orangered")
