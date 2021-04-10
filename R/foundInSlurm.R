@@ -17,7 +17,7 @@ foundInSlurm<-function(dir="."){
   }
   
   
-  if (any(grepl(dir,system(paste0("squeue -h -o '%T %j %Z'"),intern=TRUE) )) ) {
+  if (any(grepl(dir,system(paste0("/p/system/slurm/bin/squeue -h -o '%T %j %Z'"),intern=TRUE) )) ) {
     return(TRUE)
   } else {
     return(FALSE)

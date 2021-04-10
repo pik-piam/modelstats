@@ -21,6 +21,7 @@
 
 loopRuns <- function(mydir) {
 
+  if (length(mydir)==0) return("No runs found")
   if (mydir[[1]]=="exit") return(NULL)
 
   red<-make_style("orangered")
@@ -34,22 +35,22 @@ loopRuns <- function(mydir) {
   
   cat("\n")
   if (!file.exists("/p")) {
-    cat(paste0("Folder",paste0(rep(" ",len-5),collapse=""),"Mif             Conv           Iter          modelstat    RunType\n"))
+    cat(paste0("Folder",paste0(rep(" ",len-5),collapse=""),"RunStatus        Mif             Conv           Iter          modelstat    RunType\n"))
   } else {
-    cat(paste0("Folder",paste0(rep(" ",len-5),collapse=""),"runInAppResults   Mif              Conv            Iter           modelstat     RunType      JobInSlurm \n"))
+    cat(paste0("Folder",paste0(rep(" ",len-5),collapse=""),"runInAppResults    RunStatus         Mif              Conv            Iter           modelstat     RunType      JobInSlurm \n"))
   }
   
   for (i in mydir ) {
     
     if (!file.exists(paste0(i,"/config.Rdata"))) next # do not report on folders that don't contain runs
     out <- printOutput(getRunStatus(i),len1stcol=len)
-    if (grepl("not_converged",out)) {
+    if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted",out)) {
       cat(red(out))
     } else if (grepl(" converged|Clb_converged",out)){
       cat(underline(green(out)))
     } else if (grepl(" 2 ",out) && !grepl("nash ",out)){
       cat(green(out))
-    } else if (all(grepl(" NA ",out) & grepl("FALSE.*.TRUE",out))) {
+    } else if (grepl("Run in progress",out)) {
       cat(cyan(out))
     } else if (all(grepl(" NA ",out) & grepl("FALSE",out))) {
       cat(red(out))
