@@ -42,7 +42,13 @@ promptAndRun<-function(mydir=".",user=NULL) {
       myruns <- c(myruns,coupled) # add coupled paths
       myruns<-myruns[file.exists(myruns)] # keep only existing paths
     }
-    if (length(myruns)>5) message("Please wait while I gather information on your current and recently completed runs")
+    if (length(myruns)>40) {
+        message("Excuse me? You need a cluster only for yourself it seems")
+    } else if (length(myruns)>10) { 
+        message("Wow, more than 10 runs")
+    } else if (length(myruns)>5) {
+        message("Please wait while I gather information on your current and recently completed runs")
+    }
     options(width=200)
     getRunStatus(myruns)
     
