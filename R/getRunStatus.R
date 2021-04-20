@@ -158,11 +158,19 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
     
     # MIF
     if (file.exists(cfgf)) {
-      miffile <- paste0(ii,"/REMIND_generic_",cfg[["title"]],".mif")
-      out[i,"Mif"] <- FALSE
-      if (file.exists(miffile)) {
-        if (file.info(miffile)[["size"]]>99999) out[i,"Mif"] <- TRUE
-      } 
+      if (out[["RunType"]]=="MAgPIE") {
+        miffile <- paste0(ii,"/validation.mif")
+        out[i,"Mif"] <- FALSE
+        if (file.exists(miffile)) {
+          if (file.info(miffile)[["size"]]>99999) out[i,"Mif"] <- TRUE
+        }
+      } else {
+        miffile <- paste0(ii,"/REMIND_generic_",cfg[["title"]],".mif")
+        out[i,"Mif"] <- FALSE
+        if (file.exists(miffile)) {
+          if (file.info(miffile)[["size"]]>99999) out[i,"Mif"] <- TRUE
+        } 
+      }
     }
     
     
