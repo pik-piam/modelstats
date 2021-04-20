@@ -22,13 +22,13 @@ printOutput<-function(string,len1stcol=67){
   
   if (length(string)==0) return("")
   out<-""
-  templ <- data.frame("RunType"="NA", "modelstat"="NA",   "Iter"="NA",      "Conv"="NA","Mif"="NA","RunStatus"="NA",stringsAsFactors = F)
+  templ <- data.frame( "modelstat"="NA",   "Iter"="NA",      "Conv"="NA","Mif"="NA","RunStatus"="NA","RunType"="NA",stringsAsFactors = F)
   if (file.exists("/p")) templ <- data.frame("jobInSLURM" = "NA" ,"RunType"="NA", "modelstat"="NA",   "Iter"="NA",   "Conv"="NA","Mif"="NA","RunStatus"="NA","runInAppResults"="NA", stringsAsFactors = F)
   templ[,names(string)] <- string
   rownames(templ) <- rownames(string)
   string <- templ
   for (i in 1:length(string)) {
-    out <- paste0(formatstr(unname(string)[[i]],i+11),out)
+    out <- paste0(formatstr(unname(string)[[i]],i+12),out)
   }
  return(paste0(formatstr(rownames(string),len1stcol)," ",out,"\n")) 
 #  if(is.data.frame(string)) print(unname(string))
