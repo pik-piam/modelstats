@@ -23,7 +23,7 @@ printOutput<-function(string,len1stcol=67){
   if (length(string)==0) return("")
   out<-""
   templ <- data.frame( "modelstat"="NA",   "Iter"="NA",      "Conv"="NA","Mif"="NA","RunStatus"="NA","RunType"="NA",stringsAsFactors = F)
-  if (file.exists("/p")) templ <- data.frame("jobInSLURM" = "NA" ,"RunType"="NA", "modelstat"="NA",   "Iter"="NA",   "Conv"="NA","Mif"="NA","RunStatus"="NA","runInAppResults"="NA", stringsAsFactors = F)
+  if (file.exists("/p")) templ <- data.frame("runInAppResults" = "NA" ,"Mif"="NA", "modelstat"="NA",   "Conv"="NA",   "Iter"="NA","RunStatus"="NA","RunType"="NA" ,"jobInSLURM"="NA", stringsAsFactors = F)
   templ[,names(string)] <- string
   rownames(templ) <- rownames(string)
   string <- templ
