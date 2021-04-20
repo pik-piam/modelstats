@@ -14,6 +14,7 @@ colRunType<-function(mydir="."){
   
   if (file.exists(cfgf)) {
     load(cfgf)
+    if (cfg[["model_name"]] == "MAgPIE") return("MAgPIE")
     out <- cfg[["gms"]][["optimization"]]
     if (cfg[["gms"]][["CES_parameters"]]=="calibrate") out<-paste0("Calib_",out)
   } else if (file.exists(fulllst)) {
