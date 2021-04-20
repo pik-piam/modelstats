@@ -129,10 +129,11 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
         } else if (length(suppressWarnings(system(paste0("grep 'Nash did NOT' ",fulllst),intern=TRUE)))>1) {
           out[i,"Conv"] <- "not_converged"
         } else {
-          iters <- suppressWarnings(system(paste0("grep -A 15 'PARAMETER p80_repy  sum' ",fulllst),intern=TRUE))
+          iters <- suppressWarnings(system(paste0("grep -A 30 'PARAMETER p80_repy  sum' ",fulllst),intern=TRUE))
           if (length(iters)>0) {
             iters <- grep("^$|--|modelstat",iters,invert = TRUE,value=TRUE)
-     
+            iters <- grep("^[A-Z][A-Z][A-Z]  ",iters,              value=TRUE)
+            
               iters<-tail(sapply(iters, strsplit, split = " "),n=120)
               
               b<-paste0(sapply(iters,rem)[3,],collapse="")
