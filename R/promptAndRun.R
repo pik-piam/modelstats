@@ -13,15 +13,21 @@ promptAndRun<-function(mydir=".",user=NULL) {
     runnames<-system(paste0("squeue -u ",user," -h -o '%j'"),intern=TRUE)
  
     myruns2<-system(paste0("sacct -u ",user," -s cd,f -E ",format(Sys.Date(),"%Y-%m-%d")," -S ",as.Date(format(Sys.Date(),"%Y-%m-%d"))-10," --format WorkDir -P -n"),intern=T)
-    myruns2<-myruns2[!grepl("^$",myruns2)]
+ #   myruns2<-myruns2[!grepl("^$",myruns2)]
     myruns<-c(myruns,myruns2)
     runnames2<-system(paste0("sacct -u ",user," -s cd,f -E ",format(Sys.Date(),"%Y-%m-%d")," -S ",as.Date(format(Sys.Date(),"%Y-%m-%d"))-10," --format JobName -P -n"),intern=T)
-    runnames2<-runnames2[!grepl("^batch$",runnames2)]
+#    runnames2<-runnames2[!grepl("^batch$",runnames2)]
     runnames<-c(runnames,runnames2)
-    if (length(myruns)==0) return("No runs found for this user")
+    myruns<-myruns[-which(runnames%in%c("default","batch"))]
+    runnames<-runnames[-which(runnames%in%c("default","batch"))]
+    if (length(myruns)==0) {
+      return("No runs found for this user")
+    } else     message("Found these runs (only first 50 shown)")
+ 
     coupled<-rem<-NULL
     for (i in 1:length(runnames)) {
-      if (grepl(runnames[[i]],myruns[[i]])) {
+      if (any(grepl(runnames[[i]],myruns[[i]]),grepl("mag-run",runnames[[i]]))) {
+#       if (grepl(runnames[[i]],myruns[[i]])) {
         next
       } else {
         coupled<-c(coupled,paste0(myruns[[i]],"/output/",runnames[[i]],"-rem-1"))
@@ -42,15 +48,18 @@ promptAndRun<-function(mydir=".",user=NULL) {
       myruns <- c(myruns,coupled) # add coupled paths
       myruns<-myruns[file.exists(myruns)] # keep only existing paths
     }
-    if (length(myruns)>40) {
-        message("Excuse me? You need a cluster only for yourself it seems")
-    } else if (length(myruns)>10) { 
-        message("Wow, more than 10 runs")
-    } else if (length(myruns)>5) {
-        message("Please wait while I gather information on your current and recently completed runs")
-    }
+#    if (length(myruns)>40) {
+#        message("Excuse me? > 40 runs? You need a cluster only for yourself it seems")
+#    } else if (length(myruns)>15) { 
+#        message("Please wait, I found more than 15 runs (wow)")
+#    } else if (length(myruns)>5) {
+#        message("Please wait while I gather information on your current and recently completed runs")
+#    }
+#    message("Found these runs (only first 50 shown)")
+    print(myruns[1:min(50,length(myruns))])
     options(width=200)
-    getRunStatus(myruns)
+    message(paste0("                                                   ","JobInSlurm          RunType            RunStatus         Iter             Conv            modelstat      Mif           runInAppResults"))
+    for (i in myruns[1:min(50,length(myruns))]) message(sub("^\\[1\\]|\n$","",printOutput(getRunStatus(i),len1stcol=50)))
     
   } else {
     loopRuns(mydir)
