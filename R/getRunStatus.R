@@ -65,7 +65,7 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
     out[i,"modelstat"] <- "NA"
     if (file.exists(fle)) {
       load(fle)
-      if (out[["RunType"]]=="MAgPIE") {
+      if (exists("stats")) if(any(grepl("config",names(stats)))) if (stats[["config"]][["model_name"]]=="MAgPIE") {
         if(any(grepl("modelstat",names(stats)))) out[i,"modelstat"] <- paste0(as.character(stats[["modelstat"]]),collapse="")
         if(is.na(out[i,"modelstat"])) out[i,"modelstat"]<-"NA"
       } else {
@@ -82,9 +82,13 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
     if (file.exists(fle)) {
       load(fle)
       if (onCluster && any(grepl("id",names(stats)))) {
-        ovdir<-"/p/projects/rd3mod/models/results/remind/"
+        if (exists("stats")) if(any(grepl("config",names(stats)))) if (stats[["config"]][["model_name"]]=="MAgPIE") {
+          ovdir<-"/p/projects/rd3mod/models/results/magpie/"
+        } else {
+          ovdir<-"/p/projects/rd3mod/models/results/remind/"
+        }
         id <- paste0(ovdir,stats[["id"]],".rds")
-        if (file.exists(id) && all(file.info(Sys.glob(paste0(ovdir,"overview.rds")))$mtime>file.info(id)$mtime)) 
+        if (exists("ovdir"))if (file.exists(id) && all(file.info(Sys.glob(paste0(ovdir,"overview.rds")))$mtime>file.info(id)$mtime)) 
           out[i,"runInAppResults"] <- TRUE
       } else {
         if (onCluster) out[i,"runInAppResults"] <- FALSE
@@ -158,7 +162,7 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
     
     # MIF
     if (file.exists(cfgf)) {
-      if (out[["RunType"]]=="MAgPIE") {
+      if (exists("stats")) if(any(grepl("config",names(stats)))) if (stats[["config"]][["model_name"]]=="MAgPIE") {
         miffile <- paste0(ii,"/validation.mif")
         out[i,"Mif"] <- FALSE
         if (file.exists(miffile)) {
