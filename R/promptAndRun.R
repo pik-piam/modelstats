@@ -1,28 +1,39 @@
-promptAndRun<-function(mydir=".",user=NULL) {
+promptAndRun<-function(mydir=".",user=NULL,daysback=3) {
   if (is.null(user)) user <- Sys.info()[["user"]]
   if (user=="") user <- Sys.info()[["user"]]
+  if (daysback=="") daysback=3 
 
   if (mydir==".") {
-    loopRuns(".")
+    loopRuns(".",user=user)
   } else if (mydir=="") {
-    loopRuns(choose_folder("."))
+    loopRuns(choose_folder("."),user=user)
   } else if (mydir=="-f") {
-    loopRuns(dir())
+    loopRuns(dir(),user=user)
   } else if (mydir=="-cr") {
     myruns<-system(paste0("squeue -u ",user," -h -o '%Z'"),intern=TRUE)
     runnames<-system(paste0("squeue -u ",user," -h -o '%j'"),intern=TRUE)
  
-    myruns2<-system(paste0("sacct -u ",user," -s cd,f -E ",format(Sys.Date(),"%Y-%m-%d")," -S ",as.Date(format(Sys.Date(),"%Y-%m-%d"))-10," --format WorkDir -P -n"),intern=T)
+    myruns2<-system(paste0("sacct -u ",user," -s cd,f,cancelled -S ",as.Date(format(Sys.Date(),"%Y-%m-%d"))-as.numeric(daysback)," --format WorkDir -P -n"),intern=T)
  #   myruns2<-myruns2[!grepl("^$",myruns2)]
     myruns<-c(myruns,myruns2)
-    runnames2<-system(paste0("sacct -u ",user," -s cd,f -E ",format(Sys.Date(),"%Y-%m-%d")," -S ",as.Date(format(Sys.Date(),"%Y-%m-%d"))-10," --format JobName -P -n"),intern=T)
+    runnames2<-system(paste0("sacct -u ",user," -s cd,f,cancelled -S ",as.Date(format(Sys.Date(),"%Y-%m-%d"))-as.numeric(daysback)," --format JobName -P -n"),intern=T)
 #    runnames2<-runnames2[!grepl("^batch$",runnames2)]
     runnames<-c(runnames,runnames2)
-    myruns<-myruns[-which(runnames%in%c("default","batch"))]
-    runnames<-runnames[-which(runnames%in%c("default","batch"))]
+    if (any(grepl("mag-run",runnames))) {
+      myruns<-myruns[-which(runnames%in%c("default","batch"))]
+      runnames<-runnames[-which(runnames%in%c("default","batch"))]
+    } else {
+      myruns<-myruns[-which(runnames%in%c("batch"))]
+      runnames<-runnames[-which(runnames%in%c("batch"))]
+    }
     if (length(myruns)==0) {
       return("No runs found for this user")
-    } else     message("Found these runs (only first 50 shown)")
+    } else {
+      message("")
+      message("!!! NEW FEATURE FOR BETTER OUTPUT: type 'rs2 -cr username DAYS' with DAYS an integer denoting how many days you want results from")
+      message("")
+      message("Found these runs") 
+    }
  
     coupled<-rem<-NULL
     for (i in 1:length(runnames)) {
@@ -56,13 +67,13 @@ promptAndRun<-function(mydir=".",user=NULL) {
 #        message("Please wait while I gather information on your current and recently completed runs")
 #    }
 #    message("Found these runs (only first 50 shown)")
-    print(myruns[1:min(50,length(myruns))])
+    print(myruns[1:min(1500,length(myruns))])
     options(width=200)
     message(paste0("                                                   ","JobInSlurm          RunType            RunStatus         Iter             Conv            modelstat      Mif           runInAppResults"))
-    for (i in myruns[1:min(50,length(myruns))]) message(sub("^\\[1\\]|\n$","",printOutput(getRunStatus(i),len1stcol=50)))
+    for (i in myruns[1:min(1500,length(myruns))]) message(sub("^\\[1\\]|\n$","",printOutput(getRunStatus(i,user=user),len1stcol=50)))
     
   } else {
-    loopRuns(mydir)
+    loopRuns(mydir,user=user)
   }
   
 }

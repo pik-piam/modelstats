@@ -19,10 +19,13 @@ The `rs2` tool gives you quick, easy, and handy access to a number of info and s
 
 
 
-1. You have just started a session on the cluster and want a quick overview of all your recent jobs (_regardless where they are_):  
-```  rs2 -cr  ```  
+1. You want a quick overview of all your recent jobs (_regardless where they are_):  
+`  rs2 -cr  `  
 If you want to do the same for the jobs of someone else:  
 `rs2 -cr username`  
+If you want to adjust the number of days that the tool reports jobs for:
+`rs2 -cr username 10`
+e.g. for 10 days back.
 
 2. You go into a run folder (e.g. by using `cdf`) and want to see its status:  
 ```rs2 .```  

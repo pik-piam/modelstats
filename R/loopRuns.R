@@ -3,7 +3,7 @@
 #' Returns the output for getRunStatus nicely
 #'
 #' @param mydir a dir or vector of dirs
-#'
+#' @param user the user whose runs will be shown
 #'
 #' @author Anastasis Giannousakis
 #' @import crayon
@@ -19,8 +19,9 @@
 #' 
 #' 
 
-loopRuns <- function(mydir) {
+loopRuns <- function(mydir,user=NULL) {
 
+  if (is.null(user)) user <- Sys.info()[["user"]]
   if (length(mydir)==0) return("No runs found")
   if (mydir[[1]]=="exit") return(NULL)
 
@@ -43,7 +44,7 @@ loopRuns <- function(mydir) {
   for (i in mydir ) {
     
     if (!file.exists(paste0(i,"/config.Rdata"))) next # do not report on folders that don't contain runs
-    try(out <- printOutput(getRunStatus(i),len1stcol=len))
+    try(out <- printOutput(getRunStatus(i,user=user),len1stcol=len))
     if (grepl(" y2| nlp_",out)) {
       if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted",out)) {
         cat(red(out))

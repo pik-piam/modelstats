@@ -4,7 +4,7 @@
 #'
 #' @param mydir Path to the folder(s) where the run(s) is(are) performed
 #' @param sort how to sort (nf=newest first)
-#'
+#' @param user the user whose runs will be shown
 #'
 #' @author Anastasis Giannousakis
 #' @examples 
@@ -18,7 +18,7 @@
 #' @importFrom gdx readGDX
 #' @importFrom utils tail
 #' @export
-getRunStatus<-function(mydir=dir(),sort="nf"){
+getRunStatus<-function(mydir=dir(),sort="nf",user=NULL){
   
   substrRight <- function(x, n){
     substr(x, nchar(x)-n+1, nchar(x))
@@ -26,6 +26,7 @@ getRunStatus<-function(mydir=dir(),sort="nf"){
   
   rem<-function(x) return(x[-which(x=="")])
   
+  if (is.null(user)) user <- Sys.info()[["user"]]
   mydir <- normalizePath(mydir)
   
   onCluster <- file.exists("/p")
