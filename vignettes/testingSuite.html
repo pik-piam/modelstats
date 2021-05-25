@@ -357,13 +357,13 @@ pre code {
 
 <div id="introduction" class="section level2">
 <h2>Introduction</h2>
-<p>This is an introduction to the Testing Suite for big models developed at PIK RD3. For big models no standard continuous integration (CI) techniques can be deployed, and unit tests are not easy to apply and do not provide tests for the complete model workflow. We therefore developed a custom Testing Suite.</p>
+<p>This is an introduction to the Testing Suite for big models developed at PIK RD3. For big models no standard continuous integration (CI) techniques can be deployed, whereas unit tests are not easy to apply and do not provide tests for the complete model workflow. We therefore developed a custom Testing Suite.</p>
 <p>The Testing Suite tests <strong>several scenarios</strong>, including various <strong>output routines</strong> and interfaces with <strong>input data preparation</strong>. Further, it checks the model results for <strong>consistency</strong>.</p>
-<p>It is fully automated (runs every weekend) and writes reports in a gitlab project and sends a weekly email with each new report to the team developing the model.</p>
+<p>It is fully automated (runs every weekend), documents its findings in a gitlab project, and sends a weekly email with each new report to the team developing the model.</p>
 </div>
 <div id="how-it-works" class="section level2">
 <h2>How it works:</h2>
-<p>A scheduled and recurring job runs on the cluster every weekend, starting model runs according to a <code>scenario_config_AMT.csv</code> (found as always in the model’s <code>config</code> folder). AMT stands for “automated model tests”. Once the runs are finished the job creates an overview of the results using <a href="http://htmlpreview.github.io/?https://github.com/pik-piam/modelstats/blob/master/vignettes/rs2.html">rs2</a>, and additionally runs <a href="https://github.com/pik-piam/remind2/blob/master/R/compareScenarios.R">compareScenarios</a> comparing each run with the previous one with the same scenario name (the comparison PDF files are found in each scenario folder, they also contain comparisons with historical data). It also uploads all runs to the <a href="https://github.com/pik-piam/shinyresults/blob/master/R/appResults.R">shinyResults::appResults</a> app for easy and interactive viewing (use “AMT” in the title search). Also here a comparison with historical data is found. Further, the results of all runs are gathered, passed through an <a href="https://github.com/IAMconsortium/iamc">IAMC-style</a> check for consistency, and archived. These checks include:</p>
+<p>A scheduled and recurring job runs on the cluster every weekend, starting model runs according to a <code>scenario_config_AMT.csv</code> (found as always in the model’s <code>config</code> folder). AMT stands for “automated model tests”. Once the runs are finished the job creates an overview of the results using <a href="http://htmlpreview.github.io/?https://github.com/pik-piam/modelstats/blob/master/vignettes/rs2.html">rs2</a>, and additionally runs <a href="https://github.com/pik-piam/remind2/blob/master/R/compareScenarios.R">compareScenarios</a> comparing each run with the previous run with the same scenario name (the comparison PDF files are found in each scenario folder, they also contain comparisons with historical data). It also uploads all runs to the <a href="https://github.com/pik-piam/shinyresults/blob/master/R/appResults.R">shinyResults::appResults</a> app for easy and interactive viewing (use “AMT” in the title search). Also here a comparison with historical data is found. Further, the results of all runs are gathered, passed through an <a href="https://github.com/IAMconsortium/iamc">IAMC-style</a> check for consistency, and archived. These checks include:</p>
 <ul>
 <li>non-standard variable names</li>
 <li>missing variables</li>
@@ -371,10 +371,12 @@ pre code {
 <li>summation groups (using the |+| notation)</li>
 <li>units</li>
 </ul>
+<p>Finally, using a gitlab integration hook an overview of the results is automatically reported to the developer team via email.</p>
 </div>
-<div id="how-to-contribute" class="section level2">
-<h2>How to contribute:</h2>
-<p>Add your own scenarios to the <code>scenario_config_AMT.csv</code> and simply commit it to the model’s develop branch. This way your scenarios will be included in future tests.</p>
+<div id="how-to-usecontribute" class="section level2">
+<h2>How to use/contribute:</h2>
+<p>If the report contains runs that failed, or output that looks wrong (or has not been generated at all) someone has to take action. If there are cases for which you feel responsible or in the position to fix, please do so. This early warning system ensures stable workflows for all members of the team.</p>
+<p>If you want your own scenarios to be included in future tests: Add your scenarios to the <code>scenario_config_AMT.csv</code> and simply commit it to the model’s develop branch. They will be automatically executed the next time the tests are run.</p>
 <p>Tailor the IAMC-style checks to your needs or add further IAMC-style checks here (read the vignette to see how this is done): <a href="http://htmlpreview.github.io/?https://github.com/pik-piam/piamModelTests/blob/master/vignettes/iamc.html" class="uri">http://htmlpreview.github.io/?https://github.com/pik-piam/piamModelTests/blob/master/vignettes/iamc.html</a></p>
 <p>For wishes, changes etc, please contact RSE or open a new issue here: <a href="https://github.com/pik-piam/modelstats/issues" class="uri">https://github.com/pik-piam/modelstats/issues</a></p>
 </div>
