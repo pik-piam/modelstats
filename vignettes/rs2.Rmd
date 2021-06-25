@@ -1,5 +1,5 @@
 ---
-title: "REMIND run statistics"
+title: "Model run statistics 2 (rs2)"
 author: "Anastasis Giannousakis"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
