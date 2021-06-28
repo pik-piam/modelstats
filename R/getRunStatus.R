@@ -88,7 +88,7 @@ getRunStatus<-function(mydir=dir(),sort="nf",user=NULL){
         } else {
           ovdir<-"/p/projects/rd3mod/models/results/remind/"
         }
-        id <- paste0(ovdir,stats[["id"]],".rds")
+        try(id <- paste0(ovdir,stats[["id"]],".rds"))
         if (exists("ovdir"))if (file.exists(id) && all(file.info(Sys.glob(paste0(ovdir,"overview.rds")))$mtime>file.info(id)$mtime)) 
           out[i,"runInAppResults"] <- TRUE
       } else {

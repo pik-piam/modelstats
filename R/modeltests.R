@@ -12,6 +12,8 @@
 #' @param model Model name
 #' @param test Use this option to run a test of the workflow (no runs will be submitted)
 #' @param iamccheck Use this option to turn iamc-style checks on and off
+#' @param email whether an email notification will be send or not
+#' @param compScen whether compScen has to run or not 
 #'
 #' @author Anastasis Giannousakis
 #' @seealso \code{\link{package2readme}}
@@ -19,62 +21,118 @@
 #' @importFrom piamModelTests iamCheck
 #' @importFrom quitte read.quitte
 #' @importFrom lucode2 sendmail
+#' @importFrom remind2 compareScenarios
+#' @importFrom magclass read.report write.report2 collapseNames
 #' @export
-modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL,iamccheck=TRUE){
-
-  if (!is.null(test)) {
-    runcode <- paste0("-AMT-.*.202[1-9]-",test)
-    test <- TRUE
-  } else test <- FALSE
-  if (is.null(model)) stop("Model cannot be NULL")
-
-  setwd(mydir)
-  if (!test) {
-    system("/p/system/packages/git/2.16.1/bin/git reset --hard origin/develop && /p/system/packages/git/2.16.1/bin/git pull")
-    argv <- "config/scenario_config_AMT.csv"
-    slurmConfig <- "--qos=priority --time=06:00:00 --nodes=1 --tasks-per-node=12"
-    system("find . -type d -name output -prune -o -type f -name '*.R' -exec sed -i 's/sbatch/\\/p\\/system\\/slurm\\/bin\\/sbatch/g' {} +")
-    source("start.R",local=TRUE)
-  }
-
-  out<-list()
-  modelinerror = FALSE
-
-  if (!test) {
-    runcode<- paste0("-AMT-.*.202[1-9]-[0-1][0-9]-",format(Sys.Date(),"%d"))
-    repeat {
-      if(!any(grepl(runcode,system(paste0("/p/system/slurm/bin/squeue -u ",user," -h -o '%i %q %T %C %M %j %V %L %e %Z'"),intern=TRUE) ))) break
+modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL,iamccheck=TRUE,email=TRUE,compScen=TRUE){
+  if (readLines(paste0(mydir,"/.testsstatus"))=="start") {
+    if (!is.null(test)) {
+      test_bu <- test
+      runcode <- paste0("-AMT-.*.202[1-9]-",test)
+      if (model == "MAgPIE") runcode <- paste0("_TEST.*.202[1-9]-",test)
+      test    <- TRUE
+    } else {
+      test <- FALSE
+      test_bu <- NULL
+      runcode <- paste0("-AMT-.*.",format(Sys.time(),"%Y-%m-%d"))
+      if (model == "MAgPIE") runcode <- paste0("_TEST.*.",format(Sys.time(),"%Y-%m-%d"))
     }
-  }
-  
-  
-  setwd("output/")
-  paths<-grep(runcode,dir(),value = TRUE)
-  paths <- file.info(paths)
-  paths <- rownames(paths[paths[,"isdir"]==TRUE,])
-
-
-  myfile<-paste0(tempdir(),"/README.md")
-  write("```",myfile)
-  write(paste0("This is the result of the automated REMIND testing suite. Tested commit: ",system("/p/system/packages/git/2.16.1/bin/git log -1",intern=TRUE)[[1]],"\n"),myfile,append=TRUE)
-  write(paste0("Date: ",date(),". Path to the runs: /p/projects/remind/modeltests/output/ .","\n"),myfile,append=TRUE)
-  write(paste0("If 'Mif' is FALSE the reporting has failed (possible error in pik-piam/remind2)","\n"),myfile,append=TRUE)
-  write("                                   runInAppResults   Mif              Conv            Iter           modelstat     RunType      jobInSlurm",myfile,append=TRUE)
-  for (i in paths) {
-    write(sub("\n$","",printOutput(getRunStatus(i),34)),myfile,append = TRUE)
-  }
-
-  if (iamccheck) {  
-    if (length(paths)>0) {
-     mifs <- paste0(paths,"/REMIND_generic_",sub("_20[0-9][0-9].*.$","",paths),".mif")
-     mifs <- mifs[file.exists(mifs)]
-     a <- read.quitte(mifs)
-     out[["iamCheck"]] <- iamCheck(a,cfg=model)
+    if (is.null(model)) stop("Model cannot be NULL")
+    
+    setwd(mydir)
+    if (!test) {
+      system("/p/system/packages/git/2.16.1/bin/git reset --hard origin/develop && /p/system/packages/git/2.16.1/bin/git pull")
+      if (model == "REMIND") {
+        argv <- "config/scenario_config_AMT.csv"
+        slurmConfig <- "--qos=priority --time=06:00:00 --nodes=1 --tasks-per-node=12"
+        system("find . -type d -name output -prune -o -type f -name '*.R' -exec sed -i 's/sbatch/\\/p\\/system\\/slurm\\/bin\\/sbatch/g' {} +")
+        source("start.R",local=TRUE)
+      } else if (model == "MAgPIE") {
+        system("Rscript start.R runscripts=test_runs submit=slurmpriority")
+      }
     }
+    saveRDS(runcode,file=paste0(mydir,"/runcode.rds"))
+    saveRDS(test,file=paste0(mydir,"/test.rds"))
+    saveRDS(test_bu,file=paste0(mydir,"/test_bu.rds"))
+    writeLines("end",con=paste0(mydir,"/.testsstatus"))
+  } else if (readLines(paste0(mydir,"/.testsstatus"))=="end") {
+    setwd(mydir)
+    writeLines("wait",con=paste0(mydir,"/.testsstatus"))
+    test    <- readRDS(paste0(mydir,"/test.rds"))
+    test_bu <- readRDS(paste0(mydir,"/test_bu.rds"))
+    runcode <- readRDS(paste0(mydir,"/runcode.rds"))
+    out<-list()
+    
+    if (!test) {
+      repeat {
+        if(!any(grepl(runcode,system(paste0("/p/system/slurm/bin/squeue -u ",user," -h -o '%i %q %T %C %M %j %V %L %e %Z'"),intern=TRUE) ))) break
+      }
+    }
+    
+    
+    setwd("output")
+    if (!test) {
+      gRS <- getRunStatus(dir())
+    } else {
+      gRS <- readRDS("gRS.rds")
+    }
+    paths<-grep(runcode,dir(),value = TRUE)
+    paths <- file.info(paths)
+    paths <- rownames(paths[paths[,"isdir"]==TRUE,])
+    
+    commit<-sub("commit ","",system("/p/system/packages/git/2.16.1/bin/git log -1",intern=TRUE)[[1]])
+    myfile<-paste0(tempdir(),"/README.md")
+    write("```",myfile)
+    write(paste0("This is the result of the automated ", model ," testing suite."),myfile,append=TRUE)
+    write(paste0("Path to runs:", mydir ,"output/"),myfile,append=TRUE)
+    write(paste0("Direct and interactive access to plots: open shinyResults::appResults, then use '",strsplit(runcode,"\\.")[[1]][1],"' as keyword in the title search"),myfile,append=TRUE)
+if (model=="REMIND" & compScen==T)    write(paste0("Further, each folder below should contain a compareScenarios PDF comparing the output of the current and the last tests (comp_with_RUN-DATE.pdf)"),myfile,append=T)
+    write(paste0("Note: 'Mif' = FALSE indicates a possible error in output generation, please check!"),myfile,append=TRUE)
+    write(paste0("If you are currently viewing the email: Overview of the last test is in red, and of the current test in green"),myfile,append=TRUE)
+    write(paste0("Tested commit: ",commit),myfile,append=TRUE)
+    write("Run                                jobInSlurm          RunType            RunStatus         Iter             Conv            modelstat      Mif           runInAppResults",myfile,append=TRUE)
+    for (i in paths) {
+      write(sub("\n$","",printOutput(getRunStatus(i),34)),myfile,append = TRUE)
+      if (compScen) {
+        setwd(i)
+        if (file.exists("config.Rdata")) {
+          load("config.Rdata") 
+        } else {
+          next 
+        }
+        if (!any(grepl("comp_with_.*.pdf",dir()))) {
+          miffile <- paste0(getwd(),"/REMIND_generic_",cfg$title,"_withoutPlus.mif")
+          same_runs <- grep(cfg$title,rownames(dplyr::filter(gRS,Conv=="converged",Mif==TRUE)),value=TRUE)[-1]
+          if (length(same_runs) > 0) folder_comp_mif <- max(same_runs)
+          compmif <- paste0("../",folder_comp_mif,paste0("/REMIND_generic_",cfg$title,"_withoutPlus.mif"))
+          tmp <- read.report(compmif,as.list=FALSE)
+          write.report2(x=collapseNames(tmp),file="tmp.mif",scenario=paste0(cfg$title,"_ref"),model=model)
+          if (all(file.exists(miffile,"tmp.mif"))) {
+            if (!any(grepl("comp_with_.*.pdf",dir()))) try(compareScenarios(c(miffile,"tmp.mif"),hist="historical.mif",fileName=paste0("comp_with_",folder_comp_mif,".pdf")))
+          }
+        }
+        setwd("../")
+      }
+    }
+    
+    if (iamccheck) {  
+      if (length(paths)>0) {
+        mifs <- paste0(paths,"/REMIND_generic_",sub("_20[0-9][0-9].*.$","",paths),".mif")
+        mifs <- mifs[file.exists(mifs)]
+        a <- read.quitte(mifs)
+        out[["iamCheck"]] <- iamCheck(a,cfg=model)
+        if (!test) {
+          saveRDS(out[["iamCheck"]],file=paste0("iamccheck-",commit,".rds")) 
+        } else {
+          saveRDS(out[["iamCheck"]],file=paste0("iamccheck-",test_bu,".rds"))
+        }
+      }
+      write(paste0("The IAMC check of these runs is found in /p/projects/remind/modeltests/output/iamccheck-",commit,".rds","\n"),myfile,append=TRUE)
+    }
+    write("```",myfile,append=TRUE)
+    if (email) sendmail(path=gitdir,file=myfile,commitmessage="Automated Test Results",remote=TRUE,reset=TRUE)
+    writeLines("start",con=paste0(mydir,"/.testsstatus"))
   }
-  
-  write("```",myfile,append=TRUE)
-  sendmail(path=gitdir,file=myfile,commitmessage="Automated Test Results",remote=TRUE,reset=TRUE)
 }
 
 

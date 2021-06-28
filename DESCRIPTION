@@ -19,7 +19,8 @@ Suggests:
     magclass,
     covr,
     knitr,
-    rmarkdown
+    rmarkdown,
+    remind2
 URL: https://github.com/pik-piam/modelstats
 BugReports: https://github.com/pik-piam/modelstats/issues
 Encoding: UTF-8
