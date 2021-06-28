@@ -1,0 +1,44 @@
+---
+title: "Testing Suite"
+author: "Anastasis Giannousakis"
+date: "5/21/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+## Introduction
+
+This is an introduction to the Testing Suite for big models developed at PIK RD3. For big models no standard continuous integration (CI) techniques can be deployed, whereas unit tests are not easy to apply and do not provide tests for the complete model workflow. We therefore developed a custom Testing Suite.
+
+The Testing Suite tests **several scenarios**, including various **output routines** and interfaces with **input data preparation**. Further, it checks the model results for **consistency**.
+
+It is fully automated (runs every weekend), documents its findings in a gitlab project, and sends a weekly email with each new report to the team developing the model.
+
+## How it works:
+
+A scheduled and recurring job runs on the cluster every weekend, starting model runs according to a `scenario_config_AMT.csv` (found as always in the model's `config` folder). AMT stands for "automated model tests". Once the runs are finished the job creates an overview of the results using [rs2](http://htmlpreview.github.io/?https://github.com/pik-piam/modelstats/blob/master/vignettes/rs2.html), and additionally runs [compareScenarios](https://github.com/pik-piam/remind2/blob/master/R/compareScenarios.R) comparing each run with the previous run with the same scenario name (the comparison PDF files are found in each scenario folder, they also contain comparisons with historical data). It also uploads all runs to the [shinyResults::appResults](https://github.com/pik-piam/shinyresults/blob/master/R/appResults.R) app for easy and interactive viewing (use "AMT" in the title search). Also here a comparison with historical data is found. Further, the results of all runs are gathered, passed through an [IAMC-style](https://github.com/IAMconsortium/iamc) check for consistency, and archived. These checks include:
+
+  *  non-standard variable names
+  *  missing variables
+  *  min and max values
+  *  summation groups (using the |+| notation)
+  *  units
+
+Finally, using a gitlab integration hook an overview of the results is automatically reported to the developer team via email.
+
+## How to use/contribute:
+
+If the report contains runs that failed, or output that looks wrong (or has not been generated at all) someone has to take action. If there are cases for which you feel responsible or in the position to fix, please do so. This early warning system ensures stable workflows for all members of the team.
+
+If you want your own scenarios to be included in future tests: Add your scenarios to the `scenario_config_AMT.csv` and simply commit it to the model's develop branch. They will be automatically executed the next time the tests are run.
+
+Tailor the IAMC-style checks to your needs or add further IAMC-style checks here (read the vignette to see how this is done): http://htmlpreview.github.io/?https://github.com/pik-piam/piamModelTests/blob/master/vignettes/iamc.html
+
+For wishes, changes etc, please contact RSE or open a new issue here: https://github.com/pik-piam/modelstats/issues
+
+
