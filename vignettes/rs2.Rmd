@@ -1,10 +1,10 @@
 ---
-title: "Model run statistics 2 (rs2)"
+title: "Run statistics 2 (rs2)"
 author: "Anastasis Giannousakis"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{REMIND run statistics}
+  %\VignetteIndexEntry{Run statistics 2 (rs2)}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---

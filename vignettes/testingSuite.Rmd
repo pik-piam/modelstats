@@ -3,6 +3,10 @@ title: "Testing Suite"
 author: "Anastasis Giannousakis"
 date: "5/21/2021"
 output: html_document
+vignette: >
+  %\VignetteIndexEntry{Testing Suite}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 ---
 
 ```{r setup, include=FALSE}

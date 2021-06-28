@@ -18,6 +18,7 @@
 #' @author Anastasis Giannousakis
 #' @seealso \code{\link{package2readme}}
 #' @importFrom utils read.csv2
+#' @importFrom dplyr filter
 #' @importFrom piamModelTests iamCheck
 #' @importFrom quitte read.quitte
 #' @importFrom lucode2 sendmail
@@ -95,14 +96,16 @@ if (model=="REMIND" & compScen==T)    write(paste0("Further, each folder below s
       write(sub("\n$","",printOutput(getRunStatus(i),34)),myfile,append = TRUE)
       if (compScen) {
         setwd(i)
+        cfg <- NULL
         if (file.exists("config.Rdata")) {
           load("config.Rdata") 
         } else {
           next 
         }
         if (!any(grepl("comp_with_.*.pdf",dir()))) {
+          Conv <- Mif <- NULL
           miffile <- paste0(getwd(),"/REMIND_generic_",cfg$title,"_withoutPlus.mif")
-          same_runs <- grep(cfg$title,rownames(dplyr::filter(gRS,Conv=="converged",Mif==TRUE)),value=TRUE)[-1]
+          same_runs <- grep(cfg$title,rownames(filter(gRS,Conv=="converged",Mif==TRUE)),value=TRUE)[-1]
           if (length(same_runs) > 0) folder_comp_mif <- max(same_runs)
           compmif <- paste0("../",folder_comp_mif,paste0("/REMIND_generic_",cfg$title,"_withoutPlus.mif"))
           tmp <- read.report(compmif,as.list=FALSE)

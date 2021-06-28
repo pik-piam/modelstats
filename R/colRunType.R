@@ -2,13 +2,14 @@
 #'
 #' What is the type of this run?
 #'
-#' @param dir Path to the folder(s) where the run(s) is(are) performed
+#' @param mydir Path to the folder(s) where the run(s) is(are) performed
 #'
 #'
 #' @author Anastasis Giannousakis
 #' @export
 colRunType<-function(mydir="."){
 
+  cfg <- cfgf <- NULL
   cfgf <- paste0(mydir,"/config.Rdata")
   fulllst <- paste0(mydir,"/full.lst")
   

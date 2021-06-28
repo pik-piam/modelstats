@@ -1,8 +1,8 @@
 Package: modelstats
 Type: Package
 Title: Run Analysis Tools
-Version: 0.0.1.9040
-Date: 2021-04-20
+Version: 0.1.0
+Date: 2021-06-28
 Authors@R: c(person("Anastasis", "Giannousakis", email = "giannou@pik-potsdam.de", role = c("aut","cre")))
 Description: A collection of tools which allow to analyze model runs.
 Imports: 
@@ -14,13 +14,13 @@ Imports:
     piamModelTests,
     lucode2,
     usethis,
-    utils
-Suggests: 
+    utils,
     magclass,
+    remind2
+Suggests:
     covr,
     knitr,
-    rmarkdown,
-    remind2
+    rmarkdown
 URL: https://github.com/pik-piam/modelstats
 BugReports: https://github.com/pik-piam/modelstats/issues
 Encoding: UTF-8
