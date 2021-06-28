@@ -17,7 +17,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Introduction
 
-This is an introduction to the Testing Suite for big models developed at PIK RD3. For big models no standard continuous integration (CI) techniques can be deployed, whereas unit tests are not easy to apply and do not provide tests for the complete model workflow. We therefore developed a custom Testing Suite.
+This is an introduction to the Testing Suite for big models developed at PIK RD3. For big models no standard continuous integration (CI) techniques can be deployed, while unit tests are not easy to apply and do not provide tests for the complete model workflow. We therefore developed a custom Testing Suite.
 
 The Testing Suite tests **several scenarios**, including various **output routines** and interfaces with **input data preparation**. Further, it checks the model results for **consistency**.
 
