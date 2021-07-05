@@ -45,7 +45,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL,iamcc
       system("/p/system/packages/git/2.16.1/bin/git reset --hard origin/develop && /p/system/packages/git/2.16.1/bin/git pull")
       if (model == "REMIND") {
         argv <- "config/scenario_config_AMT.csv"
-        slurmConfig <- "--qos=priority --time=06:00:00 --nodes=1 --tasks-per-node=12"
+        slurmConfig <- "--qos=priority --time=12:00:00 --nodes=1 --tasks-per-node=12"
         system("find . -type d -name output -prune -o -type f -name '*.R' -exec sed -i 's/sbatch/\\/p\\/system\\/slurm\\/bin\\/sbatch/g' {} +")
         source("start.R",local=TRUE)
       } else if (model == "MAgPIE") {
