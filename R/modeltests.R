@@ -47,6 +47,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL,iamcc
         argv <- "config/scenario_config_AMT.csv"
         slurmConfig <- "--qos=priority --time=12:00:00 --nodes=1 --tasks-per-node=12"
         system("find . -type d -name output -prune -o -type f -name '*.R' -exec sed -i 's/sbatch/\\/p\\/system\\/slurm\\/bin\\/sbatch/g' {} +")
+        unlink("input/source_files.log",force = TRUE)
         source("start.R",local=TRUE)
       } else if (model == "MAgPIE") {
         system("Rscript start.R runscripts=test_runs submit=slurmpriority")
