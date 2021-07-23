@@ -73,11 +73,11 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL,iamcc
     
     
     setwd("output")
-    if (!test) {
-      gRS <- getRunStatus(dir())
-    } else {
-      gRS <- readRDS("gRS.rds")
-    }
+    
+    gRSold <- readRDS("gRS.rds")
+    gRS <- rbind(gRSold,getRunStatus(setdiff(dir(),rownames(gRSold))))
+    saveRDS(gRS,"gRS.rds")
+    
     paths<-grep(runcode,dir(),value = TRUE)
     paths <- file.info(paths)
     paths <- rownames(paths[paths[,"isdir"]==TRUE,])
