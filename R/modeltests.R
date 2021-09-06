@@ -106,8 +106,10 @@ if (model=="REMIND" & compScen==T)    write(paste0("Further, each folder below s
         if (!any(grepl("comp_with_.*.pdf",dir()))) {
           Conv <- Mif <- NULL
           miffile <- paste0(getwd(),"/REMIND_generic_",cfg$title,"_withoutPlus.mif")
-          same_runs <- grep(cfg$title,rownames(filter(gRS,Conv=="converged",Mif==TRUE)),value=TRUE)[-1]
-          if (length(same_runs) > 0) folder_comp_mif <- max(same_runs)
+          sameRuns <- grep(cfg$title,rownames(filter(gRS,Conv=="converged",Mif==TRUE)),value=TRUE)
+          rmRun <- grep(sub("output/","",cfg$results_folder),sameRuns)
+          sameRuns <- sameRuns[-rmRun]
+          if (length(sameRuns) > 0) folder_comp_mif <- max(sameRuns)
           compmif <- paste0("../",folder_comp_mif,paste0("/REMIND_generic_",cfg$title,"_withoutPlus.mif"))
           tmp <- read.report(compmif,as.list=FALSE)
           write.report2(x=collapseNames(tmp),file="tmp.mif",scenario=paste0(cfg$title,"_ref"),model=model)
