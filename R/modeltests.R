@@ -98,7 +98,7 @@ if (model=="REMIND" & compScen==T)    write(paste0("Further, each folder below s
       if (compScen) {
         setwd(i)
         cfg <- NULL
-        if (file.exists("config.Rdata")) {
+        if (any(grepl(sub("^.*./output/","",getwd()),rownames(filter(gRS,Conv=="converged",Mif==TRUE))))) {
           load("config.Rdata") 
         } else {
           next 
