@@ -73,7 +73,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL,iamcc
     
     
     setwd("output")
-    
+
     gRSold <- readRDS("gRS.rds")
     gRS <- rbind(gRSold,getRunStatus(setdiff(dir(),rownames(gRSold))))
     saveRDS(gRS,"gRS.rds")
@@ -81,7 +81,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL,iamcc
     paths<-grep(runcode,dir(),value = TRUE)
     paths <- file.info(paths)
     paths <- rownames(paths[paths[,"isdir"]==TRUE,])
-    
+
     commit<-sub("commit ","",system("/p/system/packages/git/2.16.1/bin/git log -1",intern=TRUE)[[1]])
     myfile<-paste0(tempdir(),"/README.md")
     write("```",myfile)
@@ -101,6 +101,7 @@ if (model=="REMIND" & compScen==T)    write(paste0("Further, each folder below s
         if (any(grepl(sub("^.*./output/","",getwd()),rownames(filter(gRS,Conv=="converged",Mif==TRUE))))) {
           load("config.Rdata") 
         } else {
+          setwd("../")
           next 
         }
         if (!any(grepl("comp_with_.*.pdf",dir()))) {

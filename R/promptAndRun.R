@@ -70,7 +70,7 @@ promptAndRun<-function(mydir=".",user=NULL,daysback=3) {
     print(myruns[1:min(1500,length(myruns))])
     options(width=200)
     message(paste0("                                                   ","JobInSlurm          RunType            RunStatus         Iter             Conv            modelstat      Mif           runInAppResults"))
-    for (i in myruns[1:min(1500,length(myruns))]) message(sub("^\\[1\\]|\n$","",printOutput(getRunStatus(i,user=user),len1stcol=50)))
+    for (i in myruns[1:min(1500,length(myruns))]) try(message(sub("^\\[1\\]|\n$","",printOutput(getRunStatus(i,user=user),len1stcol=50))),silent=TRUE)
     
   } else {
     loopRuns(mydir,user=user)
