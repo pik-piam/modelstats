@@ -20,7 +20,7 @@ colRunType<-function(mydir="."){
         out <- cfg[["gms"]][["optimization"]]
     } else {
         out <- cfg[["gms"]][["optimization"]]
-        if (!is.null(cfg$CES_parameters)) if (cfg[["gms"]][["CES_parameters"]]=="calibrate") out<-paste0("Calib_",out)
+        if (!is.null(cfg$gms$CES_parameters)) if (cfg[["gms"]][["CES_parameters"]]=="calibrate") out<-paste0("Calib_",out)
     }
   } else if (file.exists(fulllst)) {
         out <- sub("         !! def = nash","",sub("^ .*.ion  ","",system(paste0("grep 'setGlobal optimization  ' ",fulllst),intern=TRUE)))
