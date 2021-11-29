@@ -115,17 +115,19 @@ if (model=="REMIND" & compScen==T)    write(paste0("Further, each folder below s
           next 
         }
         if (!any(grepl("comp_with_.*.pdf",dir()))) {
-          Conv <- Mif <- NULL
+          folder_comp_mif  <- Conv <- Mif <- NULL
           miffile <- paste0(getwd(),"/REMIND_generic_",cfg$title,"_withoutPlus.mif")
           sameRuns <- grep(cfg$title,rownames(filter(gRS,Conv=="converged",Mif==TRUE)),value=TRUE)
           rmRun <- grep(sub("output/","",cfg$results_folder),sameRuns)
           sameRuns <- sameRuns[-rmRun]
-          if (length(sameRuns) > 0) folder_comp_mif <- max(sameRuns)
-          compmif <- paste0("../",folder_comp_mif,paste0("/REMIND_generic_",cfg$title,"_withoutPlus.mif"))
-          tmp <- read.report(compmif,as.list=FALSE)
-          write.report2(x=collapseNames(tmp),file="tmp.mif",scenario=paste0(cfg$title,"_ref"),model=model)
-          if (all(file.exists(miffile,"tmp.mif"))) {
-            if (!any(grepl("comp_with_.*.pdf",dir()))) try(compareScenarios(c(miffile,"tmp.mif"),hist="historical.mif",fileName=paste0("comp_with_",folder_comp_mif,".pdf")))
+          if (length(sameRuns) > 0) {
+            folder_comp_mif <- max(sameRuns)
+            compmif <- paste0("../",folder_comp_mif,paste0("/REMIND_generic_",cfg$title,"_withoutPlus.mif"))
+            tmp <- read.report(compmif,as.list=FALSE)
+            write.report2(x=collapseNames(tmp),file="tmp.mif",scenario=paste0(cfg$title,"_ref"),model=model)
+            if (all(file.exists(miffile,"tmp.mif"))) {
+              if (!any(grepl("comp_with_.*.pdf",dir()))) try(compareScenarios(c(miffile,"tmp.mif"),hist="historical.mif",fileName=paste0("comp_with_",folder_comp_mif,".pdf")))
+            }
           }
         }
         setwd("../")
