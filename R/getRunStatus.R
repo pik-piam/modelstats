@@ -173,7 +173,7 @@ getRunStatus<-function(mydir=dir(),sort="nf",user=NULL){
         miffile <- paste0(ii,"/REMIND_generic_",cfg[["title"]],".mif")
         out[i,"Mif"] <- FALSE
         if (file.exists(miffile)) {
-          if (file.info(miffile)[["size"]]>99999) out[i,"Mif"] <- TRUE
+          if (file.info(miffile)[["size"]]>3899999) out[i,"Mif"] <- TRUE
         } 
       }
     }

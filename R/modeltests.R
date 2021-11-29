@@ -43,11 +43,16 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL,iamcc
     setwd(mydir)
     if (!test) {
       system("/p/system/packages/git/2.16.1/bin/git reset --hard origin/develop && /p/system/packages/git/2.16.1/bin/git pull")
+      system("sed -i 's/cfg$force_download <- FALSE/cfg$force_download <- TRUE/' config/default.cfg")
+      a <- system("find modules/ -name 'module.gms'",intern=TRUE) # if empty realization folders exist (which git does not see), delete them
+      for (i in a) {
+        b <- setdiff(dir(sub("module.gms$", "", i)), c("module.gms", "input", sub("/realization.gms\"$", "", sub("^.*.modules/[0-9a-zA-Z_]{1,}/", "", grep("realization.gms", readLines(i), value=TRUE)))))
+        if (length(b)>0) unlink(paste0(sub("module.gms$", "", i), b), recursive=TRUE)
+      }
       if (model == "REMIND") {
         argv <- "config/scenario_config_AMT.csv"
         slurmConfig <- "--qos=priority --time=12:00:00 --nodes=1 --tasks-per-node=12"
         system("find . -type d -name output -prune -o -type f -name '*.R' -exec sed -i 's/sbatch/\\/p\\/system\\/slurm\\/bin\\/sbatch/g' {} +")
-        unlink("input/source_files.log",force = TRUE)
         source("start.R",local=TRUE)
       } else if (model == "MAgPIE") {
         system("Rscript start.R runscripts=test_runs submit=slurmpriority")
@@ -63,6 +68,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL,iamcc
     test    <- readRDS(paste0(mydir,"/test.rds"))
     test_bu <- readRDS(paste0(mydir,"/test_bu.rds"))
     runcode <- readRDS(paste0(mydir,"/runcode.rds"))
+    lastCommit <- readRDS(paste0(mydir,"/lastcommit.rds"))
     out<-list()
     
     if (!test) {
@@ -75,14 +81,15 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL,iamcc
     setwd("output")
 
     gRSold <- readRDS("gRS.rds")
-    gRS <- rbind(gRSold,getRunStatus(setdiff(dir(),rownames(gRSold))))
-    saveRDS(gRS,"gRS.rds")
+    try(gRS <- rbind(gRSold,getRunStatus(setdiff(dir(),rownames(gRSold)))))
+    if (exists("gRS")) saveRDS(gRS,"gRS.rds")
     
     paths<-grep(runcode,dir(),value = TRUE)
     paths <- file.info(paths)
     paths <- rownames(paths[paths[,"isdir"]==TRUE,])
 
     commit<-sub("commit ","",system("/p/system/packages/git/2.16.1/bin/git log -1",intern=TRUE)[[1]])
+    commits<-system(paste0("/p/system/packages/git/2.16.1/bin/git log --merges --pretty=oneline ",lastCommit,"..",commit," --abbrev-commit | grep 'Merge pull request'"),intern=TRUE)
     myfile<-paste0(tempdir(),"/README.md")
     write("```",myfile)
     write(paste0("This is the result of the automated ", model ," testing suite."),myfile,append=TRUE)
@@ -92,6 +99,9 @@ if (model=="REMIND" & compScen==T)    write(paste0("Further, each folder below s
     write(paste0("Note: 'Mif' = FALSE indicates a possible error in output generation, please check!"),myfile,append=TRUE)
     write(paste0("If you are currently viewing the email: Overview of the last test is in red, and of the current test in green"),myfile,append=TRUE)
     write(paste0("Tested commit: ",commit),myfile,append=TRUE)
+    write(paste0("The test of ",format(Sys.time(),"%Y-%m-%d")," contains these merges:"),myfile,append=TRUE)
+    write(commits,myfile,append=TRUE)
+#    write(paste0("View merge range on github: https://github.com/",model,"model/",model",/pulls?q=is%3Apr+is%3Amerged+",lastCommit,"..",commit),myfile,append=TRUE)
     write("Run                                jobInSlurm          RunType            RunStatus         Iter             Conv            modelstat      Mif           runInAppResults",myfile,append=TRUE)
     for (i in paths) {
       write(sub("\n$","",printOutput(getRunStatus(i),34)),myfile,append = TRUE)
@@ -139,6 +149,7 @@ if (model=="REMIND" & compScen==T)    write(paste0("Further, each folder below s
     write("```",myfile,append=TRUE)
     if (email) sendmail(path=gitdir,file=myfile,commitmessage="Automated Test Results",remote=TRUE,reset=TRUE)
     writeLines("start",con=paste0(mydir,"/.testsstatus"))
+    saveRDS(commit,file=paste0(mydir,"/lastcommit.rds"))
   }
 }
 
