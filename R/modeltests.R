@@ -73,7 +73,7 @@ modeltests<-function(mydir=".",gitdir=NULL, model=NULL,user=NULL,test=NULL,iamcc
     
     if (!test) {
       repeat {
-        if(!any(grepl(runcode,system(paste0("/p/system/slurm/bin/squeue -u ",user," -h -o '%i %q %T %C %M %j %V %L %e %Z'"),intern=TRUE) ))) break
+        if(!any(grepl(mydir,system(paste0("/p/system/slurm/bin/squeue -u ",user," -h -o '%i %q %T %C %M %j %V %L %e %Z'"),intern=TRUE) ))) break
       }
     }
     
