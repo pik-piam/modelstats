@@ -8,3 +8,4 @@
 R/updateReadme.R
 ^doc$
 ^Meta$
+^\.pre-commit-config\.yaml$
