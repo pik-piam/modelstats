@@ -152,7 +152,10 @@ getRunStatus<-function(mydir=dir(),sort="nf",user=NULL){
         out[i,"Conv"] <- "NA"
       }
       
-    } # END Conv
+    } else {
+      out[i,"Conv"] <- "NA" 
+    }
+    # END Conv
     
     # Calib Iter
     if (!is.null(out[i,"RunType"])) if (file.exists(logtxt) & grepl("Calib",out[i,"RunType"])) {
@@ -162,6 +165,7 @@ getRunStatus<-function(mydir=dir(),sort="nf",user=NULL){
     }
     
     # MIF
+    out[i,"Mif"] <- "NA"
     if (file.exists(cfgf)) {
       if (exists("stats")) if(any(grepl("config",names(stats)))) if (stats[["config"]][["model_name"]]=="MAgPIE") {
         miffile <- paste0(ii,"/validation.mif")
