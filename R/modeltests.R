@@ -13,6 +13,7 @@
 #' @param test Use this option to run a test of the workflow (no runs will be submitted)
 #' @param iamccheck Use this option to turn iamc-style checks on and off
 #' @param email whether an email notification will be send or not
+#' @param mattermostToken token used for mattermost notifications
 #' @param compScen whether compScen has to run or not
 #'
 #' @author Anastasis Giannousakis
@@ -25,19 +26,24 @@
 #' @importFrom remind2 compareScenarios
 #' @importFrom magclass read.report write.report2 collapseNames
 #' @export
-modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, test = NULL, iamccheck = TRUE, email = TRUE, compScen = TRUE) {
+modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, test = NULL, iamccheck = TRUE, email = TRUE, compScen = TRUE, mattermostToken = NULL) {
+  
+  
+  .mattermostBotMessage <- function(message, token) {
+    system(paste0("curl -i -X POST -H 'Content-Type: application/json' -d '", '{"text": "', message, '"', "}' ", token))
+  }
+  
   if (readLines(paste0(mydir, "/.testsstatus")) == "start") {
     if (!is.null(test)) {
       test_bu <- test
       runcode <- paste0("-AMT-.*.202[1-9]-", test)
-      if (model == "MAgPIE") runcode <- paste0("weeklyTests*.202[1-9]-", test)
       test    <- TRUE
     } else {
       test <- FALSE
       test_bu <- NULL
       runcode <- paste0("-AMT-.*.",format(Sys.time(), "%Y-%m-%d"))
-      if (model == "MAgPIE") runcode <- paste0("weeklyTests*.", format(Sys.time(),"%Y-%m-%d"))
     }
+    if (model == "MAgPIE") runcode <- "weeklyTests*."
     if (is.null(model)) stop("Model cannot be NULL")
 
     setwd(mydir)
@@ -85,10 +91,19 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
 
     setwd("output")
 
-    gRSold <- readRDS("gRS.rds")
-    try(gRS <- rbind(gRSold, getRunStatus(setdiff(dir(), rownames(gRSold)))))
-    if (exists("gRS")) saveRDS(gRS, "gRS.rds")
-
+    if (model != "MAgPIE") {
+      gRSold <- readRDS("gRS.rds")
+      try(gRS <- rbind(gRSold, getRunStatus(setdiff(dir(), rownames(gRSold)))))
+      if (exists("gRS")) {
+        saveRDS(gRS, "gRS.rds")
+      } else {
+        gRS <- getRunStatus(dir())
+        saveRDS(gRS, "gRS.rds")
+      }
+    } else {
+      gRS <- getRunStatus(dir())
+    }
+    
     paths <- grep(runcode, dir(), value = TRUE)
     paths <- file.info(paths)
     paths <- rownames(paths[paths[, "isdir"] == TRUE, ])
@@ -109,7 +124,10 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Further, each folder bel
 #    write(paste0("View merge range on github: https://github.com/",model,"model/",model",/pulls?q=is%3Apr+is%3Amerged+",lastCommit,"..",commit),myfile,append=TRUE)
     write("Run                                jobInSlurm          RunType            RunStatus         Iter             Conv            modelstat      Mif           runInAppResults", myfile, append = TRUE)
     for (i in paths) {
-      write(sub("\n$", "", printOutput(getRunStatus(i), 34)), myfile, append = TRUE)
+      grsi <- getRunStatus(i)
+      write(sub("\n$", "", printOutput(grsi, 34)), myfile, append = TRUE)
+      if (grsi[,"Conv"] != "converged") warning("Some run(s) did not converge")
+      if (grsi[,"Mif"] != "TRUE") warning("Some run(s) did not report correctly")
       if (compScen) {
         setwd(i)
         cfg <- NULL
@@ -163,8 +181,10 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Further, each folder bel
       }
       write(paste0("The IAMC check of these runs is found in /p/projects/remind/modeltests/output/iamccheck-", commit, ".rds", "\n"), myfile, append = TRUE)
     }
+    write(warnings(), myfile, append = TRUE)
     write("```", myfile, append = TRUE)
     if (email) sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
+    if (length(warnings()) != 0 & !is.null(mattermostToken)) .mattermostBotMessage(message = paste0(model, " tests have failed"), token = mattermostToken) 
     writeLines("start", con = paste0(mydir, "/.testsstatus"))
     saveRDS(commit, file = paste0(mydir, "/lastcommit.rds"))
   }

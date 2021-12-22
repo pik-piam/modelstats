@@ -12,7 +12,8 @@ modeltests(
   test = NULL,
   iamccheck = TRUE,
   email = TRUE,
-  compScen = TRUE
+  compScen = TRUE,
+  mattermostToken = NULL
 )
 }
 \arguments{
@@ -31,6 +32,8 @@ modeltests(
 \item{email}{whether an email notification will be send or not}
 
 \item{compScen}{whether compScen has to run or not}
+
+\item{mattermostToken}{token used for mattermost notifications}
 }
 \description{
 Runs a group of tests for a specific model. A "config/scenario_config_AMT.csv" file
