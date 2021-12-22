@@ -34,8 +34,8 @@ modeltests(
 }
 \description{
 Runs a group of tests for a specific model. A "config/scenario_config_AMT.csv" file
-(relative) to the main folder has to exist in the model, describing the 
-scenarios to be tested. Also, a gitlab repository is needed to push 
+(relative) to the main folder has to exist in the model, describing the
+scenarios to be tested. Also, a gitlab repository is needed to push
 the generated README.md for documentation and automated reporting
 of test results.
 }

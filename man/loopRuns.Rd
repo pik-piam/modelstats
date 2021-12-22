@@ -15,14 +15,10 @@ loopRuns(mydir, user = NULL)
 Returns the output for getRunStatus nicely
 }
 \examples{
-
-\dontrun{ 
+\dontrun{
 
 loopRuns(dir())
-
 }
-
-
 
 }
 \author{

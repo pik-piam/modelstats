@@ -17,11 +17,9 @@ getRunStatus(mydir = dir(), sort = "nf", user = NULL)
 Returns the current status of a run or a vector of runs
 }
 \examples{
-
-\dontrun{ 
+\dontrun{
 
 a <- getRunStatus(dir())
-
 }
 
 }
