@@ -7,33 +7,32 @@
 #'
 #' @author Anastasis Giannousakis
 #' @export
-printOutput<-function(string,len1stcol=67){
+printOutput <- function(string, len1stcol = 67) {
 
-  formatstr <- function(x,len) {
+  formatstr <- function(x, len) {
     if (is.na(x)) return("                 ")
     if (nchar(x) > len) {
-      return(substr(x,1,len))
+      return(substr(x, 1, len))
     } else {
-      teil2 <- paste(rep(" ",len-nchar(x)),collapse = "")
-      return(paste0(x,teil2))
+      teil2 <- paste(rep(" ", len - nchar(x)), collapse = "")
+      return(paste0(x, teil2))
     }
   }
-  
-  
-  if (length(string)==0) return("")
-  out<-""
-  templ <- data.frame( "modelstat"="NA",   "Iter"="NA",      "Conv"="NA","Mif"="NA","RunStatus"="NA","RunType"="NA",stringsAsFactors = F)
-  if (file.exists("/p")) templ <- data.frame("runInAppResults" = "NA" ,"Mif"="NA", "modelstat"="NA",   "Conv"="NA",   "Iter"="NA","RunStatus"="NA","RunType"="NA" ,"jobInSLURM"="NA", stringsAsFactors = F)
-  templ[,names(string)] <- string
+
+
+  if (length(string) == 0) return("")
+  out <- ""
+  templ <- data.frame("modelstat" = "NA",   "Iter" = "NA",      "Conv" = "NA", "Mif" = "NA", "RunStatus" = "NA", "RunType" = "NA", stringsAsFactors = FALSE)
+  if (file.exists("/p")) templ <- data.frame("runInAppResults" = "NA", "Mif" = "NA", "modelstat" = "NA",   "Conv" = "NA",   "Iter" = "NA", "RunStatus" = "NA", "RunType" = "NA", "jobInSLURM" = "NA", stringsAsFactors = FALSE)
+  templ[, names(string)] <- string
   rownames(templ) <- rownames(string)
   string <- templ
   for (i in 1:length(string)) {
-    out <- paste0(formatstr(unname(string)[[i]],i+12),out)
+    out <- paste0(formatstr(unname(string)[[i]], i + 12), out)
   }
- return(paste0(formatstr(rownames(string),len1stcol)," ",out,"\n")) 
+ return(paste0(formatstr(rownames(string), len1stcol), " ", out, "\n"))
 #  if(is.data.frame(string)) print(unname(string))
 
-  
-  
-}
 
+
+}
