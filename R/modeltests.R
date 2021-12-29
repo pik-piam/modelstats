@@ -30,7 +30,7 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
   
   
   .mattermostBotMessage <- function(message, token) {
-    system(paste0("curl -i -X POST -H 'Content-Type: application/json' -d '", '{"text": "', message, '"', "}' ", token))
+    system(paste0("curl -i -X POST -H 'Content-Type: application/json' -d '", '{"text": "', message, '"', "}' ", token), intern = TRUE)
   }
   
   if (readLines(paste0(mydir, "/.testsstatus")) == "start") {
@@ -70,7 +70,7 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
     saveRDS(runcode, file = paste0(mydir, "/runcode.rds"))
     saveRDS(test, file = paste0(mydir, "/test.rds"))
     saveRDS(test_bu, file = paste0(mydir, "/test_bu.rds"))
-    saveRDS(runsToStart, file = paste0(mydir, "/runsToStart.rds"))
+    if (model == "REMIND") saveRDS(runsToStart, file = paste0(mydir, "/runsToStart.rds"))
     writeLines("end", con = paste0(mydir, "/.testsstatus"))
   } else if (readLines(paste0(mydir, "/.testsstatus")) == "end") {
     setwd(mydir)
@@ -79,7 +79,7 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
     test_bu <- readRDS(paste0(mydir, "/test_bu.rds"))
     runcode <- readRDS(paste0(mydir, "/runcode.rds"))
     lastCommit <- readRDS(paste0(mydir, "/lastcommit.rds"))
-    runsToStart <- readRDS(paste0(mydir, "runsToStart.rds")) 
+    if (model == "REMIND") runsToStart <- readRDS(paste0(mydir, "runsToStart.rds")) 
     out <- list()
 
     if (!test) {
@@ -126,7 +126,8 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Further, each folder bel
     for (i in paths) {
       grsi <- getRunStatus(i)
       write(sub("\n$", "", printOutput(grsi, 34)), myfile, append = TRUE)
-      if (grsi[,"Conv"] != "converged") warning("Some run(s) did not converge")
+      if (model == "REMIND") if (grsi[,"Conv"] != "converged") warning("Some run(s) did not converge")
+      if (model == "MAgPIE") if (grsi[,"Iter"] != "y2100") warning("Some run(s) did not converge")
       if (grsi[,"Mif"] != "TRUE") warning("Some run(s) did not report correctly")
       if (compScen) {
         setwd(i)
@@ -156,20 +157,17 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Further, each folder bel
         setwd("../")
       }
     }
-    if (length(paths)!=length(rownames(runsToStart))) {
+    if (model == "REMIND") if (length(paths)!=length(rownames(runsToStart))) {
        runsNotStarted <- setdiff(rownames(runsToStart), sub("_.*","",paths))
        write(paste0("These scenarios did NOT start at all:"), myfile, append = TRUE)
        write(runsNotStarted, myfile, append=TRUE)
     }
-    if (iamccheck) {  
+    if (iamccheck) {
+      a <- NULL
       if (length(paths) > 0) {
         mifs <- paste0(paths, "/REMIND_generic_", sub("_20[0-9][0-9].*.$", "", paths), ".mif")
         mifs <- mifs[file.exists(mifs)]
-        if (!all(mifs)) {
-           a <- read.quitte(mifs)
-        } else {
-           a <- NULL
-        }
+        try(a <- read.quitte(mifs))
         if (!is.null(a)) {
            out[["iamCheck"]] <- iamCheck(a, cfg = model)
            if (!test) {
@@ -184,7 +182,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Further, each folder bel
     write(warnings(), myfile, append = TRUE)
     write("```", myfile, append = TRUE)
     if (email) sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
-    if (length(warnings()) != 0 & !is.null(mattermostToken)) .mattermostBotMessage(message = paste0(model, " tests have failed"), token = mattermostToken) 
+    if (model == "MAgPIE") if (length(warnings()) != 0) .mattermostBotMessage(message = paste0(model, " tests have failed"), token = mattermostToken) 
     writeLines("start", con = paste0(mydir, "/.testsstatus"))
     saveRDS(commit, file = paste0(mydir, "/lastcommit.rds"))
   }
