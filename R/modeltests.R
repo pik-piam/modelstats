@@ -81,6 +81,7 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
     lastCommit <- readRDS(paste0(mydir, "/lastcommit.rds"))
     if (model == "REMIND") runsToStart <- readRDS(paste0(mydir, "runsToStart.rds")) 
     out <- list()
+    errorList <- NULL
 
     if (!test) {
       repeat {
@@ -126,9 +127,9 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Further, each folder bel
     for (i in paths) {
       grsi <- getRunStatus(i)
       write(sub("\n$", "", printOutput(grsi, 34)), myfile, append = TRUE)
-      if (model == "REMIND") if (grsi[,"Conv"] != "converged") warning("Some run(s) did not converge")
-      if (model == "MAgPIE") if (grsi[,"Iter"] != "y2100") warning("Some run(s) did not converge")
-      if (grsi[,"Mif"] != "TRUE") warning("Some run(s) did not report correctly")
+      if (model == "REMIND") if (grsi[,"Conv"] != "converged") errorList <- c(errorList,"Some run(s) did not converge")
+      if (model == "MAgPIE") if (grsi[,"Iter"] != "y2100")  errorList <- c(errorList,"Some run(s) did not converge")
+      if (grsi[,"Mif"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
       if (compScen) {
         setwd(i)
         cfg <- NULL
@@ -179,10 +180,10 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Further, each folder bel
       }
       write(paste0("The IAMC check of these runs is found in /p/projects/remind/modeltests/output/iamccheck-", commit, ".rds", "\n"), myfile, append = TRUE)
     }
-    write(warnings(), myfile, append = TRUE)
+    write(errorList, myfile, append = TRUE)
     write("```", myfile, append = TRUE)
     if (email) sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
-    if (model == "MAgPIE") if (length(warnings()) != 0) .mattermostBotMessage(message = paste0(model, " tests have failed"), token = mattermostToken) 
+    if (!is.null(errorList) & !is.null(mattermostToken)) .mattermostBotMessage(message = paste0(model, " tests have failed"), token = mattermostToken) 
     writeLines("start", con = paste0(mydir, "/.testsstatus"))
     saveRDS(commit, file = paste0(mydir, "/lastcommit.rds"))
   }
