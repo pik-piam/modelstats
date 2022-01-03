@@ -123,7 +123,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Further, each folder bel
     write(paste0("The test of ", format(Sys.time(), "%Y-%m-%d"), " contains these merges:"), myfile, append = TRUE)
     write(commits, myfile, append = TRUE)
 #    write(paste0("View merge range on github: https://github.com/",model,"model/",model",/pulls?q=is%3Apr+is%3Amerged+",lastCommit,"..",commit),myfile,append=TRUE)
-    write("Run                                jobInSlurm          RunType            RunStatus         Iter             Conv            modelstat      Mif           runInAppResults", myfile, append = TRUE)
+    write("Run                                Runtime              jobInSlurm          RunType            RunStatus         Iter             Conv            modelstat      Mif           runInAppResults", myfile, append = TRUE)
     for (i in paths) {
       grsi <- getRunStatus(i)
       write(sub("\n$", "", printOutput(grsi, 34)), myfile, append = TRUE)

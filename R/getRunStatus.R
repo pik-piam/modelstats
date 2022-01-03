@@ -181,6 +181,15 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       }
     }
 
+    # Runtime
+    out[i, "Runtime"] <- "NA"
+    if (file.exists(fle)) {
+      load(fle)
+      if (exists("stats")) if (any(grepl("GAMSEnd", names(stats)))) {
+        out[i, "Runtime"] <- format(round(stats[["timeGAMSEnd"]] - stats[["timeGAMSStart"]],1))
+      }
+    }
+
 
   } # END DIR LOOP
 
