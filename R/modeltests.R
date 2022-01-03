@@ -130,6 +130,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Further, each folder bel
       if (model == "REMIND") if (grsi[,"Conv"] != "converged") errorList <- c(errorList,"Some run(s) did not converge")
       if (model == "MAgPIE") if (grsi[,"Iter"] != "y2100")  errorList <- c(errorList,"Some run(s) did not converge")
       if (grsi[,"Mif"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
+      if (grsi[,"runInAppResults"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
       if (compScen) {
         setwd(i)
         cfg <- NULL
@@ -180,10 +181,10 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Further, each folder bel
       }
       write(paste0("The IAMC check of these runs is found in /p/projects/remind/modeltests/output/iamccheck-", commit, ".rds", "\n"), myfile, append = TRUE)
     }
-    write(errorList, myfile, append = TRUE)
+    write(unique(errorList), myfile, append = TRUE)
     write("```", myfile, append = TRUE)
     if (email) sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
-    if (!is.null(errorList) & !is.null(mattermostToken)) .mattermostBotMessage(message = paste0(model, " tests have failed"), token = mattermostToken) 
+    if (!is.null(errorList) & !is.null(mattermostToken)) .mattermostBotMessage(message = paste0("Some ", model, " tests have failed, check https://gitlab.pik-potsdam.de/landuse/testing_suite"), token = mattermostToken) 
     writeLines("start", con = paste0(mydir, "/.testsstatus"))
     saveRDS(commit, file = paste0(mydir, "/lastcommit.rds"))
   }
