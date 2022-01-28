@@ -25,7 +25,7 @@ If you want to do the same for the jobs of someone else:
 `rs2 -cr username`  
 If you want to adjust the number of days that the tool reports jobs for:
 `rs2 -cr username 10`
-e.g. for 10 days back.
+e.g. for 10 days back. Note that when adjusting the days you _need_ to specify a username (even if it's just yours).
 
 2. You go into a run folder (e.g. by using `cdf`) and want to see its status:  
 ```rs2 .```  

@@ -38,7 +38,7 @@ loopRuns <- function(mydir, user = NULL) {
 
   for (i in mydir) {
 
-    if (!file.exists(paste0(i, "/config.Rdata"))) next # do not report on folders that don't contain runs
+    if (!file.exists(paste0(i, "/", grep("^config.*", dir(i), value = TRUE)[1]))) next # do not report on folders that do not contain runs
     try(out <- printOutput(getRunStatus(i, user = user), len1stcol = len))
     if (grepl(" y2| nlp_", out)) {
       if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted", out)) {

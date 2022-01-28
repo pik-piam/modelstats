@@ -47,7 +47,9 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 #    }
 
     # Define files
-    cfgf <- paste0(ii, "/config.Rdata")
+
+    cfgf <- grep("config.Rdata|config.yml", dir(ii), value = TRUE)
+#    ifelse(grepl("yml$", cfgf), cfgf <- "config.yml", cfgf <- "config.Rdata")
     fle <- paste0(ii, "/runstatistics.rda")
     gdx <- paste0(ii, "/fulldata.gdx")
     fulllst <- paste0(ii, "/full.lst")
@@ -56,7 +58,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
     # Initialize objects
     stats <- runtype <- cfg <- NULL
-
+    ifelse(grepl("yml$", cfgf), cfg <- gms::loadConfig(paste0(ii, "/", cfgf)), load(paste0(ii, "/", cfgf)))
     # RunType
     out[i, "RunType"] <- colRunType(ii)
 
@@ -95,7 +97,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 }
 
     # Iter
-    if (file.exists(cfgf)) totNoOfIter <- cfg[["gms"]][["cm_iteration_max"]]
+    if (exists("cfg")) totNoOfIter <- cfg[["gms"]][["cm_iteration_max"]]
     out[i, "Iter"] <- "NA"
     out[i, "RunStatus"] <- "NA"
     if (file.exists(fulllog)) {
@@ -117,7 +119,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     }
 
     # Conv
-    if (file.exists(cfgf)) load(cfgf)
+    if (exists("cfg"))
     if (file.exists(fulllst)) {
       if (length(out[i, "RunType"]) > 0)
 

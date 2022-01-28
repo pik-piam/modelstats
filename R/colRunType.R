@@ -2,7 +2,7 @@
 #'
 #' What is the type of this run?
 #'
-#' @param mydir Path to the folder(s) where the run(s) is(are) performed
+#' @param mydir Path to the folder where the run is performed
 #'
 #'
 #' @author Anastasis Giannousakis
@@ -10,12 +10,12 @@
 colRunType <- function(mydir = ".") {
 
   cfg <- cfgf <- NULL
-  cfgf <- paste0(mydir, "/config.Rdata")
+  cfgf <- grep("config.Rdata|config.yml", dir(mydir), value = TRUE)
   fulllst <- paste0(mydir, "/full.lst")
 
   out <- "NA"
-  if (file.exists(cfgf)) {
-    load(cfgf)
+  if (file.exists(paste0(mydir, "/", cfgf))) {
+    ifelse(grepl("yml",cfgf), cfg <- gms::loadConfig(file.path(mydir, "config.yml")), load(paste0(mydir, "/", cfgf)))
     if (cfg[["model_name"]] == "MAgPIE") {
         out <- cfg[["gms"]][["optimization"]]
     } else {

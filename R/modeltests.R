@@ -43,7 +43,7 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
       test_bu <- NULL
       runcode <- paste0("-AMT-.*.",format(Sys.time(), "%Y-%m-%d"))
     }
-    if (model == "MAgPIE") runcode <- "weeklyTests*."
+    if (model == "MAgPIE") runcode <- paste0(sub("-AMT-", "default", runcode),"|weeklyTests*.")
     if (is.null(model)) stop("Model cannot be NULL")
 
     setwd(mydir)
@@ -60,11 +60,23 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
         slurmConfig <- "--qos=priority --time=12:00:00 --nodes=1 --tasks-per-node=12"
         system("find . -type d -name output -prune -o -type f -name '*.R' -exec sed -i 's/sbatch/\\/p\\/system\\/slurm\\/bin\\/sbatch/g' {} +")
         write("slurmConfig <- '--qos=priority --time=12:00:00 --nodes=1 --tasks-per-node=12'", file = ".Rprofile", append = TRUE)
+        changeTitle <- paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "default-AMT-"/', "' config/default.cfg")
+        system(changeTitle)
+        system("Rscript start.R")
+        Sys.sleep(300)
+        system("sed -i 's/cfg$force_download <- TRUE/cfg$force_download <- FALSE/' config/default.cfg")
         system("Rscript start.R config/scenario_config_AMT.csv")
         runsToStart  <- read.csv2("config/scenario_config_AMT.csv", stringsAsFactors = FALSE, row.names = 1, comment.char = "#", na.strings = "")
         runsToStart  <- runsToStart[runsToStart$start==1,]
       } else if (model == "MAgPIE") {
-        system("Rscript start.R runscripts=test_runs submit=slurmpriority")
+        system("Rscript start.R runscripts=default submit=slurmpriority") # start default scenario, then wait until it runs to start also the weekly tests script
+        Sys.sleep(300)
+        repeat {
+          if (!any(grepl(paste0(mydir,"$"), system(paste0("/p/system/slurm/bin/squeue -u ", user, " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)))) {
+            system("Rscript start.R runscripts=test_runs submit=slurmpriority")
+            break
+          }
+        }
       }
     }
     saveRDS(runcode, file = paste0(mydir, "/runcode.rds"))
@@ -85,7 +97,10 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
 
     if (!test) {
       repeat {
-        if (!any(grepl(mydir, system(paste0("/p/system/slurm/bin/squeue -u ", user, " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)))) break
+        if (!any(grepl(mydir, system(paste0("/p/system/slurm/bin/squeue -u ", user, " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)))) {
+          Sys.sleep(2400) 
+          break
+        }
       }
     }
 
@@ -115,7 +130,7 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
     write("```", myfile)
     write(paste0("This is the result of the automated ", model, " testing suite."), myfile, append = TRUE)
     write(paste0("Path to runs:", mydir, "output/"), myfile, append = TRUE)
-    write(paste0("Direct and interactive access to plots: open shinyResults::appResults, then use '", strsplit(runcode, "\\.")[[1]][1], "' as keyword in the title search"), myfile, append = TRUE)
+    write(paste0("Direct and interactive access to plots: open shinyResults::appResults, then use '", ifelse(model=="MAgPIE", "weeklyTests", strsplit(runcode, "\\.")[[1]][1]), "' as keyword in the title search"), myfile, append = TRUE)
 if (model == "REMIND" & compScen == TRUE) write(paste0("Further, each folder below should contain a compareScenarios PDF comparing the output of the current and the last tests (comp_with_RUN-DATE.pdf)"), myfile, append = TRUE)
     write(paste0("Note: 'Mif' = FALSE indicates a possible error in output generation, please check!"), myfile, append = TRUE)
     write(paste0("If you are currently viewing the email: Overview of the last test is in red, and of the current test in green"), myfile, append = TRUE)
@@ -159,8 +174,8 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Further, each folder bel
         setwd("../")
       }
     }
-    if (model == "REMIND") if (length(paths)!=length(rownames(runsToStart))) {
-       runsNotStarted <- setdiff(rownames(runsToStart), sub("_.*","",paths))
+    if (model == "REMIND") if (length(paths) != length(rownames(runsToStart))+1) {
+       runsNotStarted <- setdiff(c("default-AMT-", rownames(runsToStart)), sub("_.*", "", paths))
        write(paste0("These scenarios did NOT start at all:"), myfile, append = TRUE)
        write(runsNotStarted, myfile, append=TRUE)
     }
