@@ -60,7 +60,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     stats <- runtype <- cfg <- NULL
     ifelse(grepl("yml$", cfgf), cfg <- gms::loadConfig(paste0(ii, "/", cfgf)), load(paste0(ii, "/", cfgf)))
     # RunType
-    out[i, "RunType"] <- colRunType(ii)
+    ifelse(length(cfgf) == 0, out[i, "RunType"] <- "NA",  out[i, "RunType"] <- colRunType(ii))
 
     # modelstat
     out[i, "modelstat"] <- "NA"
@@ -167,7 +167,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
     # MIF
     out[i,"Mif"] <- "NA"
-    if (file.exists(cfgf)) {
+    if (length(cfgf) != 0) if (file.exists(cfgf)) {
       if (exists("stats")) if (any(grepl("config", names(stats)))) if (stats[["config"]][["model_name"]] == "MAgPIE") {
         miffile <- paste0(ii, "/validation.mif")
         out[i, "Mif"] <- FALSE
