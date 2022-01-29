@@ -7,7 +7,7 @@
 colRunType(mydir = ".")
 }
 \arguments{
-\item{mydir}{Path to the folder(s) where the run(s) is(are) performed}
+\item{mydir}{Path to the folder where the run is performed}
 }
 \description{
 What is the type of this run?

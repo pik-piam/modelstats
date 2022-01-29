@@ -13,10 +13,10 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     myruns <- system(paste0("squeue -u ", user, " -h -o '%Z'"), intern = TRUE)
     runnames <- system(paste0("squeue -u ", user, " -h -o '%j'"), intern = TRUE)
 
-    myruns2 <- system(paste0("sacct -u ", user, " -s cd,f,cancelled -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " --format WorkDir -P -n"), intern = TRUE)
+    myruns2 <- system(paste0("sacct -u ", user, " -s cd,f,cancelled,timeout -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " --format WorkDir -P -n"), intern = TRUE)
  #   myruns2<-myruns2[!grepl("^$",myruns2)]
     myruns <- c(myruns, myruns2)
-    runnames2 <- system(paste0("sacct -u ", user, " -s cd,f,cancelled -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " --format JobName -P -n"), intern = TRUE)
+    runnames2 <- system(paste0("sacct -u ", user, " -s cd,f,cancelled,timeout -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " --format JobName -P -n"), intern = TRUE)
 #    runnames2<-runnames2[!grepl("^batch$",runnames2)]
     runnames <- c(runnames, runnames2)
     if (any(grepl("mag-run", runnames))) {

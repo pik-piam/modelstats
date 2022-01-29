@@ -6,6 +6,7 @@
 #'
 #'
 #' @author Anastasis Giannousakis
+#' @importFrom gms loadConfig
 #' @export
 colRunType <- function(mydir = ".") {
 
@@ -15,7 +16,7 @@ colRunType <- function(mydir = ".") {
 
   out <- "NA"
   if (file.exists(paste0(mydir, "/", cfgf))) {
-    ifelse(grepl("yml",cfgf), cfg <- gms::loadConfig(file.path(mydir, "config.yml")), load(paste0(mydir, "/", cfgf)))
+    ifelse(grepl("yml",cfgf), cfg <- loadConfig(file.path(mydir, "config.yml")), load(paste0(mydir, "/", cfgf)))
     if (cfg[["model_name"]] == "MAgPIE") {
         out <- cfg[["gms"]][["optimization"]]
     } else {

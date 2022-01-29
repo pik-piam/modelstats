@@ -15,6 +15,7 @@
 #'
 #' @importFrom gdx readGDX
 #' @importFrom utils tail
+#' @importFrom gms loadConfig
 #' @export
 getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
@@ -58,7 +59,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
     # Initialize objects
     stats <- runtype <- cfg <- NULL
-    ifelse(grepl("yml$", cfgf), cfg <- gms::loadConfig(paste0(ii, "/", cfgf)), load(paste0(ii, "/", cfgf)))
+    ifelse(grepl("yml$", cfgf), cfg <- loadConfig(paste0(ii, "/", cfgf)), load(paste0(ii, "/", cfgf)))
     # RunType
     ifelse(length(cfgf) == 0, out[i, "RunType"] <- "NA",  out[i, "RunType"] <- colRunType(ii))
 
