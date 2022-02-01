@@ -90,7 +90,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
           ovdir <- "/p/projects/rd3mod/models/results/remind/"
         }
         try(id <- paste0(ovdir, stats[["id"]], ".rds"))
-        if (exists("ovdir")) if (file.exists(id) && all(file.info(Sys.glob(paste0(ovdir, "overview.rds")))$mtime > file.info(id)$mtime))
+        if (exists("ovdir")) if (file.exists(id) && all((file.info(Sys.glob(paste0(ovdir, "overview.rds")))$mtime + 600) > file.info(id)$mtime))
           out[i, "runInAppResults"] <- TRUE
       } else {
         if (onCluster) out[i, "runInAppResults"] <- FALSE
@@ -168,7 +168,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
     # MIF
     out[i,"Mif"] <- "NA"
-    if (length(cfgf) != 0) if (file.exists(cfgf)) {
+    if (length(cfgf) != 0) if (file.exists(paste0(ii, "/", cfgf))) {
       if (exists("stats")) if (any(grepl("config", names(stats)))) if (stats[["config"]][["model_name"]] == "MAgPIE") {
         miffile <- paste0(ii, "/validation.mif")
         out[i, "Mif"] <- FALSE

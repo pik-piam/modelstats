@@ -41,7 +41,7 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
     } else {
       test <- FALSE
       test_bu <- NULL
-      runcode <- paste0("-AMT-.*.",format(Sys.time(), "%Y-%m-%d"))
+      runcode <- paste0("-AMT-.*.",format(Sys.Date(), "%Y-%m-%d"),"|","-AMT-.*.",as.Date(format(Sys.Date(), "%Y-%m-%d"))+1)
     }
     if (model == "MAgPIE") runcode <- paste0(sub("-AMT-", "default", runcode),"|weeklyTests*.")
     if (is.null(model)) stop("Model cannot be NULL")
@@ -57,9 +57,9 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
       }
       if (model == "REMIND") {
         argv <- "config/scenario_config_AMT.csv"
-        slurmConfig <- "--qos=priority --time=12:00:00 --nodes=1 --tasks-per-node=12"
+        slurmConfig <- "--qos=priority --time=24:00:00 --nodes=1 --tasks-per-node=12"
         system("find . -type d -name output -prune -o -type f -name '*.R' -exec sed -i 's/sbatch/\\/p\\/system\\/slurm\\/bin\\/sbatch/g' {} +")
-        write("slurmConfig <- '--qos=priority --time=12:00:00 --nodes=1 --tasks-per-node=12'", file = ".Rprofile", append = TRUE)
+        write("slurmConfig <- '--qos=priority --time=24:00:00 --nodes=1 --tasks-per-node=12'", file = ".Rprofile", append = TRUE)
         changeTitle <- paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "default-AMT-"/', "' config/default.cfg")
         system(changeTitle)
         system("Rscript start.R")
@@ -98,7 +98,7 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
     if (!test) {
       repeat {
         if (!any(grepl(mydir, system(paste0("/p/system/slurm/bin/squeue -u ", user, " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)))) {
-          Sys.sleep(2400) 
+          Sys.sleep(600) 
           break
         }
       }
