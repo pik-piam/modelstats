@@ -13,10 +13,10 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     myruns <- system(paste0("squeue -u ", user, " -h -o '%Z'"), intern = TRUE)
     runnames <- system(paste0("squeue -u ", user, " -h -o '%j'"), intern = TRUE)
 
-    myruns2 <- system(paste0("sacct -u ", user, " -s cd,f,cancelled,timeout -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " --format WorkDir -P -n"), intern = TRUE)
+    myruns2 <- system(paste0("sacct -u ", user, " -s cd,f,cancelled,timeout,oom -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " --format WorkDir -P -n"), intern = TRUE)
  #   myruns2<-myruns2[!grepl("^$",myruns2)]
     myruns <- c(myruns, myruns2)
-    runnames2 <- system(paste0("sacct -u ", user, " -s cd,f,cancelled,timeout -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " --format JobName -P -n"), intern = TRUE)
+    runnames2 <- system(paste0("sacct -u ", user, " -s cd,f,cancelled,timeout,oom -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " --format JobName -P -n"), intern = TRUE)
 #    runnames2<-runnames2[!grepl("^batch$",runnames2)]
     runnames <- c(runnames, runnames2)
     if (any(grepl("mag-run", runnames))) {
@@ -27,7 +27,7 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
       runnames <- runnames[-which(runnames %in% c("batch"))]
     }
     if (length(myruns) == 0) {
-      return("No runs found for this user")
+      return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -cr USER 1")
     } else {
       message("")
       message("!!! NEW FEATURE FOR BETTER OUTPUT: type 'rs2 -cr username DAYS' with DAYS an integer denoting how many days you want results from")
@@ -57,8 +57,10 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     if (!is.null(rem)) {
       myruns <- myruns[-rem] # remove coupled parent-job
       myruns <- c(myruns, coupled) # add coupled paths
-      myruns <- myruns[file.exists(myruns)] # keep only existing paths
     }
+    myruns <- myruns[file.exists(myruns)] # keep only existing paths
+    myruns <- myruns[!is.na(myruns)]
+
 #    if (length(myruns)>40) {
 #        message("Excuse me? > 40 runs? You need a cluster only for yourself it seems")
 #    } else if (length(myruns)>15) {
