@@ -59,7 +59,7 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
       myruns <- c(myruns, coupled) # add coupled paths
     }
     myruns <- myruns[file.exists(myruns)] # keep only existing paths
-    myruns <- myruns[!is.na(myruns)]
+    myruns <- unique(myruns[!is.na(myruns)])
 
 #    if (length(myruns)>40) {
 #        message("Excuse me? > 40 runs? You need a cluster only for yourself it seems")
