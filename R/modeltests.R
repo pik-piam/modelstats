@@ -23,8 +23,8 @@
 #' @importFrom piamModelTests iamCheck
 #' @importFrom quitte read.quitte
 #' @importFrom lucode2 sendmail
-#' @importFrom remind2 compareScenarios
-#' @importFrom magclass read.report write.report2 collapseNames
+#' @importFrom remind2 compareScenarios2
+#' @importFrom magclass read.report write.report collapseNames
 #' @export
 modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, test = NULL, iamccheck = TRUE, email = TRUE, compScen = TRUE, mattermostToken = NULL) {
   
@@ -36,7 +36,7 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
   if (readLines(paste0(mydir, "/.testsstatus")) == "start") {
     if (!is.null(test)) {
       test_bu <- test
-      runcode <- paste0("-AMT-.*.202[1-9]-", test)
+      runcode <- paste0("-AMT-.*.20", test)
       test    <- TRUE
     } else {
       test <- FALSE
@@ -82,7 +82,7 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
     saveRDS(runcode, file = paste0(mydir, "/runcode.rds"))
     saveRDS(test, file = paste0(mydir, "/test.rds"))
     saveRDS(test_bu, file = paste0(mydir, "/test_bu.rds"))
-    if (model == "REMIND") saveRDS(runsToStart, file = paste0(mydir, "/runsToStart.rds"))
+    if (model == "REMIND" & is.null(test_bu)) saveRDS(runsToStart, file = paste0(mydir, "/runsToStart.rds"))
     writeLines("end", con = paste0(mydir, "/.testsstatus"))
   } else if (readLines(paste0(mydir, "/.testsstatus")) == "end") {
     setwd(mydir)
@@ -128,10 +128,10 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
     commits <- system(paste0("/p/system/packages/git/2.16.1/bin/git log --merges --pretty=oneline ", lastCommit, "..", commit, " --abbrev-commit | grep 'Merge pull request'"), intern = TRUE)
     myfile <- paste0(tempdir(), "/README.md")
     write("```", myfile)
-    write(paste0("This is the result of the automated ", model, " testing suite."), myfile, append = TRUE)
+    write(paste0("This is the result of the automated ", model, " testing suite on ", format(Sys.time(), "%Y-%m-%d"), "."), myfile, append = TRUE)
     write(paste0("Path to runs:", mydir, "output/"), myfile, append = TRUE)
     write(paste0("Direct and interactive access to plots: open shinyResults::appResults, then use '", ifelse(model=="MAgPIE", "weeklyTests", strsplit(runcode, "\\.")[[1]][1]), "' as keyword in the title search"), myfile, append = TRUE)
-if (model == "REMIND" & compScen == TRUE) write(paste0("Further, each folder below should contain a compareScenarios PDF comparing the output of the current and the last tests (comp_with_RUN-DATE.pdf)"), myfile, append = TRUE)
+if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below should contain a compareScenarios PDF comparing the output of the current and the last successful tests (comp_with_RUN-DATE.pdf)"), myfile, append = TRUE)
     write(paste0("Note: 'Mif' = FALSE indicates a possible error in output generation, please check!"), myfile, append = TRUE)
     write(paste0("If you are currently viewing the email: Overview of the last test is in red, and of the current test in green"), myfile, append = TRUE)
     write(paste0("Tested commit: ", commit), myfile, append = TRUE)
@@ -165,9 +165,11 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Further, each folder bel
             folder_comp_mif <- max(sameRuns)
             compmif <- paste0("../", folder_comp_mif, paste0("/REMIND_generic_", cfg$title, "_withoutPlus.mif"))
             tmp <- read.report(compmif, as.list = FALSE)
-            write.report2(x = collapseNames(tmp), file = "tmp.mif", scenario = paste0(cfg$title, "_ref"), model = model)
+            write.report(x = collapseNames(tmp), file = "tmp.mif", scenario = paste0(cfg$title, "_ref"), model = model)
             if (all(file.exists(miffile, "tmp.mif"))) {
-              if (!any(grepl("comp_with_.*.pdf", dir()))) try(compareScenarios(c(miffile, "tmp.mif"), hist = "historical.mif", fileName = paste0("comp_with_", folder_comp_mif, ".pdf")))
+              print(i)
+              print(compmif)
+              if (!any(grepl("comp_with_.*.pdf", dir()))) try(compareScenarios2(c(miffile, "tmp.mif"), mifHist = "historical.mif", outputFile = paste0("comp_with_", folder_comp_mif, ".pdf")))
             }
           }
         }
@@ -196,7 +198,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Further, each folder bel
       }
       write(paste0("The IAMC check of these runs is found in /p/projects/remind/modeltests/output/iamccheck-", commit, ".rds", "\n"), myfile, append = TRUE)
     }
-    write(unique(errorList), myfile, append = TRUE)
+    write(paste0("Summary of ", format(Sys.time(), "%Y-%m-%d"), ": ", ifelse(is.null(errorList), "Tests look good" , unlist(unique(errorList))), collapse = ". "), myfile, append = TRUE)
     write("```", myfile, append = TRUE)
     if (email) sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
     if (!is.null(errorList) & !is.null(mattermostToken)) .mattermostBotMessage(message = paste0("Some ", model, " tests have failed, check https://gitlab.pik-potsdam.de/landuse/testing_suite"), token = mattermostToken) 
