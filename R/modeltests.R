@@ -146,7 +146,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
       if (model == "MAgPIE") if (grsi[,"Iter"] != "y2100")  errorList <- c(errorList,"Some run(s) did not converge")
       if (grsi[,"Mif"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
       if (grsi[,"runInAppResults"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
-      if (compScen) {
+      if (compScen & grsi[,"Conv"] == "converged") {
         setwd(i)
         cfg <- NULL
         if (any(grepl(sub("^.*./output/", "", getwd()), rownames(filter(gRS, Conv == "converged", Mif == TRUE))))) {
@@ -162,7 +162,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
           rmRun <- grep(sub("output/", "", cfg$results_folder), sameRuns)
           sameRuns <- sameRuns[-rmRun]
           if (length(sameRuns) > 0) {
-            folder_comp_mif <- max(sameRuns)
+            folder_comp_mif <- max(sameRuns[sameRuns < sub("output/", "", cfg$results_folder)])
             compmif <- paste0("../", folder_comp_mif, paste0("/REMIND_generic_", cfg$title, "_withoutPlus.mif"))
             tmp <- read.report(compmif, as.list = FALSE)
             write.report(x = collapseNames(tmp), file = "tmp.mif", scenario = paste0(cfg$title, "_ref"), model = model)
