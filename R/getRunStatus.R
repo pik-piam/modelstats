@@ -120,6 +120,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     }
 
     # Conv
+    out[i, "Conv"] <- "NA"
     if (exists("cfg"))
     if (file.exists(fulllst)) {
       if (length(out[i, "RunType"]) > 0)
