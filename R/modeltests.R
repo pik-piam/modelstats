@@ -178,8 +178,10 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
     }
     if (model == "REMIND") if (length(paths) != length(rownames(runsToStart))+1) {
        runsNotStarted <- setdiff(c("default-AMT-", rownames(runsToStart)), sub("_.*", "", paths))
-       write(paste0("These scenarios did NOT start at all:"), myfile, append = TRUE)
+       write(" ", myfile, append = TRUE)
+       write(paste0("These scenarios did not start at all:"), myfile, append = TRUE)
        write(runsNotStarted, myfile, append=TRUE)
+       write(" ", myfile, append = TRUE)
     }
     if (iamccheck) {
       a <- NULL
@@ -198,7 +200,8 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
       }
       write(paste0("The IAMC check of these runs is found in /p/projects/remind/modeltests/output/iamccheck-", commit, ".rds", "\n"), myfile, append = TRUE)
     }
-    write(paste0("Summary of ", format(Sys.time(), "%Y-%m-%d"), ": ", ifelse(is.null(errorList), "Tests look good" , unlist(unique(errorList))), collapse = ". "), myfile, append = TRUE)
+    tmp <- paste0(unlist(unique(errorList)), collapse = ". ")
+    write(paste0("Summary of ", format(Sys.time(), "%Y-%m-%d"), ": ", ifelse(tmp == "", "Tests look good" , tmp)), myfile, append = TRUE)
     write("```", myfile, append = TRUE)
     if (email) sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
     if (!is.null(errorList) & !is.null(mattermostToken)) .mattermostBotMessage(message = paste0("Some ", model, " tests have failed, check https://gitlab.pik-potsdam.de/landuse/testing_suite"), token = mattermostToken) 
