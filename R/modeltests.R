@@ -32,7 +32,13 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
   .mattermostBotMessage <- function(message, token) {
     system(paste0("curl -i -X POST -H 'Content-Type: application/json' -d '", '{"text": "', message, '"', "}' ", token), intern = TRUE)
   }
-  
+
+  .readRuntime <- function(x) {
+    load(paste0(x,"/runstatistics.rda"))
+    return(stats$runtime)
+  }  
+
+
   if (readLines(paste0(mydir, "/.testsstatus")) == "start") {
     if (!is.null(test)) {
       test_bu <- test
@@ -146,7 +152,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
       if (model == "MAgPIE") if (grsi[,"Iter"] != "y2100")  errorList <- c(errorList,"Some run(s) did not converge")
       if (grsi[,"Mif"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
       if (grsi[,"runInAppResults"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
-      if (compScen & grsi[,"Conv"] == "converged") {
+      if (grsi[,"Conv"] == "converged") {
         setwd(i)
         cfg <- NULL
         if (any(grepl(sub("^.*./output/", "", getwd()), rownames(filter(gRS, Conv == "converged", Mif == TRUE))))) {
@@ -155,14 +161,17 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
           setwd("../")
           next
         }
-        if (!any(grepl("comp_with_.*.pdf", dir()))) {
-          folder_comp_mif  <- Conv <- Mif <- NULL
-          miffile <- paste0(getwd(), "/REMIND_generic_", cfg$title, "_withoutPlus.mif")
-          sameRuns <- grep(cfg$title, rownames(filter(gRS, Conv == "converged", Mif == TRUE)), value = TRUE)
-          rmRun <- grep(sub("output/", "", cfg$results_folder), sameRuns)
-          sameRuns <- sameRuns[-rmRun]
-          if (length(sameRuns) > 0) {
-            folder_comp_mif <- max(sameRuns[sameRuns < sub("output/", "", cfg$results_folder)])
+        sameRuns <- grep(cfg$title, rownames(filter(gRS, Conv == "converged", Mif == TRUE)), value = TRUE)
+        rmRun <- grep(sub("output/", "", cfg$results_folder), sameRuns)
+        sameRuns <- sameRuns[-rmRun]
+        if (length(sameRuns) > 0) {
+          lastRun <- NULL
+          lastRun <- max(sameRuns[sameRuns < sub("output/", "", cfg$results_folder)])
+          if (as.numeric(.readRuntime("."), units="hours") > (1.05 * as.numeric(.readRuntime(paste0("../", lastRun)), units="hours"))) errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
+          if (compScen & !any(grepl("comp_with_.*.pdf", dir()))) {
+            folder_comp_mif  <- Conv <- Mif <- NULL
+            miffile <- paste0(getwd(), "/REMIND_generic_", cfg$title, "_withoutPlus.mif")
+            folder_comp_mif <- lastRun
             compmif <- paste0("../", folder_comp_mif, paste0("/REMIND_generic_", cfg$title, "_withoutPlus.mif"))
             tmp <- read.report(compmif, as.list = FALSE)
             write.report(x = collapseNames(tmp), file = "tmp.mif", scenario = paste0(cfg$title, "_ref"), model = model)
@@ -204,7 +213,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
     write(paste0("Summary of ", format(Sys.time(), "%Y-%m-%d"), ": ", ifelse(tmp == "", "Tests look good" , tmp)), myfile, append = TRUE)
     write("```", myfile, append = TRUE)
     if (email) sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
-    if (!is.null(errorList) & !is.null(mattermostToken)) .mattermostBotMessage(message = paste0("Some ", model, " tests have failed, check https://gitlab.pik-potsdam.de/landuse/testing_suite"), token = mattermostToken) 
+    if (!is.null(errorList) & !is.null(mattermostToken)) .mattermostBotMessage(message = paste0("Some ", model, " tests produce warnings, check https://gitlab.pik-potsdam.de/landuse/testing_suite"), token = mattermostToken) 
     writeLines("start", con = paste0(mydir, "/.testsstatus"))
     saveRDS(commit, file = paste0(mydir, "/lastcommit.rds"))
   }
