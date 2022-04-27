@@ -28,18 +28,22 @@ loopRuns <- function(mydir, user = NULL) {
   len <- max(c(15, nchar(mydir)))
   len <- min(67, len)
 
-
-  cat("\n")
-  if (!file.exists("/p")) {
-    cat(paste0("Folder", paste0(rep(" ", len - 5), collapse = ""), "Runtime            RunType           RunStatus        Mif             Conv           Iter          modelstat    \n"))
+  colSep <- "   "
+  if (file.exists("/p")) {
+    coltitles <- c(paste0("Folder", paste(rep(" ", len - 6), collapse = "")),
+      "Runtime   ", "JobInSlurm", "RunType    ", "RunStatus      ", "Iter   ",
+      "Conv                 ", "modelstat          ", "Mif     ", "runInAppResults")
   } else {
-    cat(paste0("Folder", paste0(rep(" ", len - 5), collapse = ""), "Runtime              JobInSlurm          RunType            RunStatus         Iter             Conv            modelstat      Mif           runInAppResults \n"))
+    coltitles <- c(paste0("Folder", paste(rep(" ", len - 6), collapse = "")),
+      "Runtime   ", "RunType    ", "RunStatus      ", "Mif     ",
+      "Conv                 ", "Iter   ", "modelstat          ")
   }
+  message(paste(coltitles, collapse = colSep))
 
   for (i in mydir) {
 
     if (!file.exists(paste0(i, "/", grep("^config.*", dir(i), value = TRUE)[1]))) next # do not report on folders that do not contain runs
-    try(out <- printOutput(getRunStatus(i, user = user), len1stcol = len))
+    try(out <- printOutput(getRunStatus(i, user = user), lenCols = nchar(coltitles), colSep = colSep))
     if (grepl(" y2| nlp_", out)) {
       if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted", out)) {
         cat(red(out))

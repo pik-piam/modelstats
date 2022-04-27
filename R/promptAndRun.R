@@ -26,15 +26,6 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
       myruns <- myruns[-which(runnames %in% c("batch"))]
       runnames <- runnames[-which(runnames %in% c("batch"))]
     }
-    if (length(myruns) == 0) {
-      return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -cr USER 1")
-    } else {
-      message("")
-      message("!!! NEW FEATURE FOR BETTER OUTPUT: type 'rs2 -cr username DAYS' with DAYS an integer denoting how many days you want results from")
-      message("")
-      message("Found these runs")
-    }
-
     coupled <- rem <- NULL
     for (i in 1:length(runnames)) {
       if (any(grepl(runnames[[i]], myruns[[i]]), grepl("mag-run", runnames[[i]]))) {
@@ -51,6 +42,15 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     }
     myruns <- myruns[file.exists(myruns)] # keep only existing paths
     myruns <- unique(myruns[!is.na(myruns)])
+
+    if (length(myruns) == 0) {
+      return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -cr USER 1")
+    } else {
+      message("")
+      message("!!! NEW FEATURE FOR BETTER OUTPUT: type 'rs2 -cr username DAYS' with DAYS an integer denoting how many days you want results from")
+      message("")
+      message("Found these runs")
+    }
 
 #    if (length(myruns)>40) {
 #        message("Excuse me? > 40 runs? You need a cluster only for yourself it seems")
