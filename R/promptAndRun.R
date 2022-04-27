@@ -41,16 +41,7 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
 #       if (grepl(runnames[[i]],myruns[[i]])) {
         next
       } else {
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-1"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-2"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-3"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-4"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-5"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-6"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-7"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-8"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-9"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-10"))
+        coupled <- c(coupled, paste0(paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-"), seq(10)))
         rem <- c(rem, i)
       }
     }
@@ -70,10 +61,16 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
 #    }
 #    message("Found these runs (only first 50 shown)")
     print(myruns[1:min(1500, length(myruns))])
+    colSep <- "   "
     options(width = 200)
-    message(paste0("                                                   ", "Runtime              JobInSlurm          RunType            RunStatus         Iter             Conv            modelstat      Mif           runInAppResults"))
-    for (i in myruns[1:min(1500, length(myruns))]) try(message(sub("^\\[1\\]|\n$", "", printOutput(getRunStatus(i, user = user), len1stcol = 50))), silent = TRUE)
-
+    len1stcol <- min(max(nchar(basename(myruns))), 50)
+    coltitles <- c(paste(rep(" ", len1stcol), collapse = ""),
+    "Runtime   ", "JobInSlurm", "RunType    ", "RunStatus      ", "Iter   ",
+    "Conv                 ", "modelstat          ", "Mif     ", "runInAppResults")
+    message(paste(coltitles, collapse = colSep))
+    for (i in myruns[1:min(1500, length(myruns))]) {
+      try(message(sub("^\\[1\\]|\n$", "", printOutput(getRunStatus(i, user = user), lenCols = nchar(coltitles), colSep = colSep))), silent = TRUE)
+    }
   } else {
     loopRuns(mydir, user = user)
   }

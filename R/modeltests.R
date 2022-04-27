@@ -34,7 +34,8 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
   }
 
   .readRuntime <- function(x) {
-    load(paste0(x,"/runstatistics.rda"))
+    stats <- NULL # because of no visible binding note
+    load(paste0(x, "/runstatistics.rda"))
     return(stats$runtime)
   }  
 
