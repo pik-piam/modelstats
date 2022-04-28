@@ -31,12 +31,12 @@ loopRuns <- function(mydir, user = NULL) {
   colSep <- "  "
   if (file.exists("/p")) {
     coltitles <- c(paste0("Folder", paste(rep(" ", len - 6), collapse = "")),
-      "Runtime    ", "JobInSlurm", "RunType    ", "RunStatus        ", "Iter    ",
-      "Conv                 ", "modelstat          ", "Mif     ", "runInAppResults")
+      "Runtime    ", "inSlurm", "RunType    ", "RunStatus        ", "Iter            ",
+      "Conv                 ", "modelstat          ", "Mif     ", "inAppResults")
   } else {
     coltitles <- c(paste0("Folder", paste(rep(" ", len - 6), collapse = "")),
       "Runtime    ", "RunType    ", "RunStatus        ", "Mif     ",
-      "Conv                 ", "Iter    ", "modelstat          ")
+      "Conv                 ", "Iter            ", "modelstat          ")
   }
   message(paste(coltitles, collapse = colSep))
 

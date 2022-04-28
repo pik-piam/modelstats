@@ -68,8 +68,8 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     options(width = 200)
     len1stcol <- min(max(nchar(basename(myruns))), 50)
     coltitles <- c(paste(rep(" ", len1stcol), collapse = ""),
-    "Runtime    ", "JobInSlurm", "RunType    ", "RunStatus         ", "Iter    ",
-    "Conv                 ", "modelstat          ", "Mif     ", "runInAppResults")
+    "Runtime    ", "inSlurm", "RunType    ", "RunStatus         ", "Iter            ",
+    "Conv                 ", "modelstat          ", "Mif     ", "inAppResults")
     message(paste(coltitles, collapse = colSep))
     for (i in myruns[1:min(1500, length(myruns))]) {
       try(message(sub("^\\[1\\]|\n$", "", printOutput(getRunStatus(i, user = user), lenCols = nchar(coltitles), colSep = colSep))), silent = TRUE)
