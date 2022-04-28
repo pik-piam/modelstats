@@ -105,7 +105,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       suppressWarnings(try(loop <- sub("^.*.= ", "", system(paste0("grep 'LOOPS' ", fulllog, " | tail -1"), intern = TRUE)), silent = TRUE))
       if (length(loop) > 0) out[i, "Iter"] <- loop
       if (!out[i, "RunType"] %in% c("nash", "Calib_nash") & length(totNoOfIter) > 0) out[i, "Iter"] <- paste0(out[i, "Iter"], "/", sub(";", "", sub("^.*.= ", "", totNoOfIter)))
-      suppressWarnings(try(out[i, "RunStatus"] <- substr(sub("\\*\\*\\* Status: ", "", system(paste0("grep '*** Status: ' ", fulllog), intern = TRUE)), start = 1, stop = 15), silent = TRUE))
+      suppressWarnings(try(out[i, "RunStatus"] <- substr(sub("\\(s\\)", "", sub("\\*\\*\\* Status: ", "", system(paste0("grep '*** Status: ' ", fulllog), intern = TRUE))), start = 1, stop = 17), silent = TRUE))
       if (onCluster & out[i, "RunStatus"] == "NA") {
         if (out[i, "jobInSLURM"] == FALSE) {
           out[i, "RunStatus"] <- "Run interrupted"

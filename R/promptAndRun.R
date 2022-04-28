@@ -26,6 +26,9 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
       myruns <- myruns[-which(runnames %in% c("batch"))]
       runnames <- runnames[-which(runnames %in% c("batch"))]
     }
+    if (length(myruns) == 0) {
+      return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -cr USER 1")
+    }
     coupled <- rem <- NULL
     for (i in 1:length(runnames)) {
       if (any(grepl(runnames[[i]], myruns[[i]]), grepl("mag-run", runnames[[i]]))) {
@@ -61,11 +64,11 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
 #    }
 #    message("Found these runs (only first 50 shown)")
     print(myruns[1:min(1500, length(myruns))])
-    colSep <- "   "
+    colSep <- "  "
     options(width = 200)
     len1stcol <- min(max(nchar(basename(myruns))), 50)
     coltitles <- c(paste(rep(" ", len1stcol), collapse = ""),
-    "Runtime   ", "JobInSlurm", "RunType    ", "RunStatus      ", "Iter   ",
+    "Runtime    ", "JobInSlurm", "RunType    ", "RunStatus         ", "Iter    ",
     "Conv                 ", "modelstat          ", "Mif     ", "runInAppResults")
     message(paste(coltitles, collapse = colSep))
     for (i in myruns[1:min(1500, length(myruns))]) {

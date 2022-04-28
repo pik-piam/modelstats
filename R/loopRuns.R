@@ -28,15 +28,15 @@ loopRuns <- function(mydir, user = NULL) {
   len <- max(c(15, nchar(mydir)))
   len <- min(67, len)
 
-  colSep <- "   "
+  colSep <- "  "
   if (file.exists("/p")) {
     coltitles <- c(paste0("Folder", paste(rep(" ", len - 6), collapse = "")),
-      "Runtime   ", "JobInSlurm", "RunType    ", "RunStatus      ", "Iter   ",
+      "Runtime    ", "JobInSlurm", "RunType    ", "RunStatus        ", "Iter    ",
       "Conv                 ", "modelstat          ", "Mif     ", "runInAppResults")
   } else {
     coltitles <- c(paste0("Folder", paste(rep(" ", len - 6), collapse = "")),
-      "Runtime   ", "RunType    ", "RunStatus      ", "Mif     ",
-      "Conv                 ", "Iter   ", "modelstat          ")
+      "Runtime    ", "RunType    ", "RunStatus        ", "Mif     ",
+      "Conv                 ", "Iter    ", "modelstat          ")
   }
   message(paste(coltitles, collapse = colSep))
 
