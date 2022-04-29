@@ -34,6 +34,7 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
   }
 
   .readRuntime <- function(x) {
+    stats <- NULL # prevent 'no visible binding for global variable', will be set by load
     load(paste0(x,"/runstatistics.rda"))
     return(stats$runtime)
   }  
