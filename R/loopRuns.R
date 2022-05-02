@@ -33,17 +33,19 @@ loopRuns <- function(mydir, user = NULL) {
     coltitles <- c(paste0("Folder", paste(rep(" ", len - 6), collapse = "")),
       "Runtime    ", "inSlurm", "RunType    ", "RunStatus        ", "Iter            ",
       "Conv                 ", "modelstat          ", "Mif     ", "inAppResults")
+    lenCols <- c(nchar(coltitles)[-length(coltitles)], 5)
   } else {
     coltitles <- c(paste0("Folder", paste(rep(" ", len - 6), collapse = "")),
       "Runtime    ", "RunType    ", "RunStatus        ", "Mif     ",
       "Conv                 ", "Iter            ", "modelstat          ")
+    lenCols <- nchar(coltitles)
   }
   message(paste(coltitles, collapse = colSep))
 
   for (i in mydir) {
 
     if (!file.exists(paste0(i, "/", grep("^config.*", dir(i), value = TRUE)[1]))) next # do not report on folders that do not contain runs
-    try(out <- printOutput(getRunStatus(i, user = user), lenCols = nchar(coltitles), colSep = colSep))
+    try(out <- printOutput(getRunStatus(i, user = user), lenCols = lenCols, colSep = colSep))
     if (grepl(" y2| nlp_", out)) {
       if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted", out)) {
         cat(red(out))

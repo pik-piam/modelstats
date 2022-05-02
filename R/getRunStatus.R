@@ -127,7 +127,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
       if (grepl("nash", out[i, "RunType"]) & !is.na(out[i, "RunType"])) {
 
-        if (cfg[["gms"]][["cm_nash_autoconverge"]] > 0) {
+        if (isTRUE(cfg[["gms"]][["cm_nash_autoconverge"]] > 0)) {
           totNoOfIter <- tail(suppressWarnings(system(paste0("grep 'cm_iteration_max = [1-9].*.;$' ", fulllst), intern = TRUE)), n = 1)
         } else {
           totNoOfIter <- cfg[["gms"]][["cm_iteration_max"]]

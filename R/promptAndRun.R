@@ -72,7 +72,8 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     "Conv                 ", "modelstat          ", "Mif     ", "inAppResults")
     message(paste(coltitles, collapse = colSep))
     for (i in myruns[1:min(1500, length(myruns))]) {
-      try(message(sub("^\\[1\\]|\n$", "", printOutput(getRunStatus(i, user = user), lenCols = nchar(coltitles), colSep = colSep))), silent = TRUE)
+      try(message(sub("^\\[1\\]|\n$", "", printOutput(getRunStatus(i, user = user),
+          lenCols = c(nchar(coltitles)[-length(coltitles)], 5), colSep = colSep))), silent = TRUE)
     }
   } else {
     loopRuns(mydir, user = user)
