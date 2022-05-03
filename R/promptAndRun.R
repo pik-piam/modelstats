@@ -28,29 +28,14 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     }
     if (length(myruns) == 0) {
       return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -cr USER 1")
-    } else {
-      message("")
-      message("!!! NEW FEATURE FOR BETTER OUTPUT: type 'rs2 -cr username DAYS' with DAYS an integer denoting how many days you want results from")
-      message("")
-      message("Found these runs")
     }
-
     coupled <- rem <- NULL
     for (i in 1:length(runnames)) {
       if (any(grepl(runnames[[i]], myruns[[i]]), grepl("mag-run", runnames[[i]]))) {
 #       if (grepl(runnames[[i]],myruns[[i]])) {
         next
       } else {
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-1"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-2"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-3"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-4"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-5"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-6"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-7"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-8"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-9"))
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-10"))
+        coupled <- c(coupled, paste0(paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-"), seq(10)))
         rem <- c(rem, i)
       }
     }
@@ -61,6 +46,15 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     myruns <- myruns[file.exists(myruns)] # keep only existing paths
     myruns <- unique(myruns[!is.na(myruns)])
 
+    if (length(myruns) == 0) {
+      return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -cr USER 1")
+    } else {
+      message("")
+      message("Type 'rs2 -cr username DAYS' with DAYS an integer denoting how many days you want results from")
+      message("")
+      message("Found these runs")
+    }
+
 #    if (length(myruns)>40) {
 #        message("Excuse me? > 40 runs? You need a cluster only for yourself it seems")
 #    } else if (length(myruns)>15) {
@@ -70,10 +64,17 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
 #    }
 #    message("Found these runs (only first 50 shown)")
     print(myruns[1:min(1500, length(myruns))])
+    colSep <- "  "
     options(width = 200)
-    message(paste0("                                                   ", "Runtime              JobInSlurm          RunType            RunStatus         Iter             Conv            modelstat      Mif           runInAppResults"))
-    for (i in myruns[1:min(1500, length(myruns))]) try(message(sub("^\\[1\\]|\n$", "", printOutput(getRunStatus(i, user = user), len1stcol = 50))), silent = TRUE)
-
+    len1stcol <- min(max(nchar(basename(myruns))), 50)
+    coltitles <- c(paste(rep(" ", len1stcol), collapse = ""),
+    "Runtime    ", "inSlurm", "RunType    ", "RunStatus         ", "Iter            ",
+    "Conv                 ", "modelstat          ", "Mif     ", "inAppResults")
+    message(paste(coltitles, collapse = colSep))
+    for (i in myruns[1:min(1500, length(myruns))]) {
+      try(message(sub("^\\[1\\]|\n$", "", printOutput(getRunStatus(i, user = user),
+          lenCols = c(nchar(coltitles)[-length(coltitles)], 5), colSep = colSep))), silent = TRUE)
+    }
   } else {
     loopRuns(mydir, user = user)
   }

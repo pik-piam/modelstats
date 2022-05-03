@@ -44,5 +44,3 @@ If you want your own scenarios to be included in future tests: Add your scenario
 Tailor the IAMC-style checks to your needs or add further IAMC-style checks here (read the vignette to see how this is done): http://htmlpreview.github.io/?https://github.com/pik-piam/piamModelTests/blob/master/vignettes/iamc.html
 
 For wishes, changes etc, please contact RSE or open a new issue here: https://github.com/pik-piam/modelstats/issues
-
-

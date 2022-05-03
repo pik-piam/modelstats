@@ -105,7 +105,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       suppressWarnings(try(loop <- sub("^.*.= ", "", system(paste0("grep 'LOOPS' ", fulllog, " | tail -1"), intern = TRUE)), silent = TRUE))
       if (length(loop) > 0) out[i, "Iter"] <- loop
       if (!out[i, "RunType"] %in% c("nash", "Calib_nash") & length(totNoOfIter) > 0) out[i, "Iter"] <- paste0(out[i, "Iter"], "/", sub(";", "", sub("^.*.= ", "", totNoOfIter)))
-      suppressWarnings(try(out[i, "RunStatus"] <- substr(sub("\\*\\*\\* Status: ", "", system(paste0("grep '*** Status: ' ", fulllog), intern = TRUE)), start = 1, stop = 14), silent = TRUE))
+      suppressWarnings(try(out[i, "RunStatus"] <- substr(sub("\\(s\\)", "", sub("\\*\\*\\* Status: ", "", system(paste0("grep '*** Status: ' ", fulllog), intern = TRUE))), start = 1, stop = 17), silent = TRUE))
       if (onCluster & out[i, "RunStatus"] == "NA") {
         if (out[i, "jobInSLURM"] == FALSE) {
           out[i, "RunStatus"] <- "Run interrupted"
@@ -127,7 +127,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
       if (grepl("nash", out[i, "RunType"]) & !is.na(out[i, "RunType"])) {
 
-        if (cfg[["gms"]][["cm_nash_autoconverge"]] > 0) {
+        if (isTRUE(cfg[["gms"]][["cm_nash_autoconverge"]] > 0)) {
           totNoOfIter <- tail(suppressWarnings(system(paste0("grep 'cm_iteration_max = [1-9].*.;$' ", fulllst), intern = TRUE)), n = 1)
         } else {
           totNoOfIter <- cfg[["gms"]][["cm_iteration_max"]]
@@ -142,14 +142,12 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
           iters <- suppressWarnings(system(paste0("grep -A 30 'PARAMETER p80_repy  sum' ", fulllst), intern = TRUE))
           if (length(iters) > 0) {
             iters <- grep("^$|--|modelstat", iters, invert = TRUE, value = TRUE)
-            iters <- grep("^[A-Z][A-Z][A-Z]  ", iters,              value = TRUE)
-
-              iters <- tail(sapply(iters, strsplit, split = " "), n = 120)
-
-              b <- paste0(sapply(iters, rem)[3, ], collapse = "")
-              iters <- gsub(" |0|\\.", "", b[[1]])
-              out[i, "Conv"] <- substr(iters, nchar(iters) - 13, nchar(iters)) # a function is needed that extracts a summary of each iteration, not just the last one
-
+            iters <- grep("^[A-Z][A-Z][A-Z]  ", iters,             value = TRUE)
+            iters <- tail(sapply(iters, strsplit, split = " "), n = 120)
+            regions <- unique(sapply(iters, rem)[1, ])
+            b <- paste0(sapply(iters, rem)[3, ], collapse = "")
+            iters <- gsub(" |0|\\.", "", b[[1]])
+            out[i, "Conv"] <- substr(iters, nchar(iters) - length(regions) + 1, nchar(iters)) # a function is needed that extracts a summary of each iteration, not just the last one
           }
         }
       } else {
