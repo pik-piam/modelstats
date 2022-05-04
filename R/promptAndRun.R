@@ -9,25 +9,31 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     loopRuns(choose_folder("."), user = user)
   } else if (mydir == "-f") {
     loopRuns(dir(), user = user)
-  } else if (mydir == "-cr") {
+  } else if (mydir %in% c("-cr", "-a", "-c")) {
     myruns <- system(paste0("squeue -u ", user, " -h -o '%Z'"), intern = TRUE)
     runnames <- system(paste0("squeue -u ", user, " -h -o '%j'"), intern = TRUE)
 
-    myruns2 <- system(paste0("sacct -u ", user, " -s cd,f,cancelled,timeout,oom -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " --format WorkDir -P -n"), intern = TRUE)
- #   myruns2<-myruns2[!grepl("^$",myruns2)]
-    myruns <- c(myruns, myruns2)
-    runnames2 <- system(paste0("sacct -u ", user, " -s cd,f,cancelled,timeout,oom -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " --format JobName -P -n"), intern = TRUE)
-#    runnames2<-runnames2[!grepl("^batch$",runnames2)]
-    runnames <- c(runnames, runnames2)
-    if (any(grepl("mag-run", runnames))) {
-      myruns <- myruns[-which(runnames %in% c("default", "batch"))]
-      runnames <- runnames[-which(runnames %in% c("default", "batch"))]
-    } else {
-      myruns <- myruns[-which(runnames %in% c("batch"))]
-      runnames <- runnames[-which(runnames %in% c("batch"))]
+    if (mydir %in% c("-cr", "-c")) {
+      myruns2 <- system(paste0("sacct -u ", user, " -s cd,f,cancelled,timeout,oom -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " --format WorkDir -P -n"), intern = TRUE)
+      # myruns2<-myruns2[!grepl("^$",myruns2)]
+      myruns <- c(myruns, myruns2)
+      runnames2 <- system(paste0("sacct -u ", user, " -s cd,f,cancelled,timeout,oom -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " --format JobName -P -n"), intern = TRUE)
+      # runnames2<-runnames2[!grepl("^batch$",runnames2)]
+      runnames <- c(runnames, runnames2)
     }
+
+    if (any(grepl("mag-run", runnames))) {
+      deleteruns <- which(runnames %in% c("default", "batch"))
+    } else {
+      deleteruns <- which(runnames %in% c("batch"))
+    }
+    if (length(deleteruns) > 0) {
+      myruns <- myruns[-deleteruns]
+      runnames <- runnames[-deleteruns]
+    }
+
     if (length(myruns) == 0) {
-      return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -cr USER 1")
+      return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -c USER 1")
     }
     coupled <- rem <- NULL
     for (i in 1:length(runnames)) {
@@ -36,6 +42,7 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
         next
       } else {
         coupled <- c(coupled, paste0(paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-"), seq(10)))
+        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]])) # for coupled runs in parallel mode
         rem <- c(rem, i)
       }
     }
@@ -44,15 +51,20 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
       myruns <- c(myruns, coupled) # add coupled paths
     }
     myruns <- myruns[file.exists(myruns)] # keep only existing paths
-    myruns <- unique(myruns[!is.na(myruns)])
+    myruns <- sort(unique(myruns[!is.na(myruns)]))
 
     if (length(myruns) == 0) {
-      return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -cr USER 1")
+      return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -c USER 1")
     } else {
       message("")
-      message("Type 'rs2 -cr username DAYS' with DAYS an integer denoting how many days you want results from")
+      if (mydir %in% c("-cr", "-c") && daysback != 3) {
+        message("Type 'rs2 -a username' to get only active runs in slurm")
+      } else {
+        message("Type 'rs2 -c username DAYS' with DAYS an integer denoting how many days you want results from")
+      }
       message("")
-      message("Found these runs")
+      message("Found ", length(myruns), if (mydir == "-a") " active", " runs.",
+              if (length(myruns)/as.numeric(daysback) > 20) " Excuse me? You need a cluster only for yourself it seems.")
     }
 
 #    if (length(myruns)>40) {
