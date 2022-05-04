@@ -56,26 +56,19 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
     setwd(mydir)
     if (!test) {
       system("/p/system/packages/git/2.16.1/bin/git reset --hard origin/develop && /p/system/packages/git/2.16.1/bin/git pull")
-      system("sed -i 's/cfg$force_download <- FALSE/cfg$force_download <- TRUE/' config/default.cfg")
       a <- system("find modules/ -name 'module.gms'", intern = TRUE) # if empty realization folders exist (which git does not see), delete them
       for (i in a) {
         b <- setdiff(dir(sub("module.gms$", "", i)), c("module.gms", "input", sub("/realization.gms\"$", "", sub("^.*.modules/[0-9a-zA-Z_]{1,}/", "", grep("realization.gms", readLines(i), value = TRUE)))))
         if (length(b) > 0) unlink(paste0(sub("module.gms$", "", i), b), recursive = TRUE)
       }
       if (model == "REMIND") {
-        argv <- "config/scenario_config_AMT.csv"
-        slurmConfig <- "--qos=priority --time=24:00:00 --nodes=1 --tasks-per-node=12"
         system("find . -type d -name output -prune -o -type f -name '*.R' -exec sed -i 's/sbatch/\\/p\\/system\\/slurm\\/bin\\/sbatch/g' {} +")
-        write("slurmConfig <- '--qos=priority --time=24:00:00 --nodes=1 --tasks-per-node=12'", file = ".Rprofile", append = TRUE)
-        changeTitle <- paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "default-AMT-"/', "' config/default.cfg")
-        system(changeTitle)
-        system("Rscript start.R")
-        Sys.sleep(300)
-        system("sed -i 's/cfg$force_download <- TRUE/cfg$force_download <- FALSE/' config/default.cfg")
+        if (file.exists("input/source_files.log")) unlink("input/source_files.log") # forces download of input files
         system("Rscript start.R config/scenario_config_AMT.csv")
         runsToStart  <- read.csv2("config/scenario_config_AMT.csv", stringsAsFactors = FALSE, row.names = 1, comment.char = "#", na.strings = "")
         runsToStart  <- runsToStart[runsToStart$start==1,]
       } else if (model == "MAgPIE") {
+        system("sed -i 's/cfg$force_download <- FALSE/cfg$force_download <- TRUE/' config/default.cfg")
         system("Rscript start.R runscripts=default submit=slurmpriority") # start default scenario, then wait until it runs to start also the weekly tests script
         Sys.sleep(300)
         repeat {
