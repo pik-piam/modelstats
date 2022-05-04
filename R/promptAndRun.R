@@ -57,7 +57,11 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
       return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -c USER 1")
     } else {
       message("")
-      message("Type 'rs2 -c username DAYS' with DAYS an integer denoting how many days you want results from")
+      if (mydir %in% c("-cr", "-c") && daysback != 3) {
+        message("Type 'rs2 -a username' to get only active runs in slurm")
+      } else {
+        message("Type 'rs2 -c username DAYS' with DAYS an integer denoting how many days you want results from")
+      }
       message("")
       message("Found ", length(myruns), if (mydir == "-a") " active", " runs.",
               if (length(myruns)/as.numeric(daysback) > 20) " Excuse me? You need a cluster only for yourself it seems.")
