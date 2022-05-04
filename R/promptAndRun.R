@@ -9,11 +9,11 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     loopRuns(choose_folder("."), user = user)
   } else if (mydir == "-f") {
     loopRuns(dir(), user = user)
-  } else if (mydir %in% c("-cr", "-ar")) {
+  } else if (mydir %in% c("-cr", "-a", "-c")) {
     myruns <- system(paste0("squeue -u ", user, " -h -o '%Z'"), intern = TRUE)
     runnames <- system(paste0("squeue -u ", user, " -h -o '%j'"), intern = TRUE)
 
-    if (mydir == "-cr") {
+    if (mydir %in% c("-cr", "-c")) {
       myruns2 <- system(paste0("sacct -u ", user, " -s cd,f,cancelled,timeout,oom -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " --format WorkDir -P -n"), intern = TRUE)
       # myruns2<-myruns2[!grepl("^$",myruns2)]
       myruns <- c(myruns, myruns2)
@@ -33,7 +33,7 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     }
 
     if (length(myruns) == 0) {
-      return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -cr USER 1")
+      return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -c USER 1")
     }
     coupled <- rem <- NULL
     for (i in 1:length(runnames)) {
@@ -54,13 +54,13 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     myruns <- sort(unique(myruns[!is.na(myruns)]))
 
     if (length(myruns) == 0) {
-      return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -cr USER 1")
+      return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -c USER 1")
     } else {
       message("")
-      message("Type 'rs2 -cr username DAYS' with DAYS an integer denoting how many days you want results from")
+      message("Type 'rs2 -c username DAYS' with DAYS an integer denoting how many days you want results from")
       message("")
-      message("Found ", length(myruns), if (mydir == "-ar") " active", " runs.",
-              if (length(myruns) > 40) " Excuse me? You need a cluster only for yourself it seems.")
+      message("Found ", length(myruns), if (mydir == "-a") " active", " runs.",
+              if (length(myruns)/as.numeric(daysback) > 20) " Excuse me? You need a cluster only for yourself it seems.")
     }
 
 #    if (length(myruns)>40) {
