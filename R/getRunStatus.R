@@ -187,8 +187,12 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     out[i, "Runtime"] <- "NA"
     if (file.exists(fle)) {
       load(fle)
-      if (exists("stats")) if (any(grepl("GAMSEnd", names(stats)))) {
-        out[i, "Runtime"] <- format(round(stats[["timeGAMSEnd"]] - stats[["timeGAMSStart"]],1))
+      if (exists("stats")) {
+        if (any(grepl("GAMSEnd", names(stats)))) {
+          out[i, "Runtime"] <- format(round(stats[["timeGAMSEnd"]] - stats[["timeGAMSStart"]], 1))
+        } else if (any(grepl("timePrepareStart", names(stats))) & out[i, "RunStatus"] %in% c("Run in progress")) {
+          out[i, "Runtime"] <- paste0("> ", format(round(Sys.time() - stats[["timePrepareStart"]], 1)))
+        }
       }
     }
 
