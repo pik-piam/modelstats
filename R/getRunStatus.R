@@ -74,8 +74,9 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         if (any(grepl("modelstat", names(stats)))) out[i, "modelstat"] <- stats[["modelstat"]]
         if (is.na(out[i, "modelstat"])) out[i, "modelstat"] <- "NA"
       }
-    } else {
-      if (file.exists(gdx)) out[i, "modelstat"] <- as.numeric(readGDX(gdx, "o_modelstat", format = "first_found"))
+    }
+    if (out[i, "modelstat"] == "NA" && file.exists(gdx)) {
+      out[i, "modelstat"] <- as.numeric(readGDX(gdx, "o_modelstat", format = "first_found"))
     }
 
 
