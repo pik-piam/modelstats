@@ -145,10 +145,13 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
     write(paste0("The test of ", format(Sys.time(), "%Y-%m-%d"), " contains these merges:"), myfile, append = TRUE)
     write(commits, myfile, append = TRUE)
 #    write(paste0("View merge range on github: https://github.com/",model,"model/",model",/pulls?q=is%3Apr+is%3Amerged+",lastCommit,"..",commit),myfile,append=TRUE)
-    write("Run                                Runtime              jobInSlurm          RunType            RunStatus         Iter             Conv            modelstat      Mif           runInAppResults", myfile, append = TRUE)
+    colSep <- "  "
+    coltitles <- c("Run                               ", "Runtime    ", "inSlurm", "RunType    ", "RunStatus         ",
+                   "Iter            ", "Conv                 ", "modelstat          ", "Mif     ", "inAppResults")
+    write(paste(coltitles, collapse = colSep), myfile, append = TRUE)
     for (i in paths) {
       grsi <- getRunStatus(i)
-      write(sub("\n$", "", printOutput(grsi, 34)), myfile, append = TRUE)
+      write(sub("\n$", "", printOutput(grsi, lenCols = nchar(coltitles), colSep = colSep)), myfile, append = TRUE)
       if (model == "REMIND") if (grsi[,"Conv"] != "converged") errorList <- c(errorList,"Some run(s) did not converge")
       if (model == "MAgPIE") if (grsi[,"Iter"] != "y2100")  errorList <- c(errorList,"Some run(s) did not converge")
       if (grsi[,"Mif"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
