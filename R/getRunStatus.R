@@ -53,6 +53,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 #    ifelse(grepl("yml$", cfgf), cfgf <- "config.yml", cfgf <- "config.Rdata")
     fle <- paste0(ii, "/runstatistics.rda")
     gdx <- paste0(ii, "/fulldata.gdx")
+    gdx_non_optimal <- paste0(ii, "/non_optimal.gdx")
     fulllst <- paste0(ii, "/full.lst")
     fulllog <- paste0(ii, "/full.log")
     logtxt <- paste0(ii, "/log.txt")
@@ -75,10 +76,22 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         if (is.na(out[i, "modelstat"])) out[i, "modelstat"] <- "NA"
       }
     }
-    if (out[i, "modelstat"] == "NA" && file.exists(gdx)) {
-      out[i, "modelstat"] <- as.numeric(readGDX(gdx, "o_modelstat", format = "first_found"))
-    }
 
+    modelstatFiles <- c(gdx, gdx_non_optimal)
+    if (out[i, "modelstat"] == "NA" && any(file.exists(modelstatFiles))) {
+      modelstat <- NULL
+      modelstat_iter <- NULL
+      for (filename in modelstatFiles[file.exists(modelstatFiles)]) {
+        modelstat <- c(modelstat, as.numeric(readGDX(gdx = filename, "o_modelstat", format = "simplest")))
+        modelstat_iter <- c(modelstat_iter, as.numeric(readGDX(gdx = filename, "o_iterationNumber", format = "simplest")))
+      }
+      out[i, "modelstat"] <- modelstat[which.max(modelstat_iter)]
+    }
+    explain_modelstat <- c("1" = "Optimal", "2" = "Locally Optimal", "3" = "Unbounded", "4" = "Infeasible",
+                           "5" = "Locally Infes", "6" = "Intermed Infes", "7" = "Intermed Nonoptimal")
+    if (out[i, "modelstat"] %in% names(explain_modelstat)) {
+      out[i, "modelstat"] <- paste0(out[i, "modelstat"], ": ", explain_modelstat[out[i, "modelstat"]])
+    }
 
     # runInAppResults
     if (onCluster) out[i, "runInAppResults"] <- "NA"
@@ -96,7 +109,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       } else {
         if (onCluster) out[i, "runInAppResults"] <- FALSE
       }
-}
+    }
 
     # Iter
     if (exists("cfg")) totNoOfIter <- cfg[["gms"]][["cm_iteration_max"]]
