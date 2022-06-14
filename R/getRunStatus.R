@@ -85,7 +85,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         modelstat <- c(modelstat, as.numeric(readGDX(gdx = filename, "o_modelstat", format = "simplest")))
         modelstat_iter <- c(modelstat_iter, as.numeric(readGDX(gdx = filename, "o_iterationNumber", format = "simplest")))
       }
-      try(out[i, "modelstat"] <- modelstat[which.max(modelstat_iter)])
+      if (length(modelstat) > 0) out[i, "modelstat"] <- modelstat[which.max(modelstat_iter)]
     }
     explain_modelstat <- c("1" = "Optimal", "2" = "Locally Optimal", "3" = "Unbounded", "4" = "Infeasible",
                            "5" = "Locally Infes", "6" = "Intermed Infes", "7" = "Intermed Nonoptimal")
