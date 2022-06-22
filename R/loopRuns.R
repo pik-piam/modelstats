@@ -65,7 +65,7 @@ loopRuns <- function(mydir, user = NULL) {
         cat(red(out))
       } else if (grepl(" converged|Clb_converged", out)) {
         cat(underline(green(out)))
-      } else if (all(grepl("testOneRegi", out) & grepl("2: Localy Optimal", out))) {
+      } else if (all(grepl("testOneRegi", out) & grepl("2: Locally Optimal", out))) {
         cat(green(out))
       } else if (grepl("2: Locally Optimal", out) && !grepl("nash ", out)) {
         cat(green(out))
