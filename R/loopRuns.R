@@ -61,7 +61,9 @@ loopRuns <- function(mydir, user = NULL) {
         cat(cyan(out))
       }
     } else {
-      if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted|Intermed Infes", out)) {
+      if (grepl("Run in progress", out)) {
+        cat(cyan(out))
+      } else if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted|Intermed Infes", out)) {
         cat(red(out))
       } else if (grepl(" converged|Clb_converged", out)) {
         cat(underline(green(out)))
@@ -69,8 +71,6 @@ loopRuns <- function(mydir, user = NULL) {
         cat(green(out))
       } else if (grepl("2: Locally Optimal", out) && !grepl("nash ", out)) {
         cat(green(out))
-      } else if (grepl("Run in progress", out)) {
-        cat(cyan(out))
       } else if (all(grepl(" NA ", out) & grepl("FALSE", out))) {
         cat(red(out))
       } else {
