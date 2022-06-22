@@ -61,7 +61,7 @@ loopRuns <- function(mydir, user = NULL) {
         cat(cyan(out))
       }
     } else {
-      if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted", out)) {
+      if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted|Intermed Infes", out)) {
         cat(red(out))
       } else if (grepl(" converged|Clb_converged", out)) {
         cat(underline(green(out)))
