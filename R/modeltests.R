@@ -152,7 +152,8 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
     for (i in paths) {
       grsi <- getRunStatus(i)
       write(sub("\n$", "", printOutput(grsi, lenCols = nchar(coltitles), colSep = colSep)), myfile, append = TRUE)
-      if (model == "REMIND") if (grsi[,"Conv"] != "converged") errorList <- c(errorList,"Some run(s) did not converge")
+      if (model == "REMIND" & grsi[,"Conv"] != "converged" & !grepl("testOneRegi", i)) errorList <- c(errorList,"Some run(s) did not converge")
+      if (grsi[,"modelstat"] != "2: Locally Optimal" & grepl("testOneRegi", i)) errorList <- c(errorList,"testOneRegi does not return an optimal solution")
       if (model == "MAgPIE") if (grsi[,"Iter"] != "y2100")  errorList <- c(errorList,"Some run(s) did not converge")
       if (grsi[,"Mif"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
       if (grsi[,"runInAppResults"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
@@ -213,7 +214,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
       }
       write(paste0("The IAMC check of these runs is found in /p/projects/remind/modeltests/output/iamccheck-", commit, ".rds", "\n"), myfile, append = TRUE)
     }
-    tmp <- paste0(unlist(unique(errorList)), collapse = ". ")
+    tmp <- ifelse(length(paths) > 0, paste0(unlist(unique(errorList)), collapse = ". "), "No runs started")
     write(paste0("Summary of ", format(Sys.time(), "%Y-%m-%d"), ": ", ifelse(tmp == "", "Tests look good" , tmp)), myfile, append = TRUE)
     write("```", myfile, append = TRUE)
     if (email) sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
