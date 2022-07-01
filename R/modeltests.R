@@ -11,6 +11,7 @@
 #' @param user the user that starts the job and commits the changes
 #' @param model Model name
 #' @param test Use this option to run a test of the workflow (no runs will be submitted)
+#' The test parameter needs to be of the form "YY-MM-DD"
 #' @param iamccheck Use this option to turn iamc-style checks on and off
 #' @param email whether an email notification will be send or not
 #' @param mattermostToken token used for mattermost notifications
@@ -27,8 +28,8 @@
 #' @importFrom magclass read.report write.report collapseNames
 #' @export
 modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, test = NULL, iamccheck = TRUE, email = TRUE, compScen = TRUE, mattermostToken = NULL) {
-  
-  
+
+
   .mattermostBotMessage <- function(message, token) {
     system(paste0("curl -i -X POST -H 'Content-Type: application/json' -d '", '{"text": "', message, '"', "}' ", token), intern = TRUE)
   }
@@ -37,7 +38,7 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
     stats <- NULL # because of no visible binding note
     load(paste0(x, "/runstatistics.rda"))
     return(stats$runtime)
-  }  
+  }
 
 
   if (readLines(paste0(mydir, "/.testsstatus")) == "start") {
@@ -98,14 +99,14 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
     test_bu <- readRDS(paste0(mydir, "/test_bu.rds"))
     runcode <- readRDS(paste0(mydir, "/runcode.rds"))
     lastCommit <- readRDS(paste0(mydir, "/lastcommit.rds"))
-    if (model == "REMIND") runsToStart <- readRDS(paste0(mydir, "runsToStart.rds")) 
+    if (model == "REMIND") runsToStart <- readRDS(paste0(mydir, "runsToStart.rds"))
     out <- list()
     errorList <- NULL
 
     if (!test) {
       repeat {
         if (!any(grepl(mydir, system(paste0("/p/system/slurm/bin/squeue -u ", user, " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)))) {
-          Sys.sleep(600) 
+          Sys.sleep(600)
           break
         }
       }
@@ -126,7 +127,7 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
     } else {
       gRS <- getRunStatus(dir())
     }
-    
+
     paths <- grep(runcode, dir(), value = TRUE)
     paths <- file.info(paths)
     paths <- rownames(paths[paths[, "isdir"] == TRUE, ])
@@ -206,7 +207,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
         if (!is.null(a)) {
            out[["iamCheck"]] <- iamCheck(a, cfg = model)
            if (!test) {
-              saveRDS(out[["iamCheck"]], file = paste0("iamccheck-", commit, ".rds")) 
+              saveRDS(out[["iamCheck"]], file = paste0("iamccheck-", commit, ".rds"))
            } else {
              saveRDS(out[["iamCheck"]], file = paste0("iamccheck-", test_bu, ".rds"))
            }
@@ -218,8 +219,8 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
     write(paste0("Summary of ", format(Sys.time(), "%Y-%m-%d"), ": ", ifelse(tmp == "", "Tests look good" , tmp)), myfile, append = TRUE)
     write("```", myfile, append = TRUE)
     if (email) sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
-    if (!is.null(errorList) & !is.null(mattermostToken)) .mattermostBotMessage(message = paste0("Some ", model, " tests produce warnings, check https://gitlab.pik-potsdam.de/landuse/testing_suite"), token = mattermostToken) 
+    if (!is.null(errorList) & !is.null(mattermostToken)) .mattermostBotMessage(message = paste0("Some ", model, " tests produce warnings, check https://gitlab.pik-potsdam.de/", ifelse(model == "MAgPIE", "landuse", model), "/testing_suite"), token = mattermostToken)
     writeLines("start", con = paste0(mydir, "/.testsstatus"))
-    saveRDS(commit, file = paste0(mydir, "/lastcommit.rds"))
+    if (!test) saveRDS(commit, file = paste0(mydir, "/lastcommit.rds"))
   }
 }
