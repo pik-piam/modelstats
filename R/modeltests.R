@@ -65,9 +65,9 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
       }
       if (model == "REMIND") {
         argv <- "config/scenario_config_AMT.csv"
-        slurmConfig <- "--qos=priority --time=24:00:00 --nodes=1 --tasks-per-node=12"
+        slurmConfig <- "--qos=priority --nodes=1 --tasks-per-node=12"
         system("find . -type d -name output -prune -o -type f -name '*.R' -exec sed -i 's/sbatch/\\/p\\/system\\/slurm\\/bin\\/sbatch/g' {} +")
-        write("slurmConfig <- '--qos=priority --time=24:00:00 --nodes=1 --tasks-per-node=12'", file = ".Rprofile", append = TRUE)
+        write("slurmConfig <- '--qos=priority --nodes=1 --tasks-per-node=12'", file = ".Rprofile", append = TRUE)
         changeTitle <- paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "default-AMT-"/', "' config/default.cfg")
         system(changeTitle)
         system("Rscript start.R")
@@ -153,11 +153,12 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
     for (i in paths) {
       grsi <- getRunStatus(i)
       write(sub("\n$", "", printOutput(grsi, lenCols = nchar(coltitles), colSep = colSep)), myfile, append = TRUE)
-      if (model == "REMIND" & grsi[,"Conv"] != "converged" & !grepl("testOneRegi", i)) errorList <- c(errorList,"Some run(s) did not converge")
+      if (model == "REMIND" & grsi[, "RunType"] != "Calib_nash" & grsi[,"Conv"] != "converged" & !grepl("testOneRegi", i)) errorList <- c(errorList,"Some run(s) did not converge")
+      if (model == "REMIND" & grsi[, "RunType"] == "Calib_nash" & grsi[,"Conv"] != "Clb_converged") errorList <- c(errorList,"Some run(s) did not converge")
       if (grsi[,"modelstat"] != "2: Locally Optimal" & grepl("testOneRegi", i)) errorList <- c(errorList,"testOneRegi does not return an optimal solution")
       if (model == "MAgPIE") if (grsi[,"Iter"] != "y2100")  errorList <- c(errorList,"Some run(s) did not converge")
       if (grsi[,"Mif"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
-      if (grsi[,"runInAppResults"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
+      if (grsi[,"inAppResults"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
       if (grsi[,"Conv"] == "converged") {
         setwd(i)
         cfg <- NULL
