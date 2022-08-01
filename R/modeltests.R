@@ -158,7 +158,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
       if (grsi[,"modelstat"] != "2: Locally Optimal" & grepl("testOneRegi", i)) errorList <- c(errorList,"testOneRegi does not return an optimal solution")
       if (model == "MAgPIE") if (grsi[,"Iter"] != "y2100")  errorList <- c(errorList,"Some run(s) did not converge")
       if (grsi[,"Mif"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
-      if (grsi[,"inAppResults"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
+      if (grsi[,"runInAppResults"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
       if (grsi[,"Conv"] == "converged") {
         setwd(i)
         cfg <- NULL
