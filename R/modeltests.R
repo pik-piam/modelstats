@@ -64,18 +64,17 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
         if (length(b) > 0) unlink(paste0(sub("module.gms$", "", i), b), recursive = TRUE)
       }
       if (model == "REMIND") {
-        argv <- "config/scenario_config_AMT.csv"
         slurmConfig <- "--qos=priority --nodes=1 --tasks-per-node=12"
         system("find . -type d -name output -prune -o -type f -name '*.R' -exec sed -i 's/sbatch/\\/p\\/system\\/slurm\\/bin\\/sbatch/g' {} +")
-        write("slurmConfig <- '--qos=priority --nodes=1 --tasks-per-node=12'", file = ".Rprofile", append = TRUE)
         changeTitle <- paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "default-AMT-"/', "' config/default.cfg")
         system(changeTitle)
-        system("Rscript start.R")
+        source("start.R", local = TRUE)
         Sys.sleep(300)
         system("sed -i 's/cfg$force_download <- TRUE/cfg$force_download <- FALSE/' config/default.cfg")
-        system("Rscript start.R config/scenario_config_AMT.csv")
+        argv <- "config/scenario_config_AMT.csv"
+        source("start.R", local = TRUE)
         runsToStart  <- read.csv2("config/scenario_config_AMT.csv", stringsAsFactors = FALSE, row.names = 1, comment.char = "#", na.strings = "")
-        runsToStart  <- runsToStart[runsToStart$start==1,]
+        runsToStart  <- runsToStart[runsToStart$start == 1, ]
       } else if (model == "MAgPIE") {
         system("Rscript start.R runscripts=default submit=slurmpriority") # start default scenario, then wait until it runs to start also the weekly tests script
         Sys.sleep(300)
