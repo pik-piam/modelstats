@@ -69,10 +69,9 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
         changeTitle <- paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "default-AMT-"/', "' config/default.cfg")
         system(changeTitle)
         source("start.R", local = TRUE)
-        Sys.sleep(300)
+        Sys.sleep(100)
         system("sed -i 's/cfg$force_download <- TRUE/cfg$force_download <- FALSE/' config/default.cfg")
-        argv <- "config/scenario_config_AMT.csv"
-        source("start.R", local = TRUE)
+        system("Rscript start.R config/scenario_config_AMT.csv")
         runsToStart  <- read.csv2("config/scenario_config_AMT.csv", stringsAsFactors = FALSE, row.names = 1, comment.char = "#", na.strings = "")
         runsToStart  <- runsToStart[runsToStart$start == 1, ]
       } else if (model == "MAgPIE") {
