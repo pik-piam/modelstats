@@ -6,7 +6,9 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
   if (mydir == ".") {
     loopRuns(".", user = user)
   } else if (mydir == "") {
-    loopRuns(choose_folder("."), user = user)
+    dirs <- list.dirs(".", recursive = FALSE)
+    chosendirs <- gms::chooseFromList(dirs, type = "folders")
+    loopRuns(if (length(chosendirs) == 0) "exit" else chosendirs, user = user)
   } else if (mydir == "-f") {
     loopRuns(dir(), user = user)
   } else if (mydir %in% c("-cr", "-a", "-c")) {
