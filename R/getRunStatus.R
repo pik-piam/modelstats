@@ -85,7 +85,10 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         modelstat <- c(modelstat, as.numeric(readGDX(gdx = filename, "o_modelstat", format = "simplest")))
         modelstat_iter <- c(modelstat_iter, as.numeric(readGDX(gdx = filename, "o_iterationNumber", format = "simplest")))
       }
-      if (length(modelstat) > 0) out[i, "modelstat"] <- modelstat[which.max(modelstat_iter)]
+      if (length(modelstat) > 0) {
+        fileInfo <- file.info(modelstatFiles[file.exists(modelstatFiles)])
+        out[i, "modelstat"] <- as.numeric(readGDX(gdx = rownames(fileInfo)[which(fileInfo[, "mtime"] == max(fileInfo[, "mtime"]))], "o_modelstat", format = "simplest"))
+      }
     }
     explain_modelstat <- c("1" = "Optimal", "2" = "Locally Optimal", "3" = "Unbounded", "4" = "Infeasible",
                            "5" = "Locally Infes", "6" = "Intermed Infes", "7" = "Intermed Nonoptimal")
@@ -168,7 +171,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         out[i, "Conv"] <- "NA"
       }
     } else {
-      out[i,"Conv"] <- "NA" 
+      out[i,"Conv"] <- "NA"
     }
     # END Conv
 
