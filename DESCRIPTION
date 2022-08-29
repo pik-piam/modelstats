@@ -1,8 +1,8 @@
 Package: modelstats
 Type: Package
 Title: Run Analysis Tools
-Version: 0.8.3
-Date: 2022-08-24
+Version: 0.8.4
+Date: 2022-08-29
 Authors@R: c(person("Anastasis", "Giannousakis", email = "giannou@pik-potsdam.de", role = c("aut","cre")))
 Description: A collection of tools which allow to analyze model runs.
 Imports: 
