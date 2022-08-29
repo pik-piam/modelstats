@@ -72,7 +72,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         if (any(grepl("modelstat", names(stats)))) out[i, "modelstat"] <- paste0(as.character(stats[["modelstat"]]), collapse = "")
         if (is.na(out[i, "modelstat"])) out[i, "modelstat"] <- "NA"
       } else {
-        if (any(grepl("modelstat", names(stats)))) out[i, "modelstat"] <- stats[["modelstat"]]
+        if (any(grepl("modelstat", names(stats)))) try(out[i, "modelstat"] <- stats[["modelstat"]], silent = TRUE)
         if (is.na(out[i, "modelstat"])) out[i, "modelstat"] <- "NA"
       }
     }
