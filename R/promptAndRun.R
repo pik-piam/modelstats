@@ -11,6 +11,11 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     loopRuns(if (length(chosendirs) == 0) "exit" else chosendirs, user = user)
   } else if (mydir == "-f") {
     loopRuns(dir(), user = user)
+  } else if (mydir == "-t") {
+    amtPath <- "/p/projects/remind/modeltests/output/"
+    amtPattern <- readRDS("/p/projects/remind/modeltests/runcode.rds")
+    amtDirs <- dir(path = amtPath, pattern = amtPattern, full.names = TRUE)
+    loopRuns(amtDirs, user = user)
   } else if (mydir %in% c("-cr", "-a", "-c")) {
     myruns <- system(paste0("squeue -u ", user, " -h -o '%Z'"), intern = TRUE)
     runnames <- system(paste0("squeue -u ", user, " -h -o '%j'"), intern = TRUE)
