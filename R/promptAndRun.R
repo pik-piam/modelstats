@@ -14,7 +14,7 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
   } else if (mydir == "-t") {
     amtPath <- "/p/projects/remind/modeltests/output/"
     amtPattern <- readRDS("/p/projects/remind/modeltests/runcode.rds")
-    amtDirs<-paste0(amtPath, dir(path = amtPath, pattern = amtPattern))
+    amtDirs <- dir(path = amtPath, pattern = amtPattern, full.names = TRUE)
     loopRuns(amtDirs, user = user)
   } else if (mydir %in% c("-cr", "-a", "-c")) {
     myruns <- system(paste0("squeue -u ", user, " -h -o '%Z'"), intern = TRUE)
