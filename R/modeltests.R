@@ -26,7 +26,6 @@
 #' @importFrom lucode2 sendmail
 #' @importFrom remind2 compareScenarios2
 #' @importFrom magclass read.report write.report collapseNames
-#' @importFrom yaml read_yaml
 #' @export
 modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, test = NULL, iamccheck = TRUE, email = TRUE, compScen = TRUE, mattermostToken = NULL) {
 
@@ -155,16 +154,9 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
       if (model == "REMIND" & grsi[, "RunType"] != "Calib_nash" & grsi[, "Conv"] != "converged" & !grepl("testOneRegi", i)) errorList <- c(errorList, "Some run(s) did not converge")
       if (model == "REMIND" & grsi[, "RunType"] == "Calib_nash" & grsi[, "Conv"] != "Clb_converged") errorList <- c(errorList, "Some run(s) did not converge")
       if (grsi[, "modelstat"] != "2: Locally Optimal" & grepl("testOneRegi", i)) errorList <- c(errorList, "testOneRegi does not return an optimal solution")
-      if (file.exists(paste0(i, "/config.yml"))) { # try to capture MAgPIE's convergence target from the number of time steps
-        cfg <- read_yaml(paste0(i, "/config.yml"))
-        timeSteps <- cfg[["gms"]][["c_timesteps"]]
-        if (!grepl("[^0-9]", timeSteps) & as.numeric(gsub("[^0-9]", "", timeSteps)) < 1000) {
-          convTarget <- paste0("y", as.character(1990 + timeSteps * 5))
-        } else {
-          convTarget <- paste0("y", gsub("[^0-9]", "", timeSteps))
-        }
+      if (model == "MAgPIE" & paste0(unique(unlist(strsplit(gsub("[^0-9]", "", grsi[, "modelstat"]), split =""))), collapse = "") != "2") {
+        errorList <- c(errorList, "Some run(s) did not converge")
       }
-      if (model == "MAgPIE") if (grsi[, "Iter"] != convTarget)  errorList <- c(errorList, "Some run(s) did not converge")
       if (grsi[, "runInAppResults"] != "TRUE") errorList <- c(errorList, "Some run(s) did not report correctly")
       if (grsi[, "Conv"] == "converged") {
         setwd(i)

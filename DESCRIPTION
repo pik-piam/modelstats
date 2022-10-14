@@ -15,8 +15,7 @@ Imports:
     utils,
     magclass,
     remind2,
-    gms,
-    yaml
+    gms
 Suggests:
     covr,
     knitr,
