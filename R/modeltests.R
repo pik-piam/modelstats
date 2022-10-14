@@ -26,6 +26,7 @@
 #' @importFrom lucode2 sendmail
 #' @importFrom remind2 compareScenarios2
 #' @importFrom magclass read.report write.report collapseNames
+#' @importFrom yaml read_yaml
 #' @export
 modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, test = NULL, iamccheck = TRUE, email = TRUE, compScen = TRUE, mattermostToken = NULL) {
 
