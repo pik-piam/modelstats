@@ -113,6 +113,8 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
 
     setwd("output")
 
+    isdir <- NULL
+
     if (model != "MAgPIE") {
       gRSold <- readRDS("gRS.rds")
       try(gRS <- rbind(gRSold, getRunStatus(setdiff(dir(), rownames(gRSold)))))
@@ -122,13 +124,17 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
         gRS <- getRunStatus(dir())
         saveRDS(gRS, "gRS.rds")
       }
-    } else {
-      gRS <- getRunStatus(dir())
+      paths <- grep(runcode, dir(), value = TRUE)
+      paths <- file.info(paths)
+      paths <- rownames(paths[paths[, "isdir"] == TRUE, ])
+    } else { # if model is MAgPIE ignore runcode and find paths to report on based on folder creation time (last 3 days)
+      gRS <- getRunStatus(dir()) # this happens because test run names are hard coded in MAgPIE scripts and thus not readable
+      paths <- file.info(dir())
+      paths <- filter(paths, isdir == TRUE)
+      paths <- rownames(paths[which(as.Date(format(paths[, "ctime"], "%Y-%m-%d")) > as.Date(format(Sys.Date(), "%Y-%m-%d")) -3), ])
     }
 
-    paths <- grep(runcode, dir(), value = TRUE)
-    paths <- file.info(paths)
-    paths <- rownames(paths[paths[, "isdir"] == TRUE, ])
+
 
     commit <- sub("commit ", "", system("/p/system/packages/git/2.16.1/bin/git log -1", intern = TRUE)[[1]])
     commits <- system(paste0("/p/system/packages/git/2.16.1/bin/git log --merges --pretty=oneline ", lastCommit, "..", commit, " --abbrev-commit | grep 'Merge pull request'"), intern = TRUE)
@@ -143,7 +149,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
     write(paste0("Tested commit: ", commit), myfile, append = TRUE)
     write(paste0("The test of ", format(Sys.time(), "%Y-%m-%d"), " contains these merges:"), myfile, append = TRUE)
     write(commits, myfile, append = TRUE)
-#    write(paste0("View merge range on github: https://github.com/",model,"model/",model",/pulls?q=is%3Apr+is%3Amerged+",lastCommit,"..",commit),myfile,append=TRUE)
+
     colSep <- "  "
     coltitles <- c("Run                               ", "Runtime    ", "inSlurm", "RunType    ", "RunStatus         ",
                    "Iter            ", "Conv                 ", "modelstat          ", "Mif     ", "inAppResults")
@@ -151,13 +157,14 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
     for (i in paths) {
       grsi <- getRunStatus(i)
       write(sub("\n$", "", printOutput(grsi, lenCols = nchar(coltitles), colSep = colSep)), myfile, append = TRUE)
-      if (model == "REMIND" & grsi[, "RunType"] != "Calib_nash" & grsi[,"Conv"] != "converged" & !grepl("testOneRegi", i)) errorList <- c(errorList,"Some run(s) did not converge")
-      if (model == "REMIND" & grsi[, "RunType"] == "Calib_nash" & grsi[,"Conv"] != "Clb_converged") errorList <- c(errorList,"Some run(s) did not converge")
-      if (grsi[,"modelstat"] != "2: Locally Optimal" & grepl("testOneRegi", i)) errorList <- c(errorList,"testOneRegi does not return an optimal solution")
-      if (model == "MAgPIE") if (grsi[,"Iter"] != "y2100")  errorList <- c(errorList,"Some run(s) did not converge")
-      if (grsi[,"Mif"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
-      if (grsi[,"runInAppResults"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
-      if (grsi[,"Conv"] == "converged") {
+      if (model == "REMIND" & grsi[, "RunType"] != "Calib_nash" & grsi[, "Conv"] != "converged" & !grepl("testOneRegi", i)) errorList <- c(errorList, "Some run(s) did not converge")
+      if (model == "REMIND" & grsi[, "RunType"] == "Calib_nash" & grsi[, "Conv"] != "Clb_converged") errorList <- c(errorList, "Some run(s) did not converge")
+      if (grsi[, "modelstat"] != "2: Locally Optimal" & grepl("testOneRegi", i)) errorList <- c(errorList, "testOneRegi does not return an optimal solution")
+      if (model == "MAgPIE" & paste0(unique(unlist(strsplit(gsub("[^0-9]", "", grsi[, "modelstat"]), split =""))), collapse = "") != "2") {
+        errorList <- c(errorList, "Some run(s) did not converge")
+      }
+      if (grsi[, "runInAppResults"] != "TRUE") errorList <- c(errorList, "Some run(s) did not report correctly")
+      if (grsi[, "Conv"] == "converged") {
         setwd(i)
         cfg <- NULL
         if (any(grepl(sub("^.*./output/", "", getwd()), rownames(filter(gRS, Conv == "converged", Mif == TRUE))))) {
@@ -172,7 +179,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
         if (length(sameRuns) > 0) {
           lastRun <- NULL
           lastRun <- max(sameRuns[sameRuns < sub("output/", "", cfg$results_folder)])
-          if (as.numeric(.readRuntime("."), units="hours") > (1.05 * as.numeric(.readRuntime(paste0("../", lastRun)), units="hours"))) errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
+          if (as.numeric(.readRuntime("."), units = "hours") > (1.25 * as.numeric(.readRuntime(paste0("../", lastRun)), units = "hours"))) errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
           if (compScen & !any(grepl("comp_with_.*.pdf", dir()))) {
             folder_comp_mif  <- Conv <- Mif <- NULL
             miffile <- paste0(getwd(), "/REMIND_generic_", cfg$title, ".mif")
