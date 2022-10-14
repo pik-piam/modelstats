@@ -155,7 +155,6 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
       if (model == "REMIND" & grsi[, "RunType"] != "Calib_nash" & grsi[, "Conv"] != "converged" & !grepl("testOneRegi", i)) errorList <- c(errorList, "Some run(s) did not converge")
       if (model == "REMIND" & grsi[, "RunType"] == "Calib_nash" & grsi[, "Conv"] != "Clb_converged") errorList <- c(errorList, "Some run(s) did not converge")
       if (grsi[, "modelstat"] != "2: Locally Optimal" & grepl("testOneRegi", i)) errorList <- c(errorList, "testOneRegi does not return an optimal solution")
-      if (model == "MAgPIE") if (grsi[, "Iter"] != "y2100")  errorList <- c(errorList, "Some run(s) did not converge")
       if (file.exists(paste0(i, "/config.yml"))) { # try to capture MAgPIE's convergence target from the number of time steps
         cfg <- read_yaml(paste0(i, "/config.yml"))
         timeSteps <- cfg[["gms"]][["c_timesteps"]]
