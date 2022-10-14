@@ -172,7 +172,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
         if (length(sameRuns) > 0) {
           lastRun <- NULL
           lastRun <- max(sameRuns[sameRuns < sub("output/", "", cfg$results_folder)])
-          if (as.numeric(.readRuntime("."), units = "hours") > (1.05 * as.numeric(.readRuntime(paste0("../", lastRun)), units = "hours"))) errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
+          if (as.numeric(.readRuntime("."), units = "hours") > (1.25 * as.numeric(.readRuntime(paste0("../", lastRun)), units = "hours"))) errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
           if (compScen & !any(grepl("comp_with_.*.pdf", dir()))) {
             folder_comp_mif  <- Conv <- Mif <- NULL
             miffile <- paste0(getwd(), "/REMIND_generic_", cfg$title, ".mif")
