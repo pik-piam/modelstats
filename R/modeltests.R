@@ -151,13 +151,13 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
     for (i in paths) {
       grsi <- getRunStatus(i)
       write(sub("\n$", "", printOutput(grsi, lenCols = nchar(coltitles), colSep = colSep)), myfile, append = TRUE)
-      if (model == "REMIND" & grsi[, "RunType"] != "Calib_nash" & grsi[,"Conv"] != "converged" & !grepl("testOneRegi", i)) errorList <- c(errorList,"Some run(s) did not converge")
-      if (model == "REMIND" & grsi[, "RunType"] == "Calib_nash" & grsi[,"Conv"] != "Clb_converged") errorList <- c(errorList,"Some run(s) did not converge")
-      if (grsi[,"modelstat"] != "2: Locally Optimal" & grepl("testOneRegi", i)) errorList <- c(errorList,"testOneRegi does not return an optimal solution")
-      if (model == "MAgPIE") if (grsi[,"Iter"] != "y2100")  errorList <- c(errorList,"Some run(s) did not converge")
-      if (grsi[,"Mif"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
-      if (grsi[,"runInAppResults"] != "TRUE") errorList <- c(errorList,"Some run(s) did not report correctly")
-      if (grsi[,"Conv"] == "converged") {
+      if (model == "REMIND" & grsi[, "RunType"] != "Calib_nash" & grsi[, "Conv"] != "converged" & !grepl("testOneRegi", i)) errorList <- c(errorList, "Some run(s) did not converge")
+      if (model == "REMIND" & grsi[, "RunType"] == "Calib_nash" & grsi[, "Conv"] != "Clb_converged") errorList <- c(errorList, "Some run(s) did not converge")
+      if (grsi[, "modelstat"] != "2: Locally Optimal" & grepl("testOneRegi", i)) errorList <- c(errorList, "testOneRegi does not return an optimal solution")
+      if (model == "MAgPIE") if (grsi[, "Iter"] != "y2100")  errorList <- c(errorList, "Some run(s) did not converge")
+      if (grsi[, "Mif"] != "TRUE") errorList <- c(errorList, "Some run(s) did not report correctly")
+      if (grsi[, "runInAppResults"] != "TRUE") errorList <- c(errorList, "Some run(s) did not report correctly")
+      if (grsi[, "Conv"] == "converged") {
         setwd(i)
         cfg <- NULL
         if (any(grepl(sub("^.*./output/", "", getwd()), rownames(filter(gRS, Conv == "converged", Mif == TRUE))))) {
@@ -172,7 +172,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
         if (length(sameRuns) > 0) {
           lastRun <- NULL
           lastRun <- max(sameRuns[sameRuns < sub("output/", "", cfg$results_folder)])
-          if (as.numeric(.readRuntime("."), units="hours") > (1.05 * as.numeric(.readRuntime(paste0("../", lastRun)), units="hours"))) errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
+          if (as.numeric(.readRuntime("."), units = "hours") > (1.05 * as.numeric(.readRuntime(paste0("../", lastRun)), units = "hours"))) errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
           if (compScen & !any(grepl("comp_with_.*.pdf", dir()))) {
             folder_comp_mif  <- Conv <- Mif <- NULL
             miffile <- paste0(getwd(), "/REMIND_generic_", cfg$title, ".mif")
