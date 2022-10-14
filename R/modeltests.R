@@ -113,6 +113,8 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
 
     setwd("output")
 
+    isdir <- NULL
+
     if (model != "MAgPIE") {
       gRSold <- readRDS("gRS.rds")
       try(gRS <- rbind(gRSold, getRunStatus(setdiff(dir(), rownames(gRSold)))))
