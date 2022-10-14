@@ -122,13 +122,17 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
         gRS <- getRunStatus(dir())
         saveRDS(gRS, "gRS.rds")
       }
-    } else {
-      gRS <- getRunStatus(dir())
+      paths <- grep(runcode, dir(), value = TRUE)
+      paths <- file.info(paths)
+      paths <- rownames(paths[paths[, "isdir"] == TRUE, ])
+    } else { # if model is MAgPIE ignore runcode and find paths to report on based on folder creation time (last 3 days)
+      gRS <- getRunStatus(dir()) # this happens because test run names are hard coded in MAgPIE scripts and thus not readable
+      paths <- file.info(dir())
+      paths <- filter(paths, isdir == TRUE)
+      paths <- rownames(paths[which(as.Date(format(paths[, "ctime"], "%Y-%m-%d")) > as.Date(format(Sys.Date(), "%Y-%m-%d")) -3), ])
     }
 
-    paths <- grep(runcode, dir(), value = TRUE)
-    paths <- file.info(paths)
-    paths <- rownames(paths[paths[, "isdir"] == TRUE, ])
+
 
     commit <- sub("commit ", "", system("/p/system/packages/git/2.16.1/bin/git log -1", intern = TRUE)[[1]])
     commits <- system(paste0("/p/system/packages/git/2.16.1/bin/git log --merges --pretty=oneline ", lastCommit, "..", commit, " --abbrev-commit | grep 'Merge pull request'"), intern = TRUE)
@@ -143,7 +147,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
     write(paste0("Tested commit: ", commit), myfile, append = TRUE)
     write(paste0("The test of ", format(Sys.time(), "%Y-%m-%d"), " contains these merges:"), myfile, append = TRUE)
     write(commits, myfile, append = TRUE)
-#    write(paste0("View merge range on github: https://github.com/",model,"model/",model",/pulls?q=is%3Apr+is%3Amerged+",lastCommit,"..",commit),myfile,append=TRUE)
+
     colSep <- "  "
     coltitles <- c("Run                               ", "Runtime    ", "inSlurm", "RunType    ", "RunStatus         ",
                    "Iter            ", "Conv                 ", "modelstat          ", "Mif     ", "inAppResults")
