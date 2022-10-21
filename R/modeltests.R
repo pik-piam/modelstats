@@ -64,6 +64,7 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
         if (length(b) > 0) unlink(paste0(sub("module.gms$", "", i), b), recursive = TRUE)
       }
       if (model == "REMIND") {
+        source("scripts/utils/updateRenv.R")
         slurmConfig <- "--qos=priority --nodes=1 --tasks-per-node=12"
         system("find . -type d -name output -prune -o -type f -name '*.R' -exec sed -i 's/sbatch/\\/p\\/system\\/slurm\\/bin\\/sbatch/g' {} +")
         changeTitle <- paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "default-AMT-"/', "' config/default.cfg")
@@ -197,7 +198,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
         setwd("../")
       }
     }
-    if (model == "REMIND") if (length(paths) != length(rownames(runsToStart))+1) {
+    if (model == "REMIND") if (length(paths) < length(rownames(runsToStart)) + 1) {
        runsNotStarted <- setdiff(c("default-AMT-", rownames(runsToStart)), sub("_.*", "", paths))
        write(" ", myfile, append = TRUE)
        write(paste0("These scenarios did not start at all:"), myfile, append = TRUE)
