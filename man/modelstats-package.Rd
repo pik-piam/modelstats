@@ -6,7 +6,7 @@
 \alias{modelstats-package}
 \title{modelstats: Run Analysis Tools}
 \description{
-A collection of tools which allow to analyze model runs.
+A collection of tools to analyze model runs.
 }
 \seealso{
 Useful links:
