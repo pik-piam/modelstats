@@ -44,12 +44,12 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
   if (readLines(paste0(mydir, "/.testsstatus")) == "start") {
     if (!is.null(test)) {
       test_bu <- test
-      runcode <- paste0("-AMT-.*.20", test)
+      runcode <- paste0("AMT-.*.20", test)
       test    <- TRUE
     } else {
       test <- FALSE
       test_bu <- NULL
-      runcode <- paste0("-AMT-.*.",format(Sys.Date(), "%Y-%m-%d"),"|","-AMT-.*.",as.Date(format(Sys.Date(), "%Y-%m-%d"))+1)
+      runcode <- paste0("AMT-.*.",format(Sys.Date(), "%Y-%m-%d"),"|","AMT-.*.",as.Date(format(Sys.Date(), "%Y-%m-%d"))+1)
     }
     if (model == "MAgPIE") runcode <- paste0(sub("-AMT-", "default", runcode),"|weeklyTests*.")
     if (is.null(model)) stop("Model cannot be NULL")
@@ -64,16 +64,20 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
         if (length(b) > 0) unlink(paste0(sub("module.gms$", "", i), b), recursive = TRUE)
       }
       if (model == "REMIND") {
-        source("scripts/utils/updateRenv.R")
         slurmConfig <- "--qos=priority --nodes=1 --tasks-per-node=12"
         system("find . -type d -name output -prune -o -type f -name '*.R' -exec sed -i 's/sbatch/\\/p\\/system\\/slurm\\/bin\\/sbatch/g' {} +")
-        changeTitle <- paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "default-AMT-"/', "' config/default.cfg")
+        changeTitle <- paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "AMT-default-"/', "' config/default.cfg")
         system(changeTitle)
         source("start.R", local = TRUE)
         Sys.sleep(100)
         system("sed -i 's/cfg$force_download <- TRUE/cfg$force_download <- FALSE/' config/default.cfg")
+        runsToStart  <- read.csv2("config/scenario_config.csv", stringsAsFactors = FALSE, row.names = 1,
+                                  comment.char = "#", na.strings = "")
+        rownames(runsToStart) <- paste0("AMT-", rownames(runsToStart))
+        scenarioConfigAMT <- cbind(title = rownames(runsToStart), runsToStart)
+        write.csv2(scenarioConfigAMT, "config/scenario_config_AMT.csv", quote = FALSE, na = "", row.names = FALSE)
         system("Rscript start.R config/scenario_config_AMT.csv")
-        runsToStart  <- read.csv2("config/scenario_config_AMT.csv", stringsAsFactors = FALSE, row.names = 1, comment.char = "#", na.strings = "")
+        file.remove("config/scenario_config_AMT.csv")
         runsToStart  <- runsToStart[runsToStart$start == 1, ]
       } else if (model == "MAgPIE") {
         system("Rscript start.R runscripts=default submit=slurmpriority") # start default scenario, then wait until it runs to start also the weekly tests script
@@ -199,7 +203,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
       }
     }
     if (model == "REMIND") if (length(paths) < length(rownames(runsToStart)) + 1) {
-       runsNotStarted <- setdiff(c("default-AMT-", rownames(runsToStart)), sub("_.*", "", paths))
+       runsNotStarted <- setdiff(c("AMT-default-", rownames(runsToStart)), sub("_.*", "", paths))
        write(" ", myfile, append = TRUE)
        write(paste0("These scenarios did not start at all:"), myfile, append = TRUE)
        write(runsNotStarted, myfile, append=TRUE)
