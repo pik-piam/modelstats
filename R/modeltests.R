@@ -64,7 +64,6 @@ modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, te
         if (length(b) > 0) unlink(paste0(sub("module.gms$", "", i), b), recursive = TRUE)
       }
       if (model == "REMIND") {
-        source("scripts/utils/updateRenv.R")
         slurmConfig <- "--qos=priority --nodes=1 --tasks-per-node=12"
         system("find . -type d -name output -prune -o -type f -name '*.R' -exec sed -i 's/sbatch/\\/p\\/system\\/slurm\\/bin\\/sbatch/g' {} +")
         changeTitle <- paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "default-AMT-"/', "' config/default.cfg")
