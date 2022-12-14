@@ -7,7 +7,7 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     loopRuns(".", user = user)
   } else if (mydir == "") {
     if (all(file.exists(c("full.gms", "log.txt", "config.Rdata", "prepare_and_run.R")))) {
-      loopRuns(".")
+      loopRuns(".", user = user)
     } else {
       dirs <- c(".", list.dirs(".", recursive = FALSE))
       chosendirs <- gms::chooseFromList(dirs, type = "folders")
