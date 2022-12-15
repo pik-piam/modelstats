@@ -151,7 +151,7 @@ if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below sh
     write(commits, myfile, append = TRUE)
 
     colSep <- "  "
-    coltitles <- c("Run                               ", "Runtime    ", "inSlurm", "RunType    ", "RunStatus         ",
+    coltitles <- c("Run                                       ", "Runtime    ", "", "RunType    ", "RunStatus         ",
                    "Iter            ", "Conv                 ", "modelstat          ", "Mif     ", "inAppResults")
     write(paste(coltitles, collapse = colSep), myfile, append = TRUE)
     for (i in paths) {

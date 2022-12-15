@@ -6,9 +6,13 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
   if (mydir == ".") {
     loopRuns(".", user = user)
   } else if (mydir == "") {
-    dirs <- list.dirs(".", recursive = FALSE)
-    chosendirs <- gms::chooseFromList(dirs, type = "folders")
-    loopRuns(if (length(chosendirs) == 0) "exit" else chosendirs, user = user)
+    if (all(file.exists(c("full.gms", "log.txt", "config.Rdata", "prepare_and_run.R")))) {
+      loopRuns(".", user = user)
+    } else {
+      dirs <- c(".", list.dirs(".", recursive = FALSE))
+      chosendirs <- gms::chooseFromList(dirs, type = "folders")
+      loopRuns(if (length(chosendirs) == 0) "exit" else chosendirs, user = user)
+    }
   } else if (mydir == "-f") {
     loopRuns(dir(), user = user)
   } else if (mydir == "-t") {
@@ -40,7 +44,7 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     }
 
     if (length(myruns) == 0) {
-      return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -c USER 1")
+      return(paste0("No runs found for this user. You can change the reporting period (here: 5 days) by running 'rs2 -c ", user, " 5"))
     }
     coupled <- rem <- NULL
     for (i in 1:length(runnames)) {
