@@ -25,7 +25,7 @@ loopRuns <- function(mydir, user = NULL) {
   a <- file.info(mydir)
   a <- a[a[, "isdir"] == TRUE, ]
   mydir <- rownames(a[order(a[, "mtime"], decreasing = TRUE), ])
-  len <- max(c(15, nchar(basename(mydir))))
+  len <- max(c(15, nchar(basename(normalizePath(mydir, mustWork = FALSE)))))
   len <- min(67, len)
 
   colSep <- "  "
