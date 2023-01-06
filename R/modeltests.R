@@ -16,6 +16,7 @@
 #' @param email whether an email notification will be send or not
 #' @param mattermostToken token used for mattermost notifications
 #' @param compScen whether compScen has to run or not
+#' @param gitPath Path to the git executable
 #'
 #' @author Anastasis Giannousakis
 #' @seealso \code{\link{package2readme}}
@@ -27,206 +28,306 @@
 #' @importFrom remind2 compareScenarios2
 #' @importFrom magclass read.report write.report collapseNames
 #' @export
-modeltests <- function(mydir = ".", gitdir = NULL, model = NULL, user = NULL, test = NULL, iamccheck = TRUE, email = TRUE, compScen = TRUE, mattermostToken = NULL) {
+modeltests <- function(
+    mydir = ".",
+    gitdir = NULL,
+    model = NULL,
+    user = NULL,
+    test = NULL,
+    iamccheck = TRUE,
+    email = TRUE,
+    compScen = TRUE,
+    mattermostToken = NULL,
+    gitPath = "/p/system/packages/git/2.16.1/bin/git"  # nolint: absolute_path_linter
+) {
+  setwd(mydir)
 
-
-  .mattermostBotMessage <- function(message, token) {
-    system(paste0("curl -i -X POST -H 'Content-Type: application/json' -d '", '{"text": "', message, '"', "}' ", token), intern = TRUE)
+  if (readLines("/.testsstatus") == "start") {
+    startRuns(test = test, model = model, gitPath = gitPath, user = user, mydir = mydir)
+    # make sure next call will evaluate runs
+    writeLines("end", con = "/.testsstatus")
+  } else if (readLines("/.testsstatus") == "end") {
+    evaluateRuns(model = model, mydir = mydir, gitPath = gitPath, compScen = compScen, email = email,
+                 mattermostToken = mattermostToken, gitdir = gitdir, iamccheck = iamccheck, user = user)
+    # make sure next call will start runs
+    writeLines("start", con = "/.testsstatus")
   }
+}
 
-  .readRuntime <- function(x) {
-    stats <- NULL # because of no visible binding note
-    load(paste0(x, "/runstatistics.rda"))
-    return(stats$runtime)
+.mattermostBotMessage <- function(message, token) {
+  cmd <- paste0("curl -i -X POST -H 'Content-Type: application/json' -d '",
+                '{"text": "', message, '"', "}' ",
+                token)
+  system(cmd, intern = TRUE)
+}
+
+.readRuntime <- function(x) {
+  stats <- NULL # because of no visible binding note
+  load(paste0(x, "/runstatistics.rda"))
+  return(stats$runtime)
+}
+
+deleteEmptyRealizationFolders <- function() {
+  moduleFiles <- system("find modules/ -name 'module.gms'", intern = TRUE)
+  for (moduleFile in moduleFiles) {
+    moduleDirectory <- sub("module.gms$", "", moduleFile)
+    realizations <- grep("realization.gms", readLines(moduleFile), value = TRUE)
+    emptyRealizations <- setdiff(
+      dir(moduleDirectory),
+      c("module.gms",
+        "input",
+        sub("/realization.gms\"$", "", sub("^.*.modules/[0-9a-zA-Z_]{1,}/", "", realizations))))
+    if (length(emptyRealizations) > 0) {
+      unlink(paste0(moduleDirectory, emptyRealizations), recursive = TRUE)
+    }
   }
+}
 
+startRuns <- function(test, model, mydir, gitPath, user) {
+  if (!is.null(test)) {
+    runcode <- paste0("-AMT-.*.20", test)
+    test <- TRUE
+  } else {
+    test <- FALSE
+    runcode <- paste0("-AMT-.*.",
+                      format(Sys.Date(), "%Y-%m-%d"),
+                      "|",
+                      "-AMT-.*.",
+                      as.Date(format(Sys.Date(), "%Y-%m-%d")) + 1)
+  }
+  if (model == "MAgPIE") runcode <- paste0(sub("-AMT-", "default", runcode), "|weeklyTests*.")
+  if (is.null(model)) stop("Model cannot be NULL")
 
-  if (readLines(paste0(mydir, "/.testsstatus")) == "start") {
-    if (!is.null(test)) {
-      test_bu <- test
-      runcode <- paste0("-AMT-.*.20", test)
-      test    <- TRUE
-    } else {
-      test <- FALSE
-      test_bu <- NULL
-      runcode <- paste0("-AMT-.*.",format(Sys.Date(), "%Y-%m-%d"),"|","-AMT-.*.",as.Date(format(Sys.Date(), "%Y-%m-%d"))+1)
-    }
-    if (model == "MAgPIE") runcode <- paste0(sub("-AMT-", "default", runcode),"|weeklyTests*.")
-    if (is.null(model)) stop("Model cannot be NULL")
+  if (!test) {
+    system(paste0(gitPath, " reset --hard origin/develop && ", gitPath, " pull"))
+    # Force downloading of the input data in the first run
+    system("sed -i 's/cfg$force_download <- FALSE/cfg$force_download <- TRUE/' config/default.cfg")
 
-    setwd(mydir)
-    if (!test) {
-      system("/p/system/packages/git/2.16.1/bin/git reset --hard origin/develop && /p/system/packages/git/2.16.1/bin/git pull")
-      system("sed -i 's/cfg$force_download <- FALSE/cfg$force_download <- TRUE/' config/default.cfg")
-      a <- system("find modules/ -name 'module.gms'", intern = TRUE) # if empty realization folders exist (which git does not see), delete them
-      for (i in a) {
-        b <- setdiff(dir(sub("module.gms$", "", i)), c("module.gms", "input", sub("/realization.gms\"$", "", sub("^.*.modules/[0-9a-zA-Z_]{1,}/", "", grep("realization.gms", readLines(i), value = TRUE)))))
-        if (length(b) > 0) unlink(paste0(sub("module.gms$", "", i), b), recursive = TRUE)
-      }
-      if (model == "REMIND") {
-        slurmConfig <- "--qos=priority --nodes=1 --tasks-per-node=12"
-        system("find . -type d -name output -prune -o -type f -name '*.R' -exec sed -i 's/sbatch/\\/p\\/system\\/slurm\\/bin\\/sbatch/g' {} +")
-        changeTitle <- paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "default-AMT-"/', "' config/default.cfg")
-        system(changeTitle)
-        source("start.R", local = TRUE)
-        Sys.sleep(100)
-        system("sed -i 's/cfg$force_download <- TRUE/cfg$force_download <- FALSE/' config/default.cfg")
-        system("Rscript start.R config/scenario_config_AMT.csv")
-        runsToStart  <- read.csv2("config/scenario_config_AMT.csv", stringsAsFactors = FALSE, row.names = 1, comment.char = "#", na.strings = "")
-        runsToStart  <- runsToStart[runsToStart$start == 1, ]
-      } else if (model == "MAgPIE") {
-        system("Rscript start.R runscripts=default submit=slurmpriority") # start default scenario, then wait until it runs to start also the weekly tests script
-        Sys.sleep(300)
-        repeat {
-          if (!any(grepl(paste0(mydir,"$"), system(paste0("/p/system/slurm/bin/squeue -u ", user, " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)))) {
-            system("Rscript start.R runscripts=test_runs submit=slurmpriority")
-            break
-          }
-        }
-      }
-    }
-    saveRDS(runcode, file = paste0(mydir, "/runcode.rds"))
-    saveRDS(test, file = paste0(mydir, "/test.rds"))
-    saveRDS(test_bu, file = paste0(mydir, "/test_bu.rds"))
-    if (model == "REMIND" & is.null(test_bu)) saveRDS(runsToStart, file = paste0(mydir, "/runsToStart.rds"))
-    writeLines("end", con = paste0(mydir, "/.testsstatus"))
-  } else if (readLines(paste0(mydir, "/.testsstatus")) == "end") {
-    setwd(mydir)
-    writeLines("wait", con = paste0(mydir, "/.testsstatus"))
-    test    <- readRDS(paste0(mydir, "/test.rds"))
-    test_bu <- readRDS(paste0(mydir, "/test_bu.rds"))
-    runcode <- readRDS(paste0(mydir, "/runcode.rds"))
-    lastCommit <- readRDS(paste0(mydir, "/lastcommit.rds"))
-    if (model == "REMIND") runsToStart <- readRDS(paste0(mydir, "runsToStart.rds"))
-    out <- list()
-    errorList <- NULL
+    # empty realization folders break the models, but can be left over because git does not
+    # delete empty folders if all files in the folder are deleted.
+    deleteEmptyRealizationFolders()
 
-    if (!test) {
+    if (model == "REMIND") {
+      # default run to download input data
+      changeTitle <- paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "default-AMT-"/', "' config/default.cfg")
+      system(changeTitle)
+      # set the slurmConfig before sourcing start.R to avoid questions about the slurm config
+      slurmConfig <- "--qos=priority --nodes=1 --tasks-per-node=12"  # nolint: object_usage_linter
+      source("start.R", local = TRUE)
+      Sys.sleep(100) # it would be much better to properly wait for the data downloading to finish
+
+      # do not download input data every run, reset force_download
+      system("sed -i 's/cfg$force_download <- TRUE/cfg$force_download <- FALSE/' config/default.cfg")
+
+      # now start actual test runs
+      system("Rscript start.R config/scenario_config_AMT.csv")
+      runsToStart <- read.csv2("config/scenario_config_AMT.csv",
+                               stringsAsFactors = FALSE,
+                               row.names = 1,
+                               comment.char = "#",
+                               na.strings = "")
+      runsToStart <- runsToStart[runsToStart$start == 1, ]
+      saveRDS(runsToStart, file = paste0(mydir, "/runsToStart.rds"))
+    } else if (model == "MAgPIE") {
+      # default run to download input data
+      system("Rscript start.R runscripts=default submit=slurmpriority")
+      # wait for default run to finish
       repeat {
-        if (!any(grepl(mydir, system(paste0("/p/system/slurm/bin/squeue -u ", user, " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)))) {
-          Sys.sleep(600)
+        Sys.sleep(300)
+        jobsInSlurm <- system(paste0("/p/system/slurm/bin/squeue -u ",
+                                     user, " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)
+        if (!any(grepl(paste0(mydir, "$"), jobsInSlurm))) {
           break
         }
       }
+      # now start actual test runs
+      system("Rscript start.R runscripts=test_runs submit=slurmpriority")
     }
+  }
+  saveRDS(runcode, file = paste0(mydir, "/runcode.rds"))
+  saveRDS(test, file = paste0(mydir, "/test.rds"))
+}
 
+evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken, gitdir, iamccheck, user) {
+  writeLines("wait", con = paste0(mydir, "/.testsstatus"))
+  test <- readRDS(paste0(mydir, "/test.rds"))
+  runcode <- readRDS(paste0(mydir, "/runcode.rds"))
+  lastCommit <- readRDS(paste0(mydir, "/lastcommit.rds"))
+  if (model == "REMIND") runsToStart <- readRDS(paste0(mydir, "runsToStart.rds"))
+  out <- list()
+  errorList <- NULL
 
-    setwd("output")
-
-    isdir <- NULL
-
-    if (model != "MAgPIE") {
-      gRSold <- readRDS("gRS.rds")
-      try(gRS <- rbind(gRSold, getRunStatus(setdiff(dir(), rownames(gRSold)))))
-      if (exists("gRS")) {
-        saveRDS(gRS, "gRS.rds")
-      } else {
-        gRS <- getRunStatus(dir())
-        saveRDS(gRS, "gRS.rds")
+  # wait for all AMT runs to finish
+  if (!test) {
+    repeat {
+      jobsInSlurm <- system(paste0("/p/system/slurm/bin/squeue -u ", user,
+                                   " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)
+      if (!any(grepl(mydir, jobsInSlurm))) {
+        Sys.sleep(600)
+        break
       }
-      paths <- grep(runcode, dir(), value = TRUE)
-      paths <- file.info(paths)
-      paths <- rownames(paths[paths[, "isdir"] == TRUE, ])
-    } else { # if model is MAgPIE ignore runcode and find paths to report on based on folder creation time (last 3 days)
-      gRS <- getRunStatus(dir()) # this happens because test run names are hard coded in MAgPIE scripts and thus not readable
-      paths <- file.info(dir())
-      paths <- filter(paths, isdir == TRUE)
-      paths <- rownames(paths[which(as.Date(format(paths[, "ctime"], "%Y-%m-%d")) > as.Date(format(Sys.Date(), "%Y-%m-%d")) -3), ])
     }
+  }
 
+  setwd("output")
 
+  isdir <- NULL
 
-    commit <- sub("commit ", "", system("/p/system/packages/git/2.16.1/bin/git log -1", intern = TRUE)[[1]])
-    commits <- system(paste0("/p/system/packages/git/2.16.1/bin/git log --merges --pretty=oneline ", lastCommit, "..", commit, " --abbrev-commit | grep 'Merge pull request'"), intern = TRUE)
-    myfile <- paste0(tempdir(), "/README.md")
-    write("```", myfile)
-    write(paste0("This is the result of the automated ", model, " testing suite on ", format(Sys.time(), "%Y-%m-%d"), "."), myfile, append = TRUE)
-    write(paste0("Path to runs:", mydir, "output/"), myfile, append = TRUE)
-    write(paste0("Direct and interactive access to plots: open shinyResults::appResults, then use '", ifelse(model=="MAgPIE", "weeklyTests", strsplit(runcode, "\\.")[[1]][1]), "' as keyword in the title search"), myfile, append = TRUE)
-if (model == "REMIND" & compScen == TRUE) write(paste0("Each run folder below should contain a compareScenarios PDF comparing the output of the current and the last successful tests (comp_with_RUN-DATE.pdf)"), myfile, append = TRUE)
-    write(paste0("Note: 'Mif' = FALSE indicates a possible error in output generation, please check!"), myfile, append = TRUE)
-    write(paste0("If you are currently viewing the email: Overview of the last test is in red, and of the current test in green"), myfile, append = TRUE)
-    write(paste0("Tested commit: ", commit), myfile, append = TRUE)
-    write(paste0("The test of ", format(Sys.time(), "%Y-%m-%d"), " contains these merges:"), myfile, append = TRUE)
-    write(commits, myfile, append = TRUE)
+  if (model != "MAgPIE") {
+    gRSold <- readRDS("gRS.rds")
+    try(gRS <- rbind(gRSold, getRunStatus(setdiff(dir(), rownames(gRSold)))))
+    if (exists("gRS")) {
+      saveRDS(gRS, "gRS.rds")
+    } else {
+      gRS <- getRunStatus(dir())
+      saveRDS(gRS, "gRS.rds")
+    }
+    paths <- grep(runcode, dir(), value = TRUE)
+    paths <- file.info(paths)
+    paths <- rownames(paths[paths[, "isdir"] == TRUE, ])
+  } else {
+    # if model is MAgPIE ignore runcode and find paths to report on based on folder creation time (last 3 days)
+    gRS <- getRunStatus(dir())
+    # this happens because test run names are hard coded in MAgPIE scripts and thus not readable
+    paths <- file.info(dir())
+    paths <- filter(paths, isdir == TRUE)
+    threeDaysAgo <- Sys.Date() - 3
+    paths <- rownames(paths[which(as.Date(format(paths[, "ctime"], "%Y-%m-%d")) > threeDaysAgo), ])
+  }
 
-    colSep <- "  "
-    coltitles <- c("Run                                       ", "Runtime    ", "", "RunType    ", "RunStatus         ",
-                   "Iter            ", "Conv                 ", "modelstat          ", "Mif     ", "inAppResults")
-    write(paste(coltitles, collapse = colSep), myfile, append = TRUE)
-    for (i in paths) {
-      grsi <- getRunStatus(i)
-      write(sub("\n$", "", printOutput(grsi, lenCols = nchar(coltitles), colSep = colSep)), myfile, append = TRUE)
-      if (model == "REMIND" & grsi[, "RunType"] != "Calib_nash" & grsi[, "Conv"] != "converged" & !grepl("testOneRegi", i)) errorList <- c(errorList, "Some run(s) did not converge")
-      if (model == "REMIND" & grsi[, "RunType"] == "Calib_nash" & grsi[, "Conv"] != "Clb_converged") errorList <- c(errorList, "Some run(s) did not converge")
-      if (grsi[, "modelstat"] != "2: Locally Optimal" & grepl("testOneRegi", i)) errorList <- c(errorList, "testOneRegi does not return an optimal solution")
-      if (model == "MAgPIE" & paste0(unique(unlist(strsplit(gsub("[^0-9]", "", grsi[, "modelstat"]), split =""))), collapse = "") != "2") {
+  commit <- sub("commit ", "", system(paste0(gitPath, " log -1"), intern = TRUE)[[1]])
+  commits <- system(paste0(gitPath, " log --merges --pretty=oneline ",
+                           lastCommit, "..", commit, " --abbrev-commit | grep 'Merge pull request'"), intern = TRUE)
+  myfile <- paste0(tempdir(), "/README.md")
+  write("```", myfile)
+  write(paste0("This is the result of the automated ", model, " testing suite on ",
+               format(Sys.time(), "%Y-%m-%d"), "."), myfile, append = TRUE)
+  write(paste0("Path to runs:", mydir, "output/"), myfile, append = TRUE)
+  write(paste0("Direct and interactive access to plots: open shinyResults::appResults, then use '",
+               ifelse(model == "MAgPIE", "weeklyTests", strsplit(runcode, "\\.")[[1]][1]),
+               "' as keyword in the title search"), myfile, append = TRUE)
+  if (model == "REMIND" && compScen == TRUE) {
+    write(paste0("Each run folder below should contain a compareScenarios PDF comparing the output of the current and",
+                 " the last successful tests (comp_with_RUN-DATE.pdf)"), myfile, append = TRUE)
+  }
+  write(paste0("Note: 'Mif' = FALSE indicates a possible error in output generation, please check!"),
+        myfile, append = TRUE)
+  write(paste0("If you are currently viewing the email: Overview of the last test is in red, ",
+               "and of the current test in green"), myfile, append = TRUE)
+  write(paste0("Tested commit: ", commit), myfile, append = TRUE)
+  write(paste0("The test of ", format(Sys.time(), "%Y-%m-%d"), " contains these merges:"), myfile, append = TRUE)
+  write(commits, myfile, append = TRUE)
+
+  colSep <- "  "
+  coltitles <- c(
+    "Run                                       ", "Runtime    ", "", "RunType    ", "RunStatus         ",
+    "Iter            ", "Conv                 ", "modelstat          ", "Mif     ", "inAppResults"
+  )
+  write(paste(coltitles, collapse = colSep), myfile, append = TRUE)
+  for (i in paths) {
+    grsi <- getRunStatus(i)
+    write(sub("\n$", "", printOutput(grsi, lenCols = nchar(coltitles), colSep = colSep)), myfile, append = TRUE)
+    if (model == "REMIND") {
+      if (grsi[, "RunType"] != "Calib_nash" && grsi[, "Conv"] != "converged" && !grepl("testOneRegi", i)) {
         errorList <- c(errorList, "Some run(s) did not converge")
       }
-      if (grsi[, "runInAppResults"] != "TRUE") errorList <- c(errorList, "Some run(s) did not report correctly")
-      if (grsi[, "Conv"] == "converged") {
-        setwd(i)
-        cfg <- NULL
-        if (any(grepl(sub("^.*./output/", "", getwd()), rownames(filter(gRS, Conv == "converged", Mif == TRUE))))) {
-          load("config.Rdata")
-        } else {
-          setwd("../")
-          next
+      if (grsi[, "RunType"] == "Calib_nash" && grsi[, "Conv"] != "Clb_converged") {
+        errorList <- c(errorList, "Some run(s) did not converge")
+      }
+      if (grsi[, "modelstat"] != "2: Locally Optimal" && grepl("testOneRegi", i)) {
+        errorList <- c(errorList, "testOneRegi does not return an optimal solution")
+      }
+    } else if (model == "MAgPIE") {
+      if (paste0(unique(unlist(strsplit(gsub("[^0-9]", "", grsi[, "modelstat"]), split = ""))), collapse = "") != "2") {
+        errorList <- c(errorList, "Some run(s) did not converge")
+      }
+    }
+    if (grsi[, "runInAppResults"] != "TRUE") errorList <- c(errorList, "Some run(s) did not report correctly")
+    if (grsi[, "Conv"] == "converged") {
+      setwd(i)
+      cfg <- NULL
+      if (any(grepl(sub("^.*./output/", "", getwd()), rownames(filter(gRS, Conv == "converged", Mif == TRUE))))) {
+        load("config.Rdata")
+      } else {
+        setwd("../")
+        next
+      }
+      sameRuns <- grep(cfg$title, rownames(filter(gRS, Conv == "converged", Mif == TRUE)), value = TRUE)
+      rmRun <- grep(sub("output/", "", cfg$results_folder), sameRuns)
+      sameRuns <- sameRuns[-rmRun]
+      if (length(sameRuns) > 0) {
+        lastRun <- NULL
+        lastRun <- max(sameRuns[sameRuns < sub("output/", "", cfg$results_folder)])
+        currentRunTime <- as.numeric(.readRuntime("."), units = "hours")
+        lastRunTime <- as.numeric(.readRuntime(paste0("../", lastRun), units = "hours"))
+        if (currentRunTime > (1.25 * lastRunTime)) {
+          errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
         }
-        sameRuns <- grep(cfg$title, rownames(filter(gRS, Conv == "converged", Mif == TRUE)), value = TRUE)
-        rmRun <- grep(sub("output/", "", cfg$results_folder), sameRuns)
-        sameRuns <- sameRuns[-rmRun]
-        if (length(sameRuns) > 0) {
-          lastRun <- NULL
-          lastRun <- max(sameRuns[sameRuns < sub("output/", "", cfg$results_folder)])
-          if (as.numeric(.readRuntime("."), units = "hours") > (1.25 * as.numeric(.readRuntime(paste0("../", lastRun)), units = "hours"))) errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
-          if (compScen & !any(grepl("comp_with_.*.pdf", dir()))) {
-            folder_comp_mif  <- Conv <- Mif <- NULL
-            miffile <- paste0(getwd(), "/REMIND_generic_", cfg$title, ".mif")
-            folder_comp_mif <- lastRun
-            compmif <- paste0("../", folder_comp_mif, paste0("/REMIND_generic_", cfg$title, ".mif"))
-            tmp <- read.report(compmif, as.list = FALSE)
-            write.report(x = collapseNames(tmp), file = "tmp.mif", scenario = paste0(cfg$title, "_ref"), model = model)
-            if (all(file.exists(miffile, "tmp.mif"))) {
-              print(i)
-              print(compmif)
-              if (!any(grepl("comp_with_.*.pdf", dir()))) try(compareScenarios2(c(miffile, "tmp.mif"), mifHist = "historical.mif", outputFile = paste0("comp_with_", folder_comp_mif, ".pdf")))
+        if (compScen && !any(grepl("comp_with_.*.pdf", dir()))) {
+          folderCompMif <- Conv <- Mif <- NULL
+          miffile <- paste0(getwd(), "/REMIND_generic_", cfg$title, ".mif")
+          folderCompMif <- lastRun
+          compmif <- paste0("../", folderCompMif, paste0("/REMIND_generic_", cfg$title, ".mif"))
+          tmp <- read.report(compmif, as.list = FALSE)
+          write.report(x = collapseNames(tmp), file = "tmp.mif", scenario = paste0(cfg$title, "_ref"), model = model)
+          if (all(file.exists(miffile, "tmp.mif"))) {
+            print(i)
+            print(compmif)
+            if (!any(grepl("comp_with_.*.pdf", dir()))) {
+              try(compareScenarios2(c(miffile, "tmp.mif"),
+                                    mifHist = "historical.mif",
+                                    outputFile = paste0("comp_with_", folderCompMif, ".pdf")))
             }
           }
         }
-        setwd("../")
       }
+      setwd("../")
     }
-    if (model == "REMIND") if (length(paths) < length(rownames(runsToStart)) + 1) {
-       runsNotStarted <- setdiff(c("default-AMT-", rownames(runsToStart)), sub("_.*", "", paths))
-       write(" ", myfile, append = TRUE)
-       write(paste0("These scenarios did not start at all:"), myfile, append = TRUE)
-       write(runsNotStarted, myfile, append=TRUE)
-       write(" ", myfile, append = TRUE)
+  }
+  if (model == "REMIND") {
+    if (length(paths) < length(rownames(runsToStart)) + 1) {
+      runsNotStarted <- setdiff(c("default-AMT-", rownames(runsToStart)), sub("_.*", "", paths))
+      write(" ", myfile, append = TRUE)
+      write(paste0("These scenarios did not start at all:"), myfile, append = TRUE)
+      write(runsNotStarted, myfile, append = TRUE)
+      write(" ", myfile, append = TRUE)
     }
-    if (iamccheck) {
-      a <- NULL
-      if (length(paths) > 0) {
-        mifs <- paste0(paths, "/REMIND_generic_", sub("_20[0-9][0-9].*.$", "", paths), ".mif")
-        mifs <- mifs[file.exists(mifs)]
-        try(a <- read.quitte(mifs))
-        if (!is.null(a)) {
-           out[["iamCheck"]] <- iamCheck(a, cfg = model)
-           if (!test) {
-              saveRDS(out[["iamCheck"]], file = paste0("iamccheck-", commit, ".rds"))
-           } else {
-             saveRDS(out[["iamCheck"]], file = paste0("iamccheck-", test_bu, ".rds"))
-           }
+  }
+  if (iamccheck) {
+    a <- NULL
+    if (length(paths) > 0) {
+      mifs <- paste0(paths, "/REMIND_generic_", sub("_20[0-9][0-9].*.$", "", paths), ".mif")
+      mifs <- mifs[file.exists(mifs)]
+      try(a <- read.quitte(mifs))
+      if (!is.null(a)) {
+        out[["iamCheck"]] <- iamCheck(a, cfg = model)
+        if (!test) {
+          saveRDS(out[["iamCheck"]], file = paste0("iamccheck-", commit, ".rds"))
+        } else {
+          saveRDS(out[["iamCheck"]], file = paste0("iamccheck-", test, ".rds"))
         }
       }
-      write(paste0("The IAMC check of these runs is found in /p/projects/remind/modeltests/output/iamccheck-", commit, ".rds", "\n"), myfile, append = TRUE)
     }
-    tmp <- ifelse(length(paths) > 0, paste0(unlist(unique(errorList)), collapse = ". "), "No runs started")
-    write(paste0("Summary of ", format(Sys.time(), "%Y-%m-%d"), ": ", ifelse(tmp == "", "Tests look good" , tmp)), myfile, append = TRUE)
-    write("```", myfile, append = TRUE)
-    if (email) sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
-    if (!is.null(errorList) & !is.null(mattermostToken)) .mattermostBotMessage(message = paste0("Some ", model, " tests produce warnings, check https://gitlab.pik-potsdam.de/", ifelse(model == "MAgPIE", "landuse", model), "/testing_suite"), token = mattermostToken)
-    writeLines("start", con = paste0(mydir, "/.testsstatus"))
-    if (!test) saveRDS(commit, file = paste0(mydir, "/lastcommit.rds"))
+    write(paste0("The IAMC check of these runs is found in /p/projects/remind/modeltests/output/iamccheck-",
+                 commit, ".rds", "\n"), myfile, append = TRUE)
   }
+  tmp <- ifelse(length(paths) > 0, paste0(unlist(unique(errorList)), collapse = ". "), "No runs started")
+  write(paste0("Summary of ", format(Sys.time(), "%Y-%m-%d"),
+               ": ",
+               ifelse(tmp == "", "Tests look good", tmp)),
+        myfile,
+        append = TRUE)
+  write("```", myfile, append = TRUE)
+  if (email) {
+    sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
+  }
+  if (!is.null(errorList) && !is.null(mattermostToken)) {
+    message <- paste0("Some ",
+                      model,
+                      " tests produce warnings, check https://gitlab.pik-potsdam.de/",
+                      ifelse(model == "MAgPIE", "landuse", model),
+                      "/testing_suite")
+    .mattermostBotMessage(message = message, token = mattermostToken)
+  }
+  if (!test) saveRDS(commit, file = paste0(mydir, "/lastcommit.rds"))
 }
