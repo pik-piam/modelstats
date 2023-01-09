@@ -13,7 +13,8 @@ modeltests(
   iamccheck = TRUE,
   email = TRUE,
   compScen = TRUE,
-  mattermostToken = NULL
+  mattermostToken = NULL,
+  gitPath = "/p/system/packages/git/2.16.1/bin/git"
 )
 }
 \arguments{
@@ -35,6 +36,8 @@ The test parameter needs to be of the form "YY-MM-DD"}
 \item{compScen}{whether compScen has to run or not}
 
 \item{mattermostToken}{token used for mattermost notifications}
+
+\item{gitPath}{Path to the git executable}
 }
 \description{
 Runs a group of tests for a specific model. A "config/scenario_config_AMT.csv" file
