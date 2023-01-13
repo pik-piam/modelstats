@@ -42,15 +42,15 @@ modeltests <- function(
 ) {
   setwd(mydir)
 
-  if (readLines("/.testsstatus") == "start") {
+  if (readLines("./.testsstatus") == "start") {
     startRuns(test = test, model = model, gitPath = gitPath, user = user, mydir = mydir)
     # make sure next call will evaluate runs
-    writeLines("end", con = "/.testsstatus")
-  } else if (readLines("/.testsstatus") == "end") {
+    writeLines("end", con = "./.testsstatus")
+  } else if (readLines("./.testsstatus") == "end") {
     evaluateRuns(model = model, mydir = mydir, gitPath = gitPath, compScen = compScen, email = email,
                  mattermostToken = mattermostToken, gitdir = gitdir, iamccheck = iamccheck, user = user)
     # make sure next call will start runs
-    writeLines("start", con = "/.testsstatus")
+    writeLines("start", con = "./.testsstatus")
   }
 }
 
