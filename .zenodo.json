@@ -1,6 +1,6 @@
 {
   "title": "modelstats: Run Analysis Tools",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "<p>A collection of tools to analyze model runs.<\/p>",
   "creators": [
     {
