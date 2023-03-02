@@ -6,7 +6,7 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
   if (mydir == ".") {
     loopRuns(".", user = user)
   } else if (mydir == "") {
-    if (all(file.exists(c("full.gms", "log.txt", "config.Rdata", "prepare_and_run.R")))) {
+    if (sum(file.exists(c("full.gms", "log.txt", "config.Rdata", "prepare_and_run.R", "prepareAndRun.R"))) >= 4) {
       loopRuns(".", user = user)
     } else {
       dirs <- c(".", list.dirs(".", recursive = FALSE))
