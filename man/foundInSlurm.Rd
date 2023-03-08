@@ -15,5 +15,5 @@ foundInSlurm(mydir = ".", user = NULL)
 Is the run found in SLURM?
 }
 \author{
-Anastasis Giannousakis
+Anastasis Giannousakis, Oliver Richters
 }
