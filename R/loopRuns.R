@@ -63,6 +63,8 @@ loopRuns <- function(mydir, user = NULL) {
     } else {
       if (grepl("Run in progress", out)) {
         cat(cyan(out))
+      } else if (grepl("  PD ", out)) {
+        cat(yellow(out))
       } else if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted|Intermed Infes", out)) {
         cat(red(out))
       } else if (grepl(" converged|Clb_converged", out)) {
