@@ -85,14 +85,14 @@ deleteEmptyRealizationFolders <- function() {
 
 startRuns <- function(test, model, mydir, gitPath, user) {
   if (!is.null(test)) {
-    runcode <- paste0("-AMT-.*.20", test)
+    runcode <- paste0("AMT-.*.20", test)
     test <- TRUE
   } else {
     test <- FALSE
-    runcode <- paste0("-AMT-.*.",
+    runcode <- paste0("AMT-.*.",
                       format(Sys.Date(), "%Y-%m-%d"),
                       "|",
-                      "-AMT-.*.",
+                      "AMT-.*.",
                       as.Date(format(Sys.Date(), "%Y-%m-%d")) + 1)
   }
   if (model == "MAgPIE") runcode <- paste0(sub("-AMT-", "default", runcode), "|weeklyTests*.")
@@ -120,13 +120,14 @@ startRuns <- function(test, model, mydir, gitPath, user) {
       system("sed -i 's/cfg$force_download <- TRUE/cfg$force_download <- FALSE/' config/default.cfg")
 
       # now start actual test runs
-      system("Rscript start.R startgroup=AMT config/scenario_config.csv")
+      system("Rscript start.R startgroup=AMT titletag=AMT config/scenario_config.csv")
       settings <- read.csv2("config/scenario_config.csv",
                              stringsAsFactors = FALSE,
                              row.names = 1,
                              comment.char = "#",
                              na.strings = "")
       runsToStart <- selectScenarios(settings = settings, interactive = FALSE, startgroup = "AMT")
+      row.names(runsToStart) <- paste0("AMT-", row.names(runsToStart))
       saveRDS(runsToStart, file = paste0(mydir, "/runsToStart.rds"))
     } else if (model == "MAgPIE") {
       # default run to download input data
