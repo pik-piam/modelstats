@@ -1,6 +1,6 @@
 #' modeltests
 #'
-#' Runs a group of tests for a specific model. A "config/scenario_config_AMT.csv" file
+#' Runs a group of tests for a specific model. A "config/scenario_config.csv" file
 #' (relative) to the main folder has to exist in the model, describing the
 #' scenarios to be tested. Also, a gitlab repository is needed to push
 #' the generated README.md for documentation and automated reporting
@@ -120,13 +120,13 @@ startRuns <- function(test, model, mydir, gitPath, user) {
       system("sed -i 's/cfg$force_download <- TRUE/cfg$force_download <- FALSE/' config/default.cfg")
 
       # now start actual test runs
-      system("Rscript start.R config/scenario_config_AMT.csv")
-      runsToStart <- read.csv2("config/scenario_config_AMT.csv",
-                               stringsAsFactors = FALSE,
-                               row.names = 1,
-                               comment.char = "#",
-                               na.strings = "")
-      runsToStart <- runsToStart[runsToStart$start == 1, ]
+      system("Rscript start.R startgroup=AMT config/scenario_config.csv")
+      settings <- read.csv2("config/scenario_config.csv",
+                             stringsAsFactors = FALSE,
+                             row.names = 1,
+                             comment.char = "#",
+                             na.strings = "")
+      runsToStart <- selectScenarios(settings = settings, interactive = FALSE, startgroup = "AMT")
       saveRDS(runsToStart, file = paste0(mydir, "/runsToStart.rds"))
     } else if (model == "MAgPIE") {
       # default run to download input data
