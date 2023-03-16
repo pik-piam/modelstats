@@ -120,7 +120,9 @@ startRuns <- function(test, model, mydir, gitPath, user) {
       system("sed -i 's/cfg$force_download <- TRUE/cfg$force_download <- FALSE/' config/default.cfg")
 
       # now start actual test runs
-      system("Rscript start.R startgroup=AMT titletag=AMT config/scenario_config.csv")
+      system(paste0("Rscript start.R ",
+                    "startgroup=AMT titletag=AMT slurmConfig=\"--qos=standby --nodes=1 --tasks-per-node=12\" ",
+                    "config/scenario_config.csv"))
       settings <- read.csv2("config/scenario_config.csv",
                              stringsAsFactors = FALSE,
                              row.names = 1,
