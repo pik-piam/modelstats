@@ -109,7 +109,7 @@ startRuns <- function(test, model, mydir, gitPath, user) {
 
     if (model == "REMIND") {
       # default run to download input data
-      changeTitle <- paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "default-AMT-"/', "' config/default.cfg")
+      changeTitle <- paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "AMT-default"/', "' config/default.cfg")
       system(changeTitle)
       # set the slurmConfig before sourcing start.R to avoid questions about the slurm config
       slurmConfig <- "--qos=priority --nodes=1 --tasks-per-node=12"  # nolint: object_usage_linter
