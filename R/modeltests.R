@@ -99,7 +99,7 @@ startRuns <- function(test, model, mydir, gitPath, user) {
   if (is.null(model)) stop("Model cannot be NULL")
 
   if (!test) {
-    system(paste0(gitPath, " reset --hard origin/develop && ", gitPath, " pull"))
+    #system(paste0(gitPath, " reset --hard origin/develop && ", gitPath, " pull"))
     # Force downloading of the input data in the first run
     system("sed -i 's/cfg$force_download <- FALSE/cfg$force_download <- TRUE/' config/default.cfg")
 
