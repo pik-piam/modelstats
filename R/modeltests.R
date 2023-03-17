@@ -1,6 +1,6 @@
 #' modeltests
 #'
-#' Runs a group of tests for a specific model. A "config/scenario_config_AMT.csv" file
+#' Runs a group of tests for a specific model. A "config/scenario_config.csv" file
 #' (relative) to the main folder has to exist in the model, describing the
 #' scenarios to be tested. Also, a gitlab repository is needed to push
 #' the generated README.md for documentation and automated reporting
@@ -85,14 +85,14 @@ deleteEmptyRealizationFolders <- function() {
 
 startRuns <- function(test, model, mydir, gitPath, user) {
   if (!is.null(test)) {
-    runcode <- paste0("-AMT-.*.20", test)
+    runcode <- paste0(".*.20-AMT", test)
     test <- TRUE
   } else {
     test <- FALSE
-    runcode <- paste0("-AMT-.*.",
+    runcode <- paste0(".*-AMT_",
                       format(Sys.Date(), "%Y-%m-%d"),
                       "|",
-                      "-AMT-.*.",
+                      ".*-AMT_",
                       as.Date(format(Sys.Date(), "%Y-%m-%d")) + 1)
   }
   if (model == "MAgPIE") runcode <- paste0(sub("-AMT-", "default", runcode), "|weeklyTests*.")
@@ -109,7 +109,7 @@ startRuns <- function(test, model, mydir, gitPath, user) {
 
     if (model == "REMIND") {
       # default run to download input data
-      changeTitle <- paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "default-AMT-"/', "' config/default.cfg")
+      changeTitle <- paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "default-AMT"/', "' config/default.cfg")
       system(changeTitle)
       # set the slurmConfig before sourcing start.R to avoid questions about the slurm config
       slurmConfig <- "--qos=priority --nodes=1 --tasks-per-node=12"  # nolint: object_usage_linter
@@ -120,13 +120,16 @@ startRuns <- function(test, model, mydir, gitPath, user) {
       system("sed -i 's/cfg$force_download <- TRUE/cfg$force_download <- FALSE/' config/default.cfg")
 
       # now start actual test runs
-      system("Rscript start.R config/scenario_config_AMT.csv")
-      runsToStart <- read.csv2("config/scenario_config_AMT.csv",
-                               stringsAsFactors = FALSE,
-                               row.names = 1,
-                               comment.char = "#",
-                               na.strings = "")
-      runsToStart <- runsToStart[runsToStart$start == 1, ]
+      system(paste0("Rscript start.R ",
+                    "startgroup=AMT titletag=AMT slurmConfig=\"--qos=standby --nodes=1 --tasks-per-node=12\" ",
+                    "config/scenario_config.csv"))
+      settings <- read.csv2("config/scenario_config.csv",
+                             stringsAsFactors = FALSE,
+                             row.names = 1,
+                             comment.char = "#",
+                             na.strings = "")
+      runsToStart <- selectScenarios(settings = settings, interactive = FALSE, startgroup = "AMT")
+      row.names(runsToStart) <- paste0("AMT-", row.names(runsToStart))
       saveRDS(runsToStart, file = paste0(mydir, "/runsToStart.rds"))
     } else if (model == "MAgPIE") {
       # default run to download input data
