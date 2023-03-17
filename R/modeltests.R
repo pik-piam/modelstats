@@ -113,6 +113,7 @@ startRuns <- function(test, model, mydir, gitPath, user) {
       system(changeTitle)
       # set the slurmConfig before sourcing start.R to avoid questions about the slurm config
       slurmConfig <- "--qos=priority --nodes=1 --tasks-per-node=12"  # nolint: object_usage_linter
+      selectScenarios <- NA  # will be loaded when sourcing start.R
       source("start.R", local = TRUE)
       Sys.sleep(100) # it would be much better to properly wait for the data downloading to finish
 

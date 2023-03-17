@@ -40,7 +40,7 @@ The test parameter needs to be of the form "YY-MM-DD"}
 \item{gitPath}{Path to the git executable}
 }
 \description{
-Runs a group of tests for a specific model. A "config/scenario_config_AMT.csv" file
+Runs a group of tests for a specific model. A "config/scenario_config.csv" file
 (relative) to the main folder has to exist in the model, describing the
 scenarios to be tested. Also, a gitlab repository is needed to push
 the generated README.md for documentation and automated reporting
