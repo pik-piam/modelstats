@@ -4,12 +4,16 @@
 \alias{loopRuns}
 \title{loopRuns}
 \usage{
-loopRuns(mydir, user = NULL)
+loopRuns(mydir, user = NULL, colors = TRUE, sortbytime = TRUE)
 }
 \arguments{
 \item{mydir}{a dir or vector of dirs}
 
 \item{user}{the user whose runs will be shown}
+
+\item{colors}{boolean whether the output is colored dependent on runstatus}
+
+\item{sortbytime}{boolean whether the output is sorted by timestamp}
 }
 \description{
 Returns the output for getRunStatus nicely

@@ -1,3 +1,19 @@
+#' promptAndRun
+#'
+#' prompts runs, will be called by rs2
+#'
+#' @param mydir a dir or vector of dirs
+#' @param user the user whose runs will be shown
+#' @param daysback integer defining the number of days -c will look back in time to find runs
+#'
+#' @author Anastasis Giannousakis, Oliver Richters
+#' @import crayon
+#' @export
+#' @examples
+#' \dontrun{
+#'   promptAndRun()
+#' }
+#'
 promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
   if (is.null(user)) user <- Sys.info()[["user"]]
   if (user == "") user <- Sys.info()[["user"]]
@@ -46,19 +62,17 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     if (length(myruns) == 0) {
       return(paste0("No runs found for this user. You can change the reporting period (here: 5 days) by running 'rs2 -c ", user, " 5"))
     }
+    # add REMIND-MAgPIE coupled runs where run directory is not the output directory
+    # these lines also drops all other slurm jobs such as remind preprocessing etc.
     coupled <- rem <- NULL
     for (i in 1:length(runnames)) {
-      if (any(grepl(runnames[[i]], myruns[[i]]), grepl("mag-run", runnames[[i]]))) {
-#       if (grepl(runnames[[i]],myruns[[i]])) {
-        next
-      } else {
-        coupled <- c(coupled, paste0(paste0(myruns[[i]], "/output/", runnames[[i]], "-rem-"), seq(10)))
+      if (! any(grepl(runnames[[i]], myruns[[i]]), grepl("mag-run", runnames[[i]]))) {
         coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]])) # for coupled runs in parallel mode
         rem <- c(rem, i)
       }
     }
     if (!is.null(rem)) {
-      myruns <- myruns[-rem] # remove coupled parent-job
+      myruns <- myruns[-rem] # remove coupled parent-job and all other slurm jobs
       myruns <- c(myruns, coupled) # add coupled paths
     }
     myruns <- myruns[file.exists(myruns)] # keep only existing paths
@@ -77,27 +91,8 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
       message("Found ", length(myruns), if (mydir == "-a") " active", " runs.",
               if (length(myruns)/as.numeric(daysback) > 20) " Excuse me? You need a cluster only for yourself it seems.")
     }
-
-#    if (length(myruns)>40) {
-#        message("Excuse me? > 40 runs? You need a cluster only for yourself it seems")
-#    } else if (length(myruns)>15) {
-#        message("Please wait, I found more than 15 runs (wow)")
-#    } else if (length(myruns)>5) {
-#        message("Please wait while I gather information on your current and recently completed runs")
-#    }
-#    message("Found these runs (only first 50 shown)")
-    print(myruns[1:min(1500, length(myruns))])
-    colSep <- "  "
-    options(width = 200)
-    len1stcol <- min(max(nchar(basename(myruns))), 50)
-    coltitles <- c(paste(rep(" ", len1stcol), collapse = ""),
-    "Runtime    ", "inSlurm", "RunType    ", "RunStatus         ", "Iter            ",
-    "Conv                 ", "modelstat          ", "Mif     ", "inAppResults")
-    message(paste(coltitles, collapse = colSep))
-    for (i in myruns[1:min(1500, length(myruns))]) {
-      try(message(sub("^\\[1\\]|\n$", "", printOutput(getRunStatus(i, user = user),
-          lenCols = c(nchar(coltitles)[-length(coltitles)], 5), colSep = colSep))), silent = TRUE)
-    }
+    print(myruns[1:min(100, length(myruns))])
+    loopRuns(myruns, user = user, colors = FALSE, sortbytime = FALSE)
   } else {
     loopRuns(mydir, user = user)
   }
