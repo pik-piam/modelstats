@@ -39,7 +39,7 @@ Finally, using a gitlab integration hook an overview of the results is automatic
 
 If the report contains runs that failed, or output that looks wrong (or has not been generated at all) someone has to take action. If there are cases for which you feel responsible or in the position to fix, please do so. This early warning system ensures stable workflows for all members of the team.
 
-If you want your own scenarios to be included in future tests: Add your scenarios to the `scenario_config_AMT.csv` (REMIND model, similar for MAgPIE) and simply commit it to the model's develop branch. They will be automatically executed the next time the tests are run.
+If you want your own scenarios to be included in future tests: For REMIND, add your scenarios to the `scenario_config.csv`, add `AMT` in the `start` column and simply commit it to the model's develop branch (similar for MAgPIE). They will be automatically executed the next time the tests are run.
 
 Tailor the IAMC-style checks to your needs or add further IAMC-style checks here (read the vignette to see how this is done): http://htmlpreview.github.io/?https://github.com/pik-piam/piamModelTests/blob/master/vignettes/iamc.html
 
