@@ -4,6 +4,8 @@
 #'
 #' @param mydir a dir or vector of dirs
 #' @param user the user whose runs will be shown
+#' @param colors boolean whether the output is colored dependent on runstatus
+#' @param sortbytime boolean whether the output is sorted by timestamp
 #'
 #' @author Anastasis Giannousakis
 #' @import crayon
@@ -14,7 +16,7 @@
 #' loopRuns(dir())
 #' }
 #'
-loopRuns <- function(mydir, user = NULL) {
+loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
 
   if (is.null(user)) user <- Sys.info()[["user"]]
   if (length(mydir) == 0) return("No runs found")
@@ -22,9 +24,11 @@ loopRuns <- function(mydir, user = NULL) {
 
   red <- make_style("orangered")
 
-  a <- file.info(mydir)
-  a <- a[a[, "isdir"] == TRUE, ]
-  mydir <- rownames(a[order(a[, "mtime"], decreasing = TRUE), ])
+  if (isTRUE(sortbytime)) {
+    a <- file.info(mydir)
+    a <- a[a[, "isdir"] == TRUE, ]
+    mydir <- rownames(a[order(a[, "mtime"], decreasing = TRUE), ])
+  }
   len <- max(c(15, nchar(basename(normalizePath(mydir, mustWork = FALSE)))))
   len <- min(67, len)
 
@@ -47,7 +51,9 @@ loopRuns <- function(mydir, user = NULL) {
     if (!file.exists(paste0(i, "/", grep("^config.*", dir(i), value = TRUE)[1]))) next # do not report on folders that do not contain runs
     try(out <- printOutput(getRunStatus(i, user = user), lenCols = lenCols, colSep = colSep))
     if (grepl(" y2| nlp_", out)) {
-      if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted", out)) {
+      if (isFALSE(colors)) {
+        cat(out)
+      } else if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted", out)) {
         cat(red(out))
       } else if (grepl(" converged|Clb_converged", out)) {
         cat(underline(green(out)))
@@ -61,7 +67,9 @@ loopRuns <- function(mydir, user = NULL) {
         cat(cyan(out))
       }
     } else {
-      if (grepl("Run in progress", out)) {
+      if (isFALSE(colors)) {
+        cat(out)
+      } else if (grepl("Run in progress", out)) {
         cat(cyan(out))
       } else if (grepl("  PD ", out)) {
         cat(yellow(out))

@@ -11,11 +11,7 @@
 foundInSlurm <- function(mydir = ".", user = NULL) {
 
   if (is.null(user)) user <- Sys.info()[["user"]]
-  if (grepl("^C_", mydir)) {
-    mydir <- sub("-rem-[1-9]$", "", mydir)
-  } else {
-    suppressWarnings(mydir <- normalizePath(mydir))
-  }
+  suppressWarnings(mydir <- normalizePath(mydir))
 
   squeueresult <- system(paste0("/p/system/slurm/bin/squeue -h -o '%j %Z %T %q' -u ", user), intern = TRUE)
   squeueresult <- grep(mydir, squeueresult, value = TRUE)

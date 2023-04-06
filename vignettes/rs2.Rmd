@@ -17,28 +17,27 @@ The `rs2` tool gives you quick, easy, and handy access to a number of info and s
 
 ## 5 common use cases:
 
-
-
-1. You want a quick overview of all your recent jobs (_regardless where they are_):  
-`  rs2 -cr  `  
-If you want to do the same for the jobs of someone else:  
-`rs2 -cr username`  
+1. You want a quick overview of all your recent jobs (_regardless where they are_):
+`rs2 -c`
+If you want to do the same for the jobs of someone else (can also be `user1,user2` for multiple users):
+`rs2 -c username`
 If you want to adjust the number of days that the tool reports jobs for:
-`rs2 -cr username 10`
-e.g. for 10 days back. Note that when adjusting the days you _need_ to specify a username (even if it's just yours).
+`rs2 -c [username] 10`
+e.g. for 10 days back.
 
-2. You go into a run folder (e.g. by using `cdf`) and want to see its status:  
-```rs2 .```  
+2. You want a quick overview of all jobs in slurm
+`rs2 -a [username]`
 
-3. You are in an `output` folder containing many run folders and want to see their status (or of some of them):  
-`rs2`  
-and then filter by pattern, e.g. `^C_` for all coupled runs, or `03-25` for all runs on Mar 25  
+3. You go into a run folder (e.g. by using `cdf`) and want to see its status:
+```rs2 .```
 
-4. You are in a hurry and want to see immediately what is going on in the run folders of your current directory:  
-`rs2 -f`  
+4. You are in an `output` folder containing many run folders and want to see their status (or of some of them):
+`rs2`
+and then filter by pattern, e.g. `^C_` for all coupled runs, or `03-25` for all runs on Mar 25
 
-5. You want to collect information about your runs and store/process it in R:  
-`modelstats::getRunStatus()`  
+5. You are in a hurry and want to see immediately what is going on in the run folders of your current directory:
+`rs2 -f`
+
+6. You want to collect information about your runs and store/process it in R:
+`modelstats::getRunStatus()`
 returns a data.frame with the job information.
-
-Note that for coupled runs the `RUNNAME-rem-#` runs will be appearing as `TRUE` in the `jobInSlurm` column until the parent-job has finished running.
