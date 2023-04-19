@@ -13,12 +13,18 @@ foundInSlurm <- function(mydir = ".", user = NULL) {
   if (is.null(user)) user <- Sys.info()[["user"]]
   suppressWarnings(mydir <- normalizePath(mydir))
 
-  squeueresult <- system(paste0("/p/system/slurm/bin/squeue -h -o '%j %Z %T %q' -u ", user), intern = TRUE)
+  squeueresult <- system("/p/system/slurm/bin/squeue -h -o '%u %Z %T %q'", intern = TRUE)
   squeueresult <- grep(mydir, squeueresult, value = TRUE)
   if (length(squeueresult) == 1 && grepl("PENDING [A-Za-z]*$", squeueresult)) {
     return(paste("PD", rev(strsplit(squeueresult, " ")[[1]])[[1]]))
   } else if (length(squeueresult) > 0) {
-    return("TRUE")
+    yourrun <- any(grepl(paste0("^", user, " "), squeueresult))
+    if (yourrun) {
+      return("TRUE")
+    } else {
+      runuser <- strsplit(squeueresult, " ")[[1]][[1]]
+      return(runuser)
+    }
   } else {
     return("FALSE")
   }
