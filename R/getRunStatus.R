@@ -66,29 +66,21 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
     # modelstat
     out[i, "modelstat"] <- "NA"
-    if (file.exists(fle)) {
-      load(fle)
-      if (exists("stats")) if (any(grepl("config", names(stats)))) if (stats[["config"]][["model_name"]] == "MAgPIE") {
-        if (any(grepl("modelstat", names(stats)))) out[i, "modelstat"] <- paste0(as.character(stats[["modelstat"]]), collapse = "")
-        if (is.na(out[i, "modelstat"])) out[i, "modelstat"] <- "NA"
-      } else {
-        if (any(grepl("modelstat", names(stats)))) try(out[i, "modelstat"] <- stats[["modelstat"]], silent = TRUE)
-        if (is.na(out[i, "modelstat"])) out[i, "modelstat"] <- "NA"
-      }
+    modelstatFiles <- c(gdx, gdx_non_optimal)[file.exists(c(gdx, gdx_non_optimal))]
+    if (length(modelstatFiles) > 0) {
+      fileInfo <- file.info(modelstatFiles)
+      latest_gdx <- rownames(fileInfo)[which.max(fileInfo$mtime)]
+      o_modelstat <- try(readGDX(gdx = latest_gdx, "o_modelstat", format = "simplest", react = "silent"), silent = TRUE)
+      if (! is.null(o_modelstat) && ! inherits(o_modelstat, "try-error")) out[i, "modelstat"] <- as.character(as.numeric(o_modelstat))
     }
-
-    modelstatFiles <- c(gdx, gdx_non_optimal)
-    if (out[i, "modelstat"] == "NA" && any(file.exists(modelstatFiles))) {
-      modelstat <- NULL
-      modelstat_iter <- NULL
-      for (filename in modelstatFiles[file.exists(modelstatFiles)]) {
-        modelstat <- c(modelstat, as.numeric(readGDX(gdx = filename, "o_modelstat", format = "simplest")))
-        modelstat_iter <- c(modelstat_iter, as.numeric(readGDX(gdx = filename, "o_iterationNumber", format = "simplest")))
-      }
-      if (length(modelstat) > 0) {
-        fileInfo <- file.info(modelstatFiles)
-        latest_gdx <- rownames(fileInfo)[which.max(fileInfo$mtime)]
-        out[i,"modelstat"] <- as.numeric(readGDX(gdx = latest_gdx, "o_modelstat"))
+    if (file.exists(fle) && out[i, "modelstat"] == "NA") {
+      load(fle)
+      if (exists("stats")) if (any(grepl("config", names(stats)))) {
+        if (stats[["config"]][["model_name"]] == "MAgPIE") {
+          if (any(grepl("modelstat", names(stats)))) out[i, "modelstat"] <- paste0(as.character(stats[["modelstat"]]), collapse = "")
+        } else {
+          if (any(grepl("modelstat", names(stats)))) try(out[i, "modelstat"] <- stats[["modelstat"]], silent = TRUE)
+        }
       }
     }
     explain_modelstat <- c("1" = "Optimal", "2" = "Locally Optimal", "3" = "Unbounded", "4" = "Infeasible",
