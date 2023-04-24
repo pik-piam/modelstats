@@ -130,7 +130,7 @@ startRuns <- function(test, model, mydir, gitPath, user) {
                              comment.char = "#",
                              na.strings = "")
       runsToStart <- selectScenarios(settings = settings, interactive = FALSE, startgroup = "AMT")
-      row.names(runsToStart) <- paste0("AMT-", row.names(runsToStart))
+      row.names(runsToStart) <- paste0(row.names(runsToStart), "-AMT")
       saveRDS(runsToStart, file = paste0(mydir, "/runsToStart.rds"))
     } else if (model == "MAgPIE") {
       # default run to download input data
