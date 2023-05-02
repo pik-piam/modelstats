@@ -9,11 +9,10 @@
 #' @importFrom gdx readGDX
 #' @export
 foundInSlurm <- function(mydir = ".", user = NULL) {
-
   if (is.null(user)) user <- Sys.info()[["user"]]
   suppressWarnings(mydir <- normalizePath(mydir))
 
-  squeueresult <- system("/p/system/slurm/bin/squeue -h -o '%u %Z %T %q'", intern = TRUE)
+  squeueresult <- system("/p/system/slurm/bin/squeue -h -o '%u %Z %j %T %q'", intern = TRUE)
   squeueresult <- grep(mydir, squeueresult, value = TRUE)
   if (length(squeueresult) == 1 && grepl("PENDING [A-Za-z]*$", squeueresult)) {
     return(paste("PD", rev(strsplit(squeueresult, " ")[[1]])[[1]]))
