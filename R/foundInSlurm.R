@@ -10,7 +10,9 @@
 #' @export
 foundInSlurm <- function(mydir = ".", user = NULL) {
   if (is.null(user)) user <- Sys.info()[["user"]]
-  suppressWarnings(mydir <- normalizePath(mydir))
+  if (! grepl("^C_.*-rem-[0-9]+$", mydir)) {
+    suppressWarnings(mydir <- normalizePath(mydir))
+  }
 
   squeueresult <- system("/p/system/slurm/bin/squeue -h -o '%u %Z %j %T %q'", intern = TRUE)
   squeueresult <- grep(mydir, squeueresult, value = TRUE)
