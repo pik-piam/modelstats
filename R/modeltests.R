@@ -351,7 +351,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
   message("Finished compiling README.md")
   
   if (email) {
-    message("Copying updated README.md to ", gitdir, " and pushing from there".)
+    message("Copying updated README.md to ", gitdir, " and pushing from there.")
     sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
   }
   
