@@ -43,7 +43,7 @@ modeltests <- function(
   setwd(mydir)
   
   message("\n=========================================================
-  Begin of AMT procedure ", format(Sys.Date(), "%Y-%m-%d"), " in ", mydir, 
+  Begin of AMT procedure ", format(Sys.time(), "%d-%m-%Y %H:%M:%S"), " in ", mydir, 
   "\n=========================================================\n")
 
   if (readLines("../.testsstatus") == "start") {
@@ -182,7 +182,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
 
   # wait for all AMT runs to finish
   if (!test) {
-    message(format(Sys.Date(), "%Y-%m-%d"), " - waiting for all AMT runs to finish.")
+    message(format(Sys.time(), "%d-%m-%Y %H:%M:%S"), " - waiting for all AMT runs to finish.")
     repeat {
       jobsInSlurm <- system(paste0("/p/system/slurm/bin/squeue -u ", user,
                                    " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)
@@ -191,7 +191,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         break
       }
     }
-    message(format(Sys.Date(), "%Y-%m-%d"), " - all AMT runs finished.")
+    message(format(Sys.time(), "%d-%m-%Y %H:%M:%S"), " - all AMT runs finished.")
   }
 
   message("Compiling the README.md to be committed to testing_suite repo.")  
