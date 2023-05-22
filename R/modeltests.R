@@ -46,21 +46,23 @@ modeltests <- function(
   Begin of AMT procedure ", format(Sys.Date(), "%Y-%m-%d"), " in ", mydir, 
   "\n=========================================================\n")
 
-  if (readLines("./.testsstatus") == "start") {
-    message("Found 'start' in ", normalizePath("./.testsstatus"), "\nCalling 'startRuns'")
+  if (readLines("../.testsstatus") == "start") {
+    message("Found 'start' in ", normalizePath("../.testsstatus"), "\nCalling 'startRuns'")
     startRuns(test = test, model = model, gitPath = gitPath, user = user, mydir = mydir)
     # make sure next call will evaluate runs
-    message("Writing 'end' to ", normalizePath("./.testsstatus"))
-    writeLines("end", con = "./.testsstatus")
-  } else if (readLines("./.testsstatus") == "end") {
-    message("Found 'end' in ", normalizePath("./.testsstatus"), "\nCalling 'evaluateRuns'")
-    evaluateRuns(model = model, mydir = mydir, gitPath = gitPath, compScen = compScen, email = email,
-                 mattermostToken = mattermostToken, gitdir = gitdir, iamccheck = iamccheck, user = user)
+    message("Writing 'end' to ", normalizePath("../.testsstatus"))
+    writeLines("end", con = "../.testsstatus")
+  } else if (readLines("../.testsstatus") == "end") {
+    message("Found 'end' in ", normalizePath("../.testsstatus"), "\nCalling 'evaluateRuns'")
+    withr::with_dir("output", { 
+      evaluateRuns(model = model, mydir = mydir, gitPath = gitPath, compScen = compScen, email = email,
+                   mattermostToken = mattermostToken, gitdir = gitdir, iamccheck = iamccheck, user = user)
+                   })
     # make sure next call will start runs
-    message("Writing 'start' to ", normalizePath("./.testsstatus"))
-    writeLines("start", con = "./.testsstatus")
+    message("Writing 'start' to ", normalizePath("../.testsstatus"))
+    writeLines("start", con = "../.testsstatus")
   } else {
-    message("Found ", readLines("./.testsstatus"), " in ", normalizePath("./.testsstatus"), ". Doing nothing")
+    message("Found ", readLines("../.testsstatus"), " in ", normalizePath("../.testsstatus"), ". Doing nothing")
   }
   
 }
@@ -168,8 +170,9 @@ startRuns <- function(test, model, mydir, gitPath, user) {
 }
 
 evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken, gitdir, iamccheck, user) {
-  message("Writing 'wait' to ", normalizePath(paste0(mydir, "/.testsstatus")))
-  writeLines("wait", con = paste0(mydir, "/.testsstatus"))
+  message("Current working directory ", normalizePath("."))
+  message("Writing 'wait' to ", normalizePath(paste0(mydir, "../.testsstatus")))
+  writeLines("wait", con = paste0(mydir, "../.testsstatus"))
   test <- readRDS(paste0(mydir, "/test.rds"))
   runcode <- readRDS(paste0(mydir, "/runcode.rds"))
   lastCommit <- readRDS(paste0(mydir, "/lastcommit.rds"))
@@ -191,33 +194,6 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     message(format(Sys.Date(), "%Y-%m-%d"), " - all AMT runs finished.")
   }
 
-  setwd("output")
-  message("Changed to ", normalizePath("."))
-
-  isdir <- NULL
-
-  if (model != "MAgPIE") {
-    gRSold <- readRDS("gRS.rds")
-    try(gRS <- rbind(gRSold, getRunStatus(setdiff(dir(), rownames(gRSold)))))
-    if (exists("gRS")) {
-      saveRDS(gRS, "gRS.rds")
-    } else {
-      gRS <- getRunStatus(dir())
-      saveRDS(gRS, "gRS.rds")
-    }
-    paths <- grep(runcode, dir(), value = TRUE)
-    paths <- file.info(paths)
-    paths <- rownames(paths[paths[, "isdir"] == TRUE, ])
-  } else {
-    # if model is MAgPIE ignore runcode and find paths to report on based on folder creation time (last 3 days)
-    gRS <- getRunStatus(dir())
-    # this happens because test run names are hard coded in MAgPIE scripts and thus not readable
-    paths <- file.info(dir())
-    paths <- filter(paths, isdir == TRUE)
-    threeDaysAgo <- Sys.Date() - 3
-    paths <- rownames(paths[which(as.Date(format(paths[, "ctime"], "%Y-%m-%d")) > threeDaysAgo), ])
-  }
-  
   message("Compiling the README.md to be committed to testing_suite repo.")  
   commitTested <- sub("commit ", "", system(paste0(gitPath, " log -1"), intern = TRUE)[[1]])
   commitsSinceLastTest <- system(paste0(gitPath, " log --merges --pretty=oneline ",
@@ -248,6 +224,31 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     "Iter            ", "Conv                 ", "modelstat          ", "Mif     ", "inAppResults"
   )
   write(paste(coltitles, collapse = colSep), myfile, append = TRUE)
+  
+  isdir <- NULL
+  if (model != "MAgPIE") {
+    gRSold <- readRDS("gRS.rds")
+    try(gRS <- rbind(gRSold, getRunStatus(setdiff(dir(), rownames(gRSold)))))
+    if (exists("gRS")) {
+      saveRDS(gRS, "gRS.rds")
+    } else {
+      gRS <- getRunStatus(dir())
+      saveRDS(gRS, "gRS.rds")
+    }
+    paths <- grep(runcode, dir(), value = TRUE)
+    paths <- file.info(paths)
+    paths <- rownames(paths[paths[, "isdir"] == TRUE, ])
+  } else {
+    # if model is MAgPIE ignore runcode and find paths to report on based on folder creation time (last 3 days)
+    gRS <- getRunStatus(dir())
+    # this happens because test run names are hard coded in MAgPIE scripts and thus not readable
+    paths <- file.info(dir())
+    paths <- filter(paths, isdir == TRUE)
+    threeDaysAgo <- Sys.Date() - 3
+    paths <- rownames(paths[which(as.Date(format(paths[, "ctime"], "%Y-%m-%d")) > threeDaysAgo), ])
+  }
+
+  message("Starting analysis for the list of the following runs:\n", paste0(paths, collapse = "\n"))
   for (i in paths) {
     grsi <- getRunStatus(i)
     write(sub("\n$", "", printOutput(grsi, lenCols = nchar(coltitles), colSep = colSep)), myfile, append = TRUE)
