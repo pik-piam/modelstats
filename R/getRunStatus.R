@@ -145,7 +145,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         if (exists("totNoOfIter") && any(grepl("cm_iteration_max", cfg))) if (length(totNoOfIter) > 0 & !cfg[["gms"]][["cm_iteration_max"]] > out[i, "Iter"]) out[i, "Iter"] <- paste0(out[i, "Iter"], "/", sub(";", "", sub("^.*.= ", "", totNoOfIter)))
 
         if (length(suppressWarnings(system(paste0("grep 'Convergence threshold' ", fulllst), intern = TRUE))) > 1) {
-          out[i, "Conv"] <- "converged"
+          out[i, "Conv"] <- if (file.exists(gdx_non_optimal)) "converged (had INFES)" else "converged"
         } else if (length(suppressWarnings(system(paste0("grep 'Nash did NOT' ", fulllst), intern = TRUE))) > 1) {
           out[i, "Conv"] <- "not_converged"
         } else {
@@ -171,7 +171,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     # Calib Iter
     if (!is.null(out[i, "RunType"])) if (file.exists(logtxt) & grepl("Calib", out[i, "RunType"])) {
       calibiter <- tail(suppressWarnings(system(paste0("grep 'CES calibration iteration' ", logtxt, " |  grep -Eo  '[0-9]{1,2}'"), intern = TRUE)), n = 1)
-      if (as.numeric(calibiter > 0)) out[i, "Iter"] <- paste0(out[i, "Iter"], " ", "Clb: ", calibiter)
+      if (isTRUE(as.numeric(calibiter > 0))) out[i, "Iter"] <- paste0(out[i, "Iter"], " ", "Clb: ", calibiter)
       if (!is.null(out[i, "Conv"])) if (out[i, "Conv"] == "converged" & length(system(paste0("find ", ii, " -name 'input_*.gdx'"), intern = TRUE)) > 10) out[i, "Conv"] <- "Clb_converged"
     }
 

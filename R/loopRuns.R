@@ -49,8 +49,10 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
   for (i in mydir) {
 
     if (!file.exists(paste0(i, "/", grep("^config.*", dir(i), value = TRUE)[1]))) next # do not report on folders that do not contain runs
-    try(out <- printOutput(getRunStatus(i, user = user), lenCols = lenCols, colSep = colSep))
-    if (grepl(" y2| nlp_", out)) {
+    out <- try(printOutput(getRunStatus(i, user = user), lenCols = lenCols, colSep = colSep))
+    if (inherits(out, "try-error")) {
+      cat(basename(i), "skipped because of getRunStatus error.")
+    } else if (grepl(" y2| nlp_", out)) {
       if (isFALSE(colors)) {
         cat(out)
       } else if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted", out)) {
@@ -69,6 +71,8 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
     } else {
       if (isFALSE(colors)) {
         cat(out)
+      } else if (grepl("converged (had INFES)", out, fixed = TRUE)) {
+        cat(yellow(out))
       } else if (grepl("Run in progress", out)) {
         cat(cyan(out))
       } else if (grepl("  PD ", out)) {
