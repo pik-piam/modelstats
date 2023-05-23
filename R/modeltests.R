@@ -191,7 +191,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         break
       }
     }
-    message(format(Sys.time(), "%d-%m-%Y %H:%M:%S"), " - all AMT runs finished.")
+    message(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " - all AMT runs finished.")
   }
 
   message("Compiling the README.md to be committed to testing_suite repo.")  
