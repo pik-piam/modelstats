@@ -43,7 +43,7 @@ modeltests <- function(
   setwd(mydir)
   
   message("\n=========================================================
-  Begin of AMT procedure ", format(Sys.time(), "%d-%m-%Y %H:%M:%S"), " in ", mydir, 
+  Begin of AMT procedure ", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " in ", mydir, 
   "\n=========================================================\n")
 
   if (readLines("../.testsstatus") == "start") {
