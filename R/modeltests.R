@@ -182,7 +182,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
 
   # wait for all AMT runs to finish
   if (!test) {
-    message(format(Sys.time(), "%d-%m-%Y %H:%M:%S"), " - waiting for all AMT runs to finish.")
+    message(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " - waiting for all AMT runs to finish.")
     repeat {
       jobsInSlurm <- system(paste0("/p/system/slurm/bin/squeue -u ", user,
                                    " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)
