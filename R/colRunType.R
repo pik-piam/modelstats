@@ -18,10 +18,15 @@ colRunType <- function(mydir = ".") {
   if (file.exists(paste0(mydir, "/", cfgf))) {
     ifelse(grepl("yml",cfgf), cfg <- loadConfig(file.path(mydir, "config.yml")), load(paste0(mydir, "/", cfgf)))
     if (cfg[["model_name"]] == "MAgPIE") {
-        out <- cfg[["gms"]][["optimization"]]
+        out <- cfg$gms$optimization
     } else {
-        out <- cfg[["gms"]][["optimization"]]
-        if (!is.null(cfg$gms$CES_parameters)) if (cfg[["gms"]][["CES_parameters"]] == "calibrate") out <- paste0("Calib_", out)
+        out <- cfg$gms$optimization
+        if (grepl("^testOneRegi", out)) {
+          out <- paste(if (isTRUE(cfg$gms$cm_quick_mode == "on")) "quick" else "1Regi", cfg$gms$c_testOneRegi_region)
+        }
+        if (isTRUE(cfg$gms$cm_nash_mode == "debug")) out <- paste0(out, " debug")
+        if (isTRUE(cfg$gms$CES_parameters == "calibrate")) out <- paste0("Calib_", out)
+        if (isTRUE(cfg$gms$cm_MAgPIE_coupling == "on")) out <- paste0(out, " + mag")
     }
   } else if (file.exists(fulllst)) {
         out <- sub("         !! def = nash", "", sub("^ .*.ion  ", "", system(paste0("grep 'setGlobal optimization  ' ", fulllst), intern = TRUE)))

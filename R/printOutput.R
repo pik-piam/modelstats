@@ -27,7 +27,7 @@ printOutput <- function(string, len1stcol = 67, lenCols = NULL, colSep = "   ") 
   string <- templ
   for (i in 1:length(string)) {
     out <- paste0(formatstr(unname(string)[[i]],
-           ifelse(i >= length(lenCols), i + 12, lenCols[length(string) + 2 - i])), ifelse(is.null(lenCols), "", colSep), out)
+           ifelse(i >= length(lenCols), i + 12, lenCols[length(string) + 2 - i])), ifelse(is.null(lenCols) || i == 1, "", colSep), out)
   }
   return(paste0(formatstr(rownames(string), len1stcol), colSep, out, "\n"))
 #  if(is.data.frame(string)) print(unname(string))

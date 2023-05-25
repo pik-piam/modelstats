@@ -15,27 +15,28 @@
 #' }
 #'
 promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
-  if (is.null(user)) user <- Sys.info()[["user"]]
-  if (user == "") user <- Sys.info()[["user"]]
+  if (is.null(user) || user == "") user <- Sys.info()[["user"]]
   if (daysback == "") daysback <- 3
-
+  colors <- ! grepl("-.*b.*", mydir)
+  if (isFALSE(colors)) mydir <- gsub("b", "", mydir)
   if (mydir == ".") {
-    loopRuns(".", user = user)
+    loopRuns(".", user = user, colors = colors)
   } else if (mydir == "") {
     if (sum(file.exists(c("full.gms", "log.txt", "config.Rdata", "prepare_and_run.R", "prepareAndRun.R"))) >= 4) {
-      loopRuns(".", user = user)
+      loopRuns(".", user = user, colors = colors)
     } else {
-      dirs <- c(".", list.dirs(".", recursive = FALSE))
+      folder <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "./output" else "."
+      dirs <- c(folder, list.dirs(folder, recursive = FALSE))
       chosendirs <- gms::chooseFromList(dirs, type = "folders")
       loopRuns(if (length(chosendirs) == 0) "exit" else chosendirs, user = user)
     }
   } else if (mydir == "-f") {
-    loopRuns(dir(), user = user)
+    loopRuns(dir(), user = user, colors = colors)
   } else if (mydir == "-t") {
     amtPath <- "/p/projects/remind/modeltests/output/"
     amtPattern <- readRDS("/p/projects/remind/modeltests/runcode.rds")
     amtDirs <- dir(path = amtPath, pattern = amtPattern, full.names = TRUE)
-    loopRuns(amtDirs, user = user)
+    loopRuns(amtDirs, user = user, colors = colors)
   } else if (mydir %in% c("-cr", "-a", "-c")) {
     myruns <- system(paste0("squeue -u ", user, " -h -o '%Z'"), intern = TRUE)
     runnames <- system(paste0("squeue -u ", user, " -h -o '%j'"), intern = TRUE)
@@ -92,9 +93,9 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
               if (length(myruns)/as.numeric(daysback) > 20) " Excuse me? You need a cluster only for yourself it seems.")
     }
     print(myruns[1:min(100, length(myruns))])
-    loopRuns(myruns, user = user, colors = FALSE, sortbytime = FALSE)
+    loopRuns(myruns, user = user, colors = colors, sortbytime = FALSE)
   } else {
-    loopRuns(mydir, user = user)
+    loopRuns(mydir, user = user, colors = colors)
   }
 
 }
