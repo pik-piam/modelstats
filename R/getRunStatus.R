@@ -199,9 +199,14 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         }
       }
     }
-    if (out[i, "Runtime"] == "NA" && grepl("pending$", out[i, "jobInSLURM"])) {
-      out[i, "Runtime"] <- "pending"
-      out[i, "jobInSLURM"] <- gsub(" *pending", "", out[i, "jobInSLURM"])
+    if (out[i, "Runtime"] == "NA") {
+      if(grepl("pending$", out[i, "jobInSLURM"])) {
+        out[i, "Runtime"] <- "pending"
+        out[i, "jobInSLURM"] <- gsub(" *pending", "", out[i, "jobInSLURM"])
+      } else if (grepl("startup$", out[i, "jobInSLURM"])) {
+        out[i, "Runtime"] <- "startup"
+        out[i, "jobInSLURM"] <- gsub(" *startup", "", out[i, "jobInSLURM"])
+      }
     }
 
   } # END DIR LOOP

@@ -90,9 +90,9 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
         cat(underline(green(out)))
       } else if (grepl("2: Locally Optimal", status[["modelstat"]]) && ! grepl("nash", status[["RunType"]])) {
         cat(green(out))
-      } else if (status[["Runtime"]] %in% "pending" || status[["jobInSLURM"]] != "no") {
+      } else if (status[["Runtime"]] %in% c("pending", "startup")) {
         cat(yellow(out))
-      } else if (grepl("missing", status[["RunStatus"]]) || grepl("no", status[["jobInSLURM"]])) {
+      } else if (status[["jobInSLURM"]] == "no") {
         cat(red(out))
       } else {
         cat(out)
