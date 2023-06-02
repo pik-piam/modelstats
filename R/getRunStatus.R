@@ -149,15 +149,15 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     # Conv
     out[i, "Conv"] <- "NA"
     if (exists("cfg") && isTRUE(grepl("nash", out[i, "RunType"])) && length(latest_gdx) > 0) {
-      iter_no  <- try(as.numeric(readGDX(gdx = latest_gdx, "o_iterationNumber", format = "simplest")))
-      s80_bool <- try(as.numeric(readGDX(gdx = latest_gdx, "s80_bool", types="parameters", format = "simplest")))
+      iter_no  <- try(as.numeric(readGDX(gdx = latest_gdx, "o_iterationNumber", format = "simplest")), silent = TRUE)
+      s80_bool <- try(as.numeric(readGDX(gdx = latest_gdx, "s80_bool", types="parameters", format = "simplest")), silent = TRUE)
       if (! inherits(s80_bool, "try-error") && ! inherits(iter_no, "try-error")) {
         if (s80_bool == 1) {
           out[i, "Conv"] <- if (file.exists(gdx_non_optimal)) "converged (had INFES)" else "converged"
         } else if (s80_bool == 0 && as.numeric(cm_iteration_max) == iter_no) {
           out[i, "Conv"] <- "not_converged"
         } else {
-          p80_repy <- try(readGDX(gdx = latest_gdx, "p80_repy"))
+          p80_repy <- try(readGDX(gdx = latest_gdx, "p80_repy"), silent = TRUE)
           if (! inherits(p80_repy, "try-error")) {
             out[i, "Conv"] <- paste(p80_repy[, , "modelstat"], collapse = "")
           }
@@ -202,12 +202,12 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     if (out[i, "Runtime"] == "NA") {
       if(grepl("pending$", out[i, "jobInSLURM"])) {
         out[i, "Runtime"] <- "pending"
-        out[i, "jobInSLURM"] <- gsub(" *pending", "", out[i, "jobInSLURM"])
       } else if (grepl("startup$", out[i, "jobInSLURM"])) {
         out[i, "Runtime"] <- "startup"
-        out[i, "jobInSLURM"] <- gsub(" *startup", "", out[i, "jobInSLURM"])
       }
     }
+    out[i, "jobInSLURM"] <- gsub(" *pending$", "", out[i, "jobInSLURM"])
+    out[i, "jobInSLURM"] <- gsub(" *startup", "", out[i, "jobInSLURM"])
 
   } # END DIR LOOP
 
