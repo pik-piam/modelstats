@@ -17,20 +17,20 @@ foundInSlurm <- function(mydir = ".", user = NULL) {
     mydir <- dirname(dirname(mydir))
   }
 
-  squeueresult <- system("/p/system/slurm/bin/squeue -h -o '%u %Z %j %T %M %q'", intern = TRUE)
+  squeueresult <- system("/p/system/slurm/bin/squeue -h -o '%u %Z %j %M %T %q'", intern = TRUE)
   squeueresult <- grep(mydir, squeueresult, value = TRUE, fixed = TRUE)
   squeueresult <- grep(runname, squeueresult, value = TRUE, fixed = TRUE)
   if (length(squeueresult) > 0) {
-    time <- rev(strsplit(squeueresult, " ")[[1]])[[2]]
-    startup <- if (grepl("[01]:[0-9]{2}", time)) " startup" else NULL
+    time <- rev(strsplit(squeueresult, " ")[[1]])[[3]]
     qos <- rev(strsplit(squeueresult, " ")[[1]])[[1]]
     yourrun <- any(grepl(paste0("^", user, " "), squeueresult))
     pending <- if (length(squeueresult) == 1 && grepl("PENDING [A-Za-z]*$", squeueresult)) " pending" else NULL
+    startup <- if (grepl("[01]:[0-9]{2}", time) && is.null(pending)) " startup" else NULL
     if (yourrun) {
-      return(paste0(qos, pending, startup))
+      return(paste0(qos, startup, pending))
     } else {
       runuser <- strsplit(squeueresult, " ")[[1]][[1]]
-      return(paste(runuser, pending, startup))
+      return(paste(runuser, startup, pending))
     }
   } else {
     return("no")
