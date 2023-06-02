@@ -18,7 +18,6 @@
 #' @importFrom gms loadConfig
 #' @export
 getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
-
   substrRight <- function(x, n) {
     substr(x, nchar(x) - n + 1, nchar(x))
   }
@@ -36,11 +35,10 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
   if (sort == "nf") mydir <- rownames(a[order(a[, "mtime"], decreasing = TRUE), ])
 
   for (i in mydir) {
-
     ii <- i
     i <- sub(paste0(dirname(i), "/"), "", i)
 
-    if (onCluster) out[i, "jobInSLURM"] <- foundInSlurm(i, user)
+    if (onCluster) out[i, "jobInSLURM"] <- foundInSlurm(ii, user)
 
 #    if (onCluster) if (!out[i,"jobInSLURM"] & onlyrunning) {
 #     out <- out[setdiff(rownames(out),i),]
@@ -50,13 +48,21 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     # Define files
 
     cfgf <- grep("config.Rdata|config.yml", dir(ii), value = TRUE)
-#    ifelse(grepl("yml$", cfgf), cfgf <- "config.yml", cfgf <- "config.Rdata")
     fle <- paste0(ii, "/runstatistics.rda")
     gdx <- paste0(ii, "/fulldata.gdx")
     gdx_non_optimal <- paste0(ii, "/non_optimal.gdx")
+    fullgms <- paste0(ii, "/full.gms")
     fulllst <- paste0(ii, "/full.lst")
     fulllog <- paste0(ii, "/full.log")
     logtxt <- paste0(ii, "/log.txt")
+    logmagtxt <- paste(ii, "/log-mag.txt")
+    if (! file.exists(logmagtxt)) logmagtxt <- logtxt
+    gdxfiles <- c(gdx, gdx_non_optimal)[file.exists(c(gdx, gdx_non_optimal))]
+    latest_gdx <- NULL
+    if (length(gdxfiles) > 0) {
+      fileInfo <- file.info(gdxfiles)
+      latest_gdx <- rownames(fileInfo)[which.max(fileInfo$mtime)]
+    }
 
     # Initialize objects
     stats <- runtype <- cfg <- NULL
@@ -66,10 +72,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
     # modelstat
     out[i, "modelstat"] <- "NA"
-    modelstatFiles <- c(gdx, gdx_non_optimal)[file.exists(c(gdx, gdx_non_optimal))]
-    if (length(modelstatFiles) > 0) {
-      fileInfo <- file.info(modelstatFiles)
-      latest_gdx <- rownames(fileInfo)[which.max(fileInfo$mtime)]
+    if (length(latest_gdx) > 0) {
       o_modelstat <- try(readGDX(gdx = latest_gdx, "o_modelstat", format = "simplest", react = "silent"), silent = TRUE)
       if (! is.null(o_modelstat) && ! inherits(o_modelstat, "try-error")) out[i, "modelstat"] <- as.character(as.numeric(o_modelstat))
     }
@@ -84,46 +87,60 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       }
     }
     explain_modelstat <- c("1" = "Optimal", "2" = "Locally Optimal", "3" = "Unbounded", "4" = "Infeasible",
-                           "5" = "Locally Infes", "6" = "Intermed Infes", "7" = "Intermed Nonoptimal")
+                           "5" = "Locally Infes", "6" = "Intermed Infes", "7" = "Intermed Nonoptimal", "13" = "Error achieved")
     if (out[i, "modelstat"] %in% names(explain_modelstat)) {
       out[i, "modelstat"] <- paste0(out[i, "modelstat"], ": ", explain_modelstat[out[i, "modelstat"]])
     }
 
     # runInAppResults
-    if (onCluster) out[i, "runInAppResults"] <- "NA"
-    if (file.exists(fle)) {
-      load(fle)
-      if (onCluster && any(grepl("id", names(stats)))) {
-        if (exists("stats")) if (any(grepl("config", names(stats)))) if (stats[["config"]][["model_name"]] == "MAgPIE") {
-          ovdir <- "/p/projects/rd3mod/models/results/magpie/"
-        } else {
-          ovdir <- "/p/projects/rd3mod/models/results/remind/"
+    if (onCluster) {
+      out[i, "runInAppResults"] <- "no"
+      if (file.exists(fle)) {
+        load(fle)
+        if (any(grepl("id", names(stats)))) {
+          if (exists("stats") && any(grepl("config", names(stats))) && stats[["config"]][["model_name"]] == "MAgPIE") {
+            ovdir <- "/p/projects/rd3mod/models/results/magpie/"
+          } else {
+            ovdir <- "/p/projects/rd3mod/models/results/remind/"
+          }
+          try(id <- paste0(ovdir, stats[["id"]], ".rds"))
+          if (file.exists(id) && all((file.info(Sys.glob(paste0(ovdir, "overview.rds")))$mtime + 600) > file.info(id)$mtime)) {
+            out[i, "runInAppResults"] <- "yes"
+          }
         }
-        try(id <- paste0(ovdir, stats[["id"]], ".rds"))
-        if (exists("ovdir")) if (file.exists(id) && all((file.info(Sys.glob(paste0(ovdir, "overview.rds")))$mtime + 600) > file.info(id)$mtime))
-          out[i, "runInAppResults"] <- TRUE
-      } else {
-        if (onCluster) out[i, "runInAppResults"] <- FALSE
       }
     }
 
     # Iter
-    if (exists("cfg")) totNoOfIter <- cfg[["gms"]][["cm_iteration_max"]]
+    cm_iteration_max <- cfg$gms$cm_iteration_max
+    if (isTRUE(cfg$gms$cm_nash_autoconverge > 0) && grepl("nash", out[i, "RunType"])) {
+      if (file.exists(fullgms)) {
+        cm_iteration_max <- suppressWarnings(system(paste0("tac ", fullgms, "| grep -m 1 'cm_iteration_max = [1-9].*.;[ ]*$'"), intern = TRUE))
+        cm_iteration_max <- sub(";[ ]*", "", sub("^.*.= ", "", cm_iteration_max))
+      }
+    }
     out[i, "Iter"] <- "NA"
     out[i, "RunStatus"] <- "NA"
     if (file.exists(fulllog)) {
       suppressWarnings(try(loop <- sub("^.*.= ", "", system(paste0("grep 'LOOPS' ", fulllog, " | tail -1"), intern = TRUE)), silent = TRUE))
       if (length(loop) > 0) out[i, "Iter"] <- loop
-      if (!out[i, "RunType"] %in% c("nash", "Calib_nash") & length(totNoOfIter) > 0) out[i, "Iter"] <- paste0(out[i, "Iter"], "/", sub(";", "", sub("^.*.= ", "", totNoOfIter)))
+      if (length(cm_iteration_max) > 0) out[i, "Iter"] <- paste0(out[i, "Iter"], "/", cm_iteration_max)
       suppressWarnings(try(out[i, "RunStatus"] <- substr(sub("\\(s\\)", "", sub("\\*\\*\\* Status: ", "", system(paste0("grep '*** Status: ' ", fulllog), intern = TRUE))), start = 1, stop = 17), silent = TRUE))
       if (onCluster & out[i, "RunStatus"] == "NA") {
-        if (out[i, "jobInSLURM"] == FALSE) {
+        if (out[i, "jobInSLURM"] == "no") {
           out[i, "RunStatus"] <- "Run interrupted"
         } else {
           out[i, "RunStatus"] <- "Run in progress"
-          }
+        }
       } else {
         if (out[i, "RunStatus"] == "NA") out[i, "RunStatus"] <- "Run interrupted"
+      }
+      if (out[i, "RunStatus"] == "Normal completion" && file.exists(logmagtxt)) {
+        startmag <- suppressWarnings(system(paste0("tac ", logmagtxt, " | grep -m 1 'Preparing MAgPIE'"), intern = TRUE))
+        endmag <- suppressWarnings(system(paste0("tac ", logmagtxt, " | grep -m 1 'MAgPIE output was stored'"), intern = TRUE))
+        if (length(startmag) > length(endmag) && out[i, "jobInSLURM"] != "no") {
+          out[i, "RunStatus"] <- "Running MAgPIE"
+        }
       }
     } else {
       out[i, "RunStatus"] <- "full.log missing"
@@ -131,65 +148,42 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
     # Conv
     out[i, "Conv"] <- "NA"
-    if (exists("cfg"))
-    if (file.exists(fulllst)) {
-      if (length(out[i, "RunType"]) > 0)
-
-      if (grepl("nash", out[i, "RunType"]) & !is.na(out[i, "RunType"])) {
-
-        if (isTRUE(cfg[["gms"]][["cm_nash_autoconverge"]] > 0)) {
-          totNoOfIter <- tail(suppressWarnings(system(paste0("grep 'cm_iteration_max = [1-9].*.;$' ", fulllst), intern = TRUE)), n = 1)
-        } else {
-          totNoOfIter <- cfg[["gms"]][["cm_iteration_max"]]
-        }
-        if (exists("totNoOfIter") && any(grepl("cm_iteration_max", cfg))) if (length(totNoOfIter) > 0 & !cfg[["gms"]][["cm_iteration_max"]] > out[i, "Iter"]) out[i, "Iter"] <- paste0(out[i, "Iter"], "/", sub(";", "", sub("^.*.= ", "", totNoOfIter)))
-
-        if (length(suppressWarnings(system(paste0("grep 'Convergence threshold' ", fulllst), intern = TRUE))) > 1) {
+    if (exists("cfg") && isTRUE(grepl("nash", out[i, "RunType"])) && length(latest_gdx) > 0) {
+      iter_no  <- try(as.numeric(readGDX(gdx = latest_gdx, "o_iterationNumber", format = "simplest")))
+      s80_bool <- try(as.numeric(readGDX(gdx = latest_gdx, "s80_bool", types="parameters", format = "simplest")))
+      if (! inherits(s80_bool, "try-error") && ! inherits(iter_no, "try-error")) {
+        if (s80_bool == 1) {
           out[i, "Conv"] <- if (file.exists(gdx_non_optimal)) "converged (had INFES)" else "converged"
-        } else if (length(suppressWarnings(system(paste0("grep 'Nash did NOT' ", fulllst), intern = TRUE))) > 1) {
+        } else if (s80_bool == 0 && as.numeric(cm_iteration_max) == iter_no) {
           out[i, "Conv"] <- "not_converged"
         } else {
-          iters <- suppressWarnings(system(paste0("grep -A 30 'PARAMETER p80_repy  sum' ", fulllst), intern = TRUE))
-          if (length(iters) > 0) {
-            iters <- grep("^$|--|modelstat", iters, invert = TRUE, value = TRUE)
-            iters <- grep("^[A-Z][A-Z][A-Z]  ", iters,             value = TRUE)
-            iters <- tail(sapply(iters, strsplit, split = " "), n = 120)
-            regions <- unique(sapply(iters, rem)[1, ])
-            b <- paste0(sapply(iters, rem)[3, ], collapse = "")
-            iters <- gsub(" |0|\\.", "", b[[1]])
-            out[i, "Conv"] <- substr(iters, nchar(iters) - length(regions) + 1, nchar(iters)) # a function is needed that extracts a summary of each iteration, not just the last one
+          p80_repy <- try(readGDX(gdx = latest_gdx, "p80_repy"))
+          if (! inherits(p80_repy, "try-error")) {
+            out[i, "Conv"] <- paste(p80_repy[, , "modelstat"], collapse = "")
           }
         }
-      } else {
-        out[i, "Conv"] <- "NA"
       }
-    } else {
-      out[i,"Conv"] <- "NA"
     }
     # END Conv
 
     # Calib Iter
-    if (!is.null(out[i, "RunType"])) if (file.exists(logtxt) & grepl("Calib", out[i, "RunType"])) {
+    if (isTRUE(grepl("Calib", out[i, "RunType"])) && file.exists(logtxt)) {
       calibiter <- tail(suppressWarnings(system(paste0("grep 'CES calibration iteration' ", logtxt, " |  grep -Eo  '[0-9]{1,2}'"), intern = TRUE)), n = 1)
-      if (isTRUE(as.numeric(calibiter > 0))) out[i, "Iter"] <- paste0(out[i, "Iter"], " ", "Clb: ", calibiter)
-      if (!is.null(out[i, "Conv"])) if (out[i, "Conv"] == "converged" & length(system(paste0("find ", ii, " -name 'input_*.gdx'"), intern = TRUE)) > 10) out[i, "Conv"] <- "Clb_converged"
+      if (isTRUE(as.numeric(calibiter) > 0)) out[i, "Iter"] <- paste0(out[i, "Iter"], " ", "Clb: ", calibiter)
+      if (isTRUE(out[i, "Conv"] == "converged") && length(system(paste0("find ", ii, " -name 'input_*.gdx'"), intern = TRUE)) > 10) {
+        out[i, "Conv"] <- "Clb_converged"
+      }
     }
 
     # MIF
     out[i,"Mif"] <- "NA"
-    if (length(cfgf) != 0) if (file.exists(paste0(ii, "/", cfgf))) {
-      if (exists("stats")) if (any(grepl("config", names(stats)))) if (stats[["config"]][["model_name"]] == "MAgPIE") {
+    if (length(cfgf) != 0 && file.exists(paste0(ii, "/", cfgf))) {
+      if (exists("stats") && isTRUE(stats[["config"]][["model_name"]] == "MAgPIE")) {
         miffile <- paste0(ii, "/validation.mif")
-        out[i, "Mif"] <- FALSE
-        if (file.exists(miffile)) {
-          if (file.info(miffile)[["size"]] > 99999) out[i, "Mif"] <- TRUE
-        }
+        out[i, "Mif"] <- if (file.exists(miffile) && file.info(miffile)[["size"]] > 99999) "yes" else "no"
       } else {
         miffile <- paste0(ii, "/REMIND_generic_", cfg[["title"]], ".mif")
-        out[i, "Mif"] <- FALSE
-        if (file.exists(miffile)) {
-          if (file.info(miffile)[["size"]] > 3899999) out[i, "Mif"] <- TRUE
-        }
+        out[i, "Mif"] <- if (file.exists(miffile) && file.info(miffile)[["size"]] > 3899999) "yes" else "no"
       }
     }
 
@@ -200,12 +194,20 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       if (exists("stats")) {
         if (any(grepl("GAMSEnd", names(stats)))) {
           out[i, "Runtime"] <- format(round(stats[["timeGAMSEnd"]] - stats[["timeGAMSStart"]], 1))
-        } else if (any(grepl("timePrepareStart", names(stats))) & out[i, "RunStatus"] %in% c("Run in progress")) {
+        } else if (any(grepl("timePrepareStart", names(stats))) && ! out[i, "jobInSLURM"] %in% "no") {
           out[i, "Runtime"] <- paste0("> ", format(round(Sys.time() - stats[["timePrepareStart"]], 1)))
         }
       }
     }
-
+    if (out[i, "Runtime"] == "NA") {
+      if(grepl("pending$", out[i, "jobInSLURM"])) {
+        out[i, "Runtime"] <- "pending"
+        out[i, "jobInSLURM"] <- gsub(" *pending", "", out[i, "jobInSLURM"])
+      } else if (grepl("startup$", out[i, "jobInSLURM"])) {
+        out[i, "Runtime"] <- "startup"
+        out[i, "jobInSLURM"] <- gsub(" *startup", "", out[i, "jobInSLURM"])
+      }
+    }
 
   } # END DIR LOOP
 
