@@ -82,12 +82,12 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
         cat(out)
       } else if (status[["RunStatus"]] %in% c("Run in progress", "Running MAgPIE")) {
         cat(cyan(out))
-      } else if (grepl("converged (had INFES)", status[["Conv"]], fixed = TRUE)) {
+      } else if (status[["Conv"]] == "converged (had INFES)") {
         cat(blue(out))
       } else if (grepl("not_converged|Execution erro|Compilation er|interrupted|Intermed Infes", status[["RunStatus"]])) {
         cat(red(out))
       } else if (status[["Conv"]] %in% c("converged", "Clb_converged")) {
-        cat(underline(green(out)))
+        cat(underline(if (status[["jobInSLURM"]] == "no") green(out) else cyan(out)))
       } else if (grepl("2: Locally Optimal", status[["modelstat"]]) && ! grepl("nash", status[["RunType"]])) {
         cat(green(out))
       } else if (status[["Runtime"]] %in% c("pending", "startup")) {

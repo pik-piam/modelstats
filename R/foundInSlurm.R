@@ -30,7 +30,7 @@ foundInSlurm <- function(mydir = ".", user = NULL) {
       return(paste0(qos, startup, pending))
     } else {
       runuser <- strsplit(squeueresult, " ")[[1]][[1]]
-      return(paste(runuser, startup, pending))
+      return(paste0(runuser, startup, pending))
     }
   } else {
     return("no")
