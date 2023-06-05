@@ -45,7 +45,7 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
     lenCols <- nchar(coltitles)
   }
   if (colors) {
-    cat("# Color code: ", yellow("pending"), ", ", cyan("running"), ", ", underline(green("converged")), ", ",
+    cat("# Color code: ", yellow("pending/startup"), ", ", cyan("running"), ", ", underline(green("converged")), ", ",
         blue("converged with INFES"), ", ", green("finished"), ", ", red("error"), "\n", sep = "")
   }
   message(paste(coltitles, collapse = colSep))

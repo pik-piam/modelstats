@@ -207,7 +207,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       }
     }
     out[i, "jobInSLURM"] <- gsub(" *pending$", "", out[i, "jobInSLURM"])
-    out[i, "jobInSLURM"] <- gsub(" *startup", "", out[i, "jobInSLURM"])
+    out[i, "jobInSLURM"] <- gsub(" *startup$", "", out[i, "jobInSLURM"])
 
   } # END DIR LOOP
 
