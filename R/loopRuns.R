@@ -45,19 +45,21 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
     lenCols <- nchar(coltitles)
   }
   if (colors) {
-    cat("# Color code: ", yellow("pending/startup"), ", ", cyan("running"), ", ", underline(green("converged")), ", ",
-        blue("converged with INFES"), ", ", green("finished"), ", ", red("error"), "\n", sep = "")
+    cat("# Color code: ", yellow("pending"), "/", yellow("startup"), ", ", cyan("running"), ", ",
+        underline(green("converged")), ", ", blue("converged (had INFES)"), ", ",
+        green("finished"), ", ", red("error"), "\n", sep = "")
   }
   message(paste(coltitles, collapse = colSep))
   for (i in mydir) {
+    # skip folders that do not contain runs
+    if (!file.exists(paste0(i, "/", grep("^config.*", dir(i), value = TRUE)[1]))) next
 
-    if (!file.exists(paste0(i, "/", grep("^config.*", dir(i), value = TRUE)[1]))) next # do not report on folders that do not contain runs
     status <- try(getRunStatus(i, user = user))
     if (inherits(status, "try-error")) {
       cat(basename(i), "skipped because of error\n")
       next
     }
-    out <- printOutput(status, lenCols = lenCols, colSep = colSep)
+    out <- trimws(printOutput(status, lenCols = lenCols, colSep = colSep), which = "right", whitespace = " ")
     status <- unlist(status)
     if (grepl(" y2| nlp_", out)) {
       if (isFALSE(colors)) {
@@ -80,22 +82,22 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
     } else {
       if (isFALSE(colors)) {
         cat(out)
-      } else if (status[["RunStatus"]] %in% c("Run in progress", "Running MAgPIE")) {
+      } else if (status[["Runtime"]] %in% c("pending", "startup")) {
+        cat(yellow(out))
+      } else if (! status[["jobInSLURM"]] == "no") {
         cat(cyan(out))
       } else if (status[["Conv"]] == "converged (had INFES)") {
         cat(blue(out))
       } else if (grepl("not_converged|Execution erro|Compilation er|interrupted|Intermed Infes", status[["RunStatus"]])) {
         cat(red(out))
       } else if (status[["Conv"]] %in% c("converged", "Clb_converged")) {
-        cat(underline(if (status[["jobInSLURM"]] == "no") green(out) else cyan(out)))
+        cat(underline(green(out)))
       } else if (grepl("2: Locally Optimal", status[["modelstat"]]) && ! grepl("nash", status[["RunType"]])) {
         cat(green(out))
-      } else if (status[["Runtime"]] %in% c("pending", "startup")) {
-        cat(yellow(out))
       } else if (status[["jobInSLURM"]] == "no") {
         cat(red(out))
       } else {
-        cat(out)
+        cat(cyan(out))
       }
     }
 
