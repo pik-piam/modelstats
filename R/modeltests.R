@@ -220,7 +220,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
 
   colSep <- "  "
   coltitles <- c(
-    "Run                                       ", "Runtime    ", "", "RunType    ", "RunStatus         ",
+    "Run                                        ", "Runtime    ", "", "RunType    ", "RunStatus         ",
     "Iter            ", "Conv                 ", "modelstat          ", "Mif     ", "inAppResults"
   )
   write(paste(coltitles, collapse = colSep), myfile, append = TRUE)
