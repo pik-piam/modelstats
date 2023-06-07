@@ -25,7 +25,7 @@ foundInSlurm <- function(mydir = ".", user = NULL) {
     qos <- rev(strsplit(squeueresult, " ")[[1]])[[1]]
     yourrun <- any(grepl(paste0("^", user, " "), squeueresult))
     pending <- if (length(squeueresult) == 1 && grepl("PENDING [A-Za-z]*$", squeueresult)) " pending" else NULL
-    startup <- if (grepl("^[01]:[0-9]{2}$", time) && is.null(pending)) " startup" else NULL
+    startup <- if (grepl("^[0-2]:[0-9]{2}$", time) && is.null(pending)) " startup" else NULL
     if (yourrun) {
       return(paste0(qos, startup, pending))
     } else {
