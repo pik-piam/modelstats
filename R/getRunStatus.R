@@ -66,9 +66,13 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
     # Initialize objects
     stats <- runtype <- cfg <- NULL
-    ifelse(grepl("yml$", cfgf), cfg <- loadConfig(paste0(ii, "/", cfgf)), load(paste0(ii, "/", cfgf)))
-    # RunType
-    ifelse(length(cfgf) == 0, out[i, "RunType"] <- "NA",  out[i, "RunType"] <- colRunType(ii))
+    # Runtype and load cfg
+    if (length(cfgf) == 0) {
+      out[i, "RunType"] <- "NA"
+    } else {
+      ifelse(grepl("yml$", cfgf), cfg <- loadConfig(paste0(ii, "/", cfgf)), load(paste0(ii, "/", cfgf)))
+      out[i, "RunType"] <- colRunType(ii)
+    }
 
     # modelstat
     out[i, "modelstat"] <- "NA"
