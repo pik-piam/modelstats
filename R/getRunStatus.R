@@ -47,15 +47,15 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
     # Define files
 
-    cfgf <- grep("config.Rdata|config.yml", dir(ii), value = TRUE)
-    fle <- paste0(ii, "/runstatistics.rda")
-    gdx <- paste0(ii, "/fulldata.gdx")
-    gdx_non_optimal <- paste0(ii, "/non_optimal.gdx")
-    fullgms <- paste0(ii, "/full.gms")
-    fulllst <- paste0(ii, "/full.lst")
-    fulllog <- paste0(ii, "/full.log")
-    logtxt <- paste0(ii, "/log.txt")
-    logmagtxt <- paste(ii, "/log-mag.txt")
+    cfgf            <- grep("config.Rdata|config.yml", dir(ii), value = TRUE)
+    fle             <- file.path(ii, "runstatistics.rda")
+    gdx             <- file.path(ii, "fulldata.gdx")
+    gdx_non_optimal <- file.path(ii, "non_optimal.gdx")
+    fullgms         <- file.path(ii, "full.gms")
+    fulllst         <- file.path(ii, "full.lst")
+    fulllog         <- file.path(ii, "full.log")
+    logtxt          <- file.path(ii, "log.txt")
+    logmagtxt       <- file.path(ii, "log-mag.txt")
     if (! file.exists(logmagtxt)) logmagtxt <- logtxt
     gdxfiles <- c(gdx, gdx_non_optimal)[file.exists(c(gdx, gdx_non_optimal))]
     latest_gdx <- NULL
