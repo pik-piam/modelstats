@@ -31,7 +31,11 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
       loopRuns(if (length(chosendirs) == 0) "exit" else chosendirs, user = user)
     }
   } else if (mydir == "-f") {
-    loopRuns(dir(), user = user, colors = colors)
+    folder <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "output" else "."
+    # load all directories with a config file plus all that look like coupled runs to include them if they are pending
+    dirs <- unique(c(basename(dirname(Sys.glob(file.path(folder, "*", "config*.*")))),
+                     grep("^C_.*-rem-[0-9]+$", dir(folder), value = TRUE)))
+    loopRuns(file.path(folder, dirs), user = user, colors = colors)
   } else if (mydir == "-t") {
     amtPath <- "/p/projects/remind/modeltests/output/"
     amtPattern <- readRDS("/p/projects/remind/modeltests/runcode.rds")
