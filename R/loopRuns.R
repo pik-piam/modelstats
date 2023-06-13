@@ -52,6 +52,7 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
   message(paste(coltitles, collapse = colSep))
   for (i in mydir) {
     status <- try(getRunStatus(i, user = user))
+    if (! file.exists(paste0(i, "/", grep("^config.*", dir(i), value = TRUE)[1])) && status[["jobInSLURM"]] == "no") next
     if (inherits(status, "try-error")) {
       cat(basename(i), "skipped because of error\n")
       next
