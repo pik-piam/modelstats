@@ -8,6 +8,7 @@
 #'
 #' @author Anastasis Giannousakis, Oliver Richters
 #' @import crayon
+#' @importFrom gtools mixedsort
 #' @export
 #' @examples
 #' \dontrun{
@@ -15,13 +16,14 @@
 #' }
 #'
 promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
+  mydir <- strsplit(mydir, ',')[[1]]
   if (is.null(user) || user == "") user <- Sys.info()[["user"]]
   if (daysback == "") daysback <- 3
-  colors <- ! grepl("-.*b.*", mydir)
+  colors <- ! any(grepl("-.*b.*", mydir))
   if (isFALSE(colors)) mydir <- gsub("b", "", mydir)
-  if (mydir == ".") {
+  if (isTRUE(mydir == ".")) {
     loopRuns(".", user = user, colors = colors)
-  } else if (mydir == "") {
+  } else if (length(mydir) == 0 || isTRUE(mydir == "")) {
     if (sum(file.exists(c("full.gms", "log.txt", "config.Rdata", "prepare_and_run.R", "prepareAndRun.R"))) >= 4) {
       loopRuns(".", user = user, colors = colors)
     } else {
@@ -30,22 +32,28 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
       chosendirs <- gms::chooseFromList(dirs, type = "folders")
       loopRuns(if (length(chosendirs) == 0) "exit" else chosendirs, user = user)
     }
-  } else if (mydir == "-f") {
+  } else if (isTRUE(mydir == "-f")) {
     folder <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "output" else "."
     # load all directories with a config file plus all that look like coupled runs to include them if they are pending
-    dirs <- unique(c(basename(dirname(Sys.glob(file.path(folder, "*", "config*.*")))),
-                     grep("^C_.*-rem-[0-9]+$", dir(folder), value = TRUE)))
-    loopRuns(file.path(folder, dirs), user = user, colors = colors)
-  } else if (mydir == "-t") {
+    loopRuns(file.path(folder, dir(folder)), user = user, colors = colors)
+  } else if (isTRUE(mydir == "-t")) {
     amtPath <- "/p/projects/remind/modeltests/output/"
     amtPattern <- readRDS("/p/projects/remind/modeltests/runcode.rds")
     amtDirs <- dir(path = amtPath, pattern = amtPattern, full.names = TRUE)
     loopRuns(amtDirs, user = user, colors = colors)
-  } else if (mydir %in% c("-cr", "-a", "-c")) {
+  } else if (isTRUE(mydir == "-s")) {
+    folder <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "output" else "."
+    dirs <- mixedsort(grep("^C_.*-(rem|mag)-[0-9]+$", dir(folder), value = TRUE))
+    lastdirs <- NULL
+    for (r in unique(gsub("-(rem|mag)-[0-9]+$", "", dirs))) {
+      lastdirs <- c(lastdirs, dirs[min(which(gsub("-(rem|mag)-[0-9]+$", "", dirs) == r))])
+    }
+    loopRuns(file.path(folder, lastdirs), user = user, colors = colors, sortbytime = FALSE)
+  } else if (all(mydir %in% c("-cr", "-a", "-c"))) {
     myruns <- system(paste0("squeue -u ", user, " -h -o '%Z'"), intern = TRUE)
     runnames <- system(paste0("squeue -u ", user, " -h -o '%j'"), intern = TRUE)
 
-    if (mydir %in% c("-cr", "-c")) {
+    if (all(mydir %in% c("-cr", "-c"))) {
       myruns2 <- system(paste0("sacct -u ", user, " -s cd,f,cancelled,timeout,oom -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " --format WorkDir -P -n"), intern = TRUE)
       # myruns2<-myruns2[!grepl("^$",myruns2)]
       myruns <- c(myruns, myruns2)
