@@ -23,7 +23,6 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
   if (mydir[[1]] == "exit") return(NULL)
 
   red <- make_style("orangered")
-
   if (isTRUE(sortbytime)) {
     a <- file.info(mydir)
     a <- a[a[, "isdir"] == TRUE, ]
