@@ -204,7 +204,12 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
                format(Sys.time(), "%Y-%m-%d"), "."), myfile, append = TRUE)
   write(paste0("Path to runs:", mydir, "output/"), myfile, append = TRUE)
   if (model == "REMIND") {
-    write(paste0(c("Responsibilities:","  Robert     : SSP2EU-EU21", "  Jess / Olli: SSP2EU", "  Bjoern     : SDP", "             : SSP1", "             : SSP5"), collapse = "\n"), myfile, append = TRUE)
+    write(paste0(c("Responsibilities:",
+                   "  Robert     : SSP2EU-EU21",
+                   "  Jess / Olli: SSP2EU",
+                   "  Bjoern     : SDP",
+                   "             : SSP1",
+                   "             : SSP5"), collapse = "\n"), myfile, append = TRUE)
   }
   write(paste0("Direct and interactive access to plots: open shinyResults::appResults, then use '",
                ifelse(model == "MAgPIE", "weeklyTests", strsplit(runcode, "\\.")[[1]][1]),
