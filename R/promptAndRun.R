@@ -41,14 +41,23 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     amtPattern <- readRDS("/p/projects/remind/modeltests/runcode.rds")
     amtDirs <- dir(path = amtPath, pattern = amtPattern, full.names = TRUE)
     loopRuns(amtDirs, user = user, colors = colors)
-  } else if (isTRUE(mydir == "-s")) {
-    folder <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "output" else "."
-    dirs <- mixedsort(grep("^C_.*-(rem|mag)-[0-9]+$", dir(folder), value = TRUE))
-    lastdirs <- NULL
-    for (r in unique(gsub("-(rem|mag)-[0-9]+$", "", dirs))) {
-      lastdirs <- c(lastdirs, dirs[min(which(gsub("-(rem|mag)-[0-9]+$", "", dirs) == r))])
+  } else if (isTRUE(mydir %in% c("-p", "-s"))) {
+    folders <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "output" else "."
+    if (isTRUE(mydir %in% "-p") && dir.exists(file.path("magpie", "output"))) folders <- c(folders, file.path("magpie", "output"))
+    dirs <- NULL
+    for (folder in folders) {
+      fdirs <- mixedsort(grep("^C_.*-(rem|mag)-[0-9]+$", dir(folder), value = TRUE))
+      if (isTRUE(mydir %in% "-p")) {
+        dirs <- c(dirs, file.path(folder, fdirs))
+      } else { # -s shows only last run
+        lastdirs <- NULL
+        for (r in unique(gsub("-(rem|mag)-[0-9]+$", "", fdirs))) {
+          lastdirs <- c(lastdirs, fdirs[min(which(gsub("-(rem|mag)-[0-9]+$", "", fdirs) == r))])
+        }
+        dirs <- c(dirs, file.path(folder, lastdirs))
+      }
     }
-    loopRuns(file.path(folder, lastdirs), user = user, colors = colors, sortbytime = FALSE)
+    loopRuns(sort(dirs), user = user, colors = colors, sortbytime = FALSE)
   } else if (all(mydir %in% c("-cr", "-a", "-c"))) {
     myruns <- system(paste0("squeue -u ", user, " -h -o '%Z'"), intern = TRUE)
     runnames <- system(paste0("squeue -u ", user, " -h -o '%j'"), intern = TRUE)
@@ -95,19 +104,13 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
       return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -c USER 1")
     } else {
       message("")
-      if (mydir %in% c("-cr", "-c") && daysback != 3) {
-        message("Type 'rs2 -a username' to get only active runs in slurm")
-      } else {
-        message("Type 'rs2 -c username DAYS' with DAYS an integer denoting how many days you want results from")
-      }
-      message("")
       message("Found ", length(myruns), if (mydir == "-a") " active", " runs.",
               if (length(myruns)/as.numeric(daysback) > 20) " Excuse me? You need a cluster only for yourself it seems.")
     }
     print(myruns[1:min(100, length(myruns))])
     loopRuns(myruns, user = user, colors = colors, sortbytime = FALSE)
   } else {
-    loopRuns(mydir, user = user, colors = colors)
+    loopRuns(ifelse(dir.exists(mydir), mydir, file.path("output", mydir)), user = user, colors = colors)
   }
 
 }

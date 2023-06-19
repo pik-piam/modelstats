@@ -77,8 +77,10 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     # modelstat
     out[i, "modelstat"] <- "NA"
     if (length(latest_gdx) > 0) {
-      o_modelstat <- try(readGDX(gdx = latest_gdx, "o_modelstat", format = "simplest", react = "silent"), silent = TRUE)
-      if (! is.null(o_modelstat) && ! inherits(o_modelstat, "try-error")) out[i, "modelstat"] <- as.character(as.numeric(o_modelstat))
+      o_modelstat <- try(c(readGDX(gdx = latest_gdx, c("o_modelstat", "p80_modelstat"), format = "first_found", react = "silent")), silent = TRUE)
+      if (! is.null(o_modelstat) && ! inherits(o_modelstat, "try-error")) {
+        out[i, "modelstat"] <- gsub("0", ".", paste0(o_modelstat, collapse = ""))
+      }
     }
     if (file.exists(fle) && out[i, "modelstat"] == "NA") {
       load(fle)
@@ -115,6 +117,18 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       }
     }
 
+    # MIF
+    out[i,"Mif"] <- "NA"
+    if (length(cfgf) != 0 && file.exists(paste0(ii, "/", cfgf))) {
+      if (exists("stats") && isTRUE(stats[["config"]][["model_name"]] == "MAgPIE")) {
+        miffile <- paste0(ii, "/validation.mif")
+        out[i, "Mif"] <- if (file.exists(miffile) && file.info(miffile)[["size"]] > 99999) "yes" else "no"
+      } else {
+        miffile <- paste0(ii, "/REMIND_generic_", cfg[["title"]], ".mif")
+        out[i, "Mif"] <- if (file.exists(miffile) && file.info(miffile)[["size"]] > 3899999) "yes" else "no"
+      }
+    }
+
     # Iter
     cm_iteration_max <- cfg$gms$cm_iteration_max
     if (isTRUE(cfg$gms$cm_nash_autoconverge > 0) && grepl("nash", out[i, "RunType"])) {
@@ -139,11 +153,23 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       } else {
         if (out[i, "RunStatus"] == "NA") out[i, "RunStatus"] <- "Run interrupted"
       }
-      if (out[i, "RunStatus"] == "Normal completion" && file.exists(logmagtxt)) {
+      if (out[i, "RunStatus"] == "Normal completion" && file.exists(logtxt) && out[i, "jobInSLURM"] != "no") {
+        startrep <- suppressWarnings(system(paste0("tac ", logtxt, " | grep -m 1 'Starting output generation for'"), intern = TRUE))
+        endrep <- suppressWarnings(system(paste0("tac ", logtxt, " | grep -m 1 'Finished output generation for'"), intern = TRUE))
+        if (length(startrep) > length(endrep) && out[i, "jobInSLURM"] != "no") {
+          out[i, "RunStatus"] <- "Running reporting"
+        }
+      }
+      if (file.exists(logmagtxt) && out[i, "jobInSLURM"] != "no" && (out[i, "RunStatus"] == "Normal completion" || grepl("log-mag.txt", logmagtxt))) {
         startmag <- suppressWarnings(system(paste0("tac ", logmagtxt, " | grep -m 1 'Preparing MAgPIE'"), intern = TRUE))
         endmag <- suppressWarnings(system(paste0("tac ", logmagtxt, " | grep -m 1 'MAgPIE output was stored'"), intern = TRUE))
-        if (length(startmag) > length(endmag) && out[i, "jobInSLURM"] != "no") {
-          out[i, "RunStatus"] <- "Running MAgPIE"
+        if (length(startmag) > length(endmag)) {
+          fulllogmag <- gsub("-rem-", "-mag-", gsub("output", file.path("magpie", "output"), fulllog))
+          loopmag <- NULL
+          if (isTRUE(cfg$gms$cm_MAgPIE_coupling == "on") && file.exists(fulllogmag)) {
+            suppressWarnings(try(loopmag <- sub("^.*.= ", "", system(paste0("grep 'LOOPS' ", fulllogmag, " | tail -1"), intern = TRUE)), silent = TRUE))
+          }
+          out[i, "RunStatus"] <- paste("Run MAgPIE", loopmag)
         }
       }
     } else {
@@ -176,18 +202,6 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       if (isTRUE(as.numeric(calibiter) > 0)) out[i, "Iter"] <- paste0(out[i, "Iter"], " ", "Clb: ", calibiter)
       if (isTRUE(out[i, "Conv"] == "converged") && length(system(paste0("find ", ii, " -name 'input_*.gdx'"), intern = TRUE)) > 10) {
         out[i, "Conv"] <- "Clb_converged"
-      }
-    }
-
-    # MIF
-    out[i,"Mif"] <- "NA"
-    if (length(cfgf) != 0 && file.exists(paste0(ii, "/", cfgf))) {
-      if (exists("stats") && isTRUE(stats[["config"]][["model_name"]] == "MAgPIE")) {
-        miffile <- paste0(ii, "/validation.mif")
-        out[i, "Mif"] <- if (file.exists(miffile) && file.info(miffile)[["size"]] > 99999) "yes" else "no"
-      } else {
-        miffile <- paste0(ii, "/REMIND_generic_", cfg[["title"]], ".mif")
-        out[i, "Mif"] <- if (file.exists(miffile) && file.info(miffile)[["size"]] > 3899999) "yes" else "no"
       }
     }
 
