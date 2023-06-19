@@ -23,6 +23,11 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
   if (mydir[[1]] == "exit") return(NULL)
 
   red <- make_style("orangered")
+  if (colors) {
+    cat("# Color code: ", yellow("pending"), "/", yellow("startup"), ", ", cyan("running"), ", ",
+        underline(green("converged")), ", ", blue("converged (had INFES)"), ", ",
+        green("finished"), ", ", red("error"), ".\n\n", sep = "")
+  }
   if (isTRUE(sortbytime)) {
     a <- file.info(mydir)
     a <- a[a[, "isdir"] == TRUE, ]
@@ -35,7 +40,7 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
   if (file.exists("/p")) {
     coltitles <- c(paste0("Folder", paste(rep(" ", len - 6), collapse = "")),
       "Runtime    ", "inSlurm ", "RunType    ", "RunStatus        ", "Iter            ",
-      "Conv                 ", "modelstat          ", "Mif", "AppResults")
+      "Conv                 ", "modelstat            ", "Mif", "AppResults")
     lenCols <- c(nchar(coltitles)[-length(coltitles)], 3)
   } else {
     coltitles <- c(paste0("Folder", paste(rep(" ", len - 6), collapse = "")),
@@ -43,12 +48,7 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
       "Conv                 ", "Iter            ", "modelstat          ")
     lenCols <- nchar(coltitles)
   }
-  if (colors) {
-    cat("# Color code: ", yellow("pending"), "/", yellow("startup"), ", ", cyan("running"), ", ",
-        underline(green("converged")), ", ", blue("converged (had INFES)"), ", ",
-        green("finished"), ", ", red("error"), "\n", sep = "")
-  }
-  message(paste(coltitles, collapse = colSep))
+  cat(underline(paste(coltitles, collapse = colSep)), "\n")
   for (i in mydir) {
     status <- try(getRunStatus(i, user = user))
     if (! file.exists(paste0(i, "/", grep("^config.*", dir(i), value = TRUE)[1])) && status[["jobInSLURM"]] == "no") next
@@ -58,7 +58,7 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
     }
     out <- trimws(printOutput(status, lenCols = lenCols, colSep = colSep), which = "right", whitespace = " ")
     status <- unlist(status)
-    if (grepl(" y2| nlp_", out)) {
+    if (grepl("^y[12]", status[["Iter"]]) || grepl("^nlp_", status[["RunType"]])) {
       if (isFALSE(colors)) {
         cat(out)
       } else if (status[["Runtime"]] %in% "pending") {
@@ -67,7 +67,8 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
         cat(red(out))
       } else if (grepl("converged|Clb_converged", status[["RunStatus"]])) {
         cat(underline(green(out)))
-      } else if (grepl("222", status[["modelstat"]]) || status[["modelstat"]] == "2: Locally Optimal") {
+      } else if ((grepl("222", status[["modelstat"]]) && ! grepl(".", status[["modelstat"]], fixed = TRUE))
+                 || status[["modelstat"]] == "2: Locally Optimal") {
         cat(green(out))
       } else if (grepl("Run in progress", out)) {
         cat(cyan(out))

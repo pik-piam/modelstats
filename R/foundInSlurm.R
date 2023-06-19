@@ -20,12 +20,14 @@ foundInSlurm <- function(mydir = ".", user = NULL) {
   squeueresult <- system("/p/system/slurm/bin/squeue -h -o '%u %Z %j %M %T %q'", intern = TRUE)
   squeuefiltered <- grep(mydir, squeueresult, value = TRUE, fixed = TRUE)
   squeuefiltered <- grep(runname, squeuefiltered, value = TRUE, fixed = TRUE)
+  # try to find REMIND slurm job corresponding to coupled MAgPIE run
   if (length(squeuefiltered) == 0 && grepl("^C_.*-mag-[0-9]+$", runname)) {
     runrem <- gsub("-mag-", "-rem-", runname)
     squeuefiltered <- grep(runrem, squeueresult, value = TRUE, fixed = TRUE)
-    if (length(squeuefiltered) > 0) return("REMIND?")
+    squeuefiltered <- grep(dirname(mydir), squeuefiltered, value = TRUE, fixed = TRUE)
+    # if (length(squeuefiltered) > 0) return("REMIND")
   }
-  if (length(squeuefiltered) > 0) {
+  if (length(squeuefiltered) == 1) {
     time <- rev(strsplit(squeuefiltered, " ")[[1]])[[3]]
     qos <- rev(strsplit(squeuefiltered, " ")[[1]])[[1]]
     yourrun <- any(grepl(paste0("^", user, " "), squeuefiltered))
@@ -37,6 +39,8 @@ foundInSlurm <- function(mydir = ".", user = NULL) {
       runuser <- strsplit(squeuefiltered, " ")[[1]][[1]]
       return(paste0(runuser, startup, pending))
     }
+  } else if (length(squeuefiltered) > 1) {
+    return("yes")
   } else {
     return("no")
   }

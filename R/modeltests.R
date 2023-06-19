@@ -202,11 +202,11 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
   write("```", myfile)
   write(paste0("This is the result of the automated ", model, " testing suite on ",
                format(Sys.time(), "%Y-%m-%d"), "."), myfile, append = TRUE)
-  write(paste0("Path to runs:", mydir, "output/"), myfile, append = TRUE)
+  write(paste0("Path to runs: ", mydir, "output/"), myfile, append = TRUE)
   if (model == "REMIND") {
     write(paste0(c("Responsibilities:",
                    "  Robert     : SSP2EU-EU21",
-                   "  Jess / Olli: SSP2EU",
+                   "  Jess / Oli: SSP2EU",
                    "  Bjoern     : SDP",
                    "             : SSP1",
                    "             : SSP5"), collapse = "\n"), myfile, append = TRUE)
@@ -218,7 +218,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     write(paste0("Each run folder below should contain a compareScenarios PDF comparing the output of the current and",
                  " the last successful tests (comp_with_RUN-DATE.pdf)"), myfile, append = TRUE)
   }
-  write(paste0("Note: 'Mif' = FALSE indicates a possible error in output generation, please check!"),
+  write(paste0("Note: 'Mif' = 'no' indicates a possible error in output generation, please check!"),
         myfile, append = TRUE)
   write(paste0("If you are currently viewing the email: Overview of the last test is in red, ",
                "and of the current test in green"), myfile, append = TRUE)
@@ -228,7 +228,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
 
   colSep <- "  "
   coltitles <- c(
-    "Run                                        ", "Runtime    ", "", "RunType    ", "RunStatus         ",
+    "Run                                          ", "Runtime    ", "", "RunType    ", "RunStatus         ",
     "Iter            ", "Conv                 ", "modelstat          ", "Mif     ", "inAppResults"
   )
   write(paste(coltitles, collapse = colSep), myfile, append = TRUE)
