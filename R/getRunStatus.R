@@ -40,7 +40,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
     if (onCluster) out[i, "jobInSLURM"] <- foundInSlurm(ii, user)
 
-#    if (onCluster) if (!out[i,"jobInSLURM"] & onlyrunning) {
+#    if (onCluster) if (!out[i, "jobInSLURM"] & onlyrunning) {
 #     out <- out[setdiff(rownames(out),i),]
 #     next
 #    }
@@ -118,7 +118,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     }
 
     # MIF
-    out[i,"Mif"] <- "NA"
+    out[i, "Mif"] <- "NA"
     if (length(cfgf) != 0 && file.exists(paste0(ii, "/", cfgf))) {
       if (exists("stats") && isTRUE(stats[["config"]][["model_name"]] == "MAgPIE")) {
         miffile <- paste0(ii, "/validation.mif")
@@ -144,9 +144,19 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       if (length(loop) > 0) out[i, "Iter"] <- loop
       if (length(cm_iteration_max) > 0) out[i, "Iter"] <- paste0(out[i, "Iter"], "/", cm_iteration_max)
       suppressWarnings(try(out[i, "RunStatus"] <- substr(sub("\\(s\\)", "", sub("\\*\\*\\* Status: ", "", system(paste0("grep '*** Status: ' ", fulllog), intern = TRUE))), start = 1, stop = 17), silent = TRUE))
-      if (onCluster & out[i, "RunStatus"] == "NA") {
+      if (onCluster && out[i, "RunStatus"] == "NA") {
         if (out[i, "jobInSLURM"] == "no") {
           out[i, "RunStatus"] <- "Run interrupted"
+          slurmerror <- NULL
+          if (file.exists(logtxt)) {
+            slurmerror <- NULL
+            suppressWarnings(try(slurmerror <- system(paste0("grep 'slurmstepd: error' ", logtxt), intern = TRUE), silent = TRUE))
+            if (isTRUE(any(grepl("DUE TO TIME LIMIT", slurmerror)))) {
+              out[i, "RunStatus"] <- "Timeout interrupt"
+            } else if (isTRUE(any(grepl("memory|oom-kill", slurmerror)))) {
+              out[i, "RunStatus"] <- "Memory interrupt"
+            }
+          }
         } else {
           out[i, "RunStatus"] <- "Run in progress"
         }
@@ -180,7 +190,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     out[i, "Conv"] <- "NA"
     if (exists("cfg") && isTRUE(grepl("nash", out[i, "RunType"])) && length(latest_gdx) > 0) {
       iter_no  <- try(as.numeric(readGDX(gdx = latest_gdx, "o_iterationNumber", format = "simplest")), silent = TRUE)
-      s80_bool <- try(as.numeric(readGDX(gdx = latest_gdx, "s80_bool", types="parameters", format = "simplest")), silent = TRUE)
+      s80_bool <- try(as.numeric(readGDX(gdx = latest_gdx, "s80_bool", types = "parameters", format = "simplest")), silent = TRUE)
       if (! inherits(s80_bool, "try-error") && ! inherits(iter_no, "try-error")) {
         if (s80_bool == 1) {
           out[i, "Conv"] <- if (file.exists(gdx_non_optimal)) "converged (had INFES)" else "converged"
@@ -197,7 +207,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     # END Conv
 
     # Calib Iter
-    if (isTRUE(grepl("Calib", out[i, "RunType"])) && file.exists(logtxt)) {
+    if ((isTRUE(grepl("Calib", out[i, "RunType"])) || isTRUE(cfg$gms$CES_parameters == "calibrate")) && file.exists(logtxt)) {
       calibiter <- tail(suppressWarnings(system(paste0("grep 'CES calibration iteration' ", logtxt, " |  grep -Eo  '[0-9]{1,2}'"), intern = TRUE)), n = 1)
       if (isTRUE(as.numeric(calibiter) > 0)) out[i, "Iter"] <- paste0(out[i, "Iter"], " ", "Clb: ", calibiter)
       if (isTRUE(out[i, "Conv"] == "converged") && length(system(paste0("find ", ii, " -name 'input_*.gdx'"), intern = TRUE)) > 10) {
@@ -218,7 +228,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       }
     }
     if (out[i, "Runtime"] == "NA") {
-      if(grepl("pending$", out[i, "jobInSLURM"])) {
+      if (grepl("pending$", out[i, "jobInSLURM"])) {
         out[i, "Runtime"] <- "pending"
       } else if (grepl("startup$", out[i, "jobInSLURM"])) {
         out[i, "Runtime"] <- "startup"
