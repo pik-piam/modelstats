@@ -25,7 +25,6 @@ foundInSlurm <- function(mydir = ".", user = NULL) {
     runrem <- gsub("-mag-", "-rem-", runname)
     squeuefiltered <- grep(runrem, squeueresult, value = TRUE, fixed = TRUE)
     squeuefiltered <- grep(dirname(mydir), squeuefiltered, value = TRUE, fixed = TRUE)
-    # if (length(squeuefiltered) > 0) return("REMIND")
   }
   if (length(squeuefiltered) == 1) {
     time <- rev(strsplit(squeuefiltered, " ")[[1]])[[3]]
@@ -39,8 +38,11 @@ foundInSlurm <- function(mydir = ".", user = NULL) {
       runuser <- strsplit(squeuefiltered, " ")[[1]][[1]]
       return(paste0(runuser, startup, pending))
     }
+  } else if (length(unique(sapply(strsplit(squeuefiltered, " "), `[`, 1))) == 1) {
+    runuser <- strsplit(squeuefiltered[[1]], " ")[[1]][[1]]
+    return(runuser)
   } else if (length(squeuefiltered) > 1) {
-    return("yes")
+    return("> 1 user")
   } else {
     return("no")
   }
