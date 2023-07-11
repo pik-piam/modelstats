@@ -41,9 +41,9 @@ modeltests <- function(
     gitPath = "/p/system/packages/git/2.16.1/bin/git"  # nolint: absolute_path_linter
 ) {
   setwd(mydir)
-  
+
   message("\n=========================================================
-  Begin of AMT procedure ", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " in ", mydir, 
+  Begin of AMT procedure ", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " in ", mydir,
   "\n=========================================================\n")
 
   if (readLines("../.testsstatus") == "start") {
@@ -54,7 +54,7 @@ modeltests <- function(
     writeLines("end", con = "../.testsstatus")
   } else if (readLines("../.testsstatus") == "end") {
     message("Found 'end' in ", normalizePath("../.testsstatus"), "\nCalling 'evaluateRuns'")
-    withr::with_dir("output", { 
+    withr::with_dir("output", {
       evaluateRuns(model = model, mydir = mydir, gitPath = gitPath, compScen = compScen, email = email,
                    mattermostToken = mattermostToken, gitdir = gitdir, iamccheck = iamccheck, user = user)
                    })
@@ -64,7 +64,7 @@ modeltests <- function(
   } else {
     message("Found ", readLines("../.testsstatus"), " in ", normalizePath("../.testsstatus"), ". Doing nothing")
   }
-  
+
 }
 
 .mattermostBotMessage <- function(message, token) {
@@ -138,13 +138,13 @@ startRuns <- function(test, model, mydir, gitPath, user) {
       system(paste0("Rscript start.R ",
                     "startgroup=AMT titletag=AMT slurmConfig=\"--qos=standby --nodes=1 --tasks-per-node=12\" ",
                     "config/scenario_config.csv"))
-                    
+
       settings <- read.csv2("config/scenario_config.csv",
                              stringsAsFactors = FALSE,
                              row.names = 1,
                              comment.char = "#",
                              na.strings = "")
-                             
+
       runsToStart <- selectScenarios(settings = settings, interactive = FALSE, startgroup = "AMT")
       row.names(runsToStart) <- paste0(row.names(runsToStart), "-AMT")
       saveRDS(runsToStart, file = paste0(mydir, "/runsToStart.rds"))
@@ -194,7 +194,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     message(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " - all AMT runs finished.")
   }
 
-  message("Compiling the README.md to be committed to testing_suite repo.")  
+  message("Compiling the README.md to be committed to testing_suite repo.")
   commitTested <- sub("commit ", "", system(paste0(gitPath, " log -1"), intern = TRUE)[[1]])
   commitsSinceLastTest <- system(paste0(gitPath, " log --merges --pretty=oneline ",
                            lastCommit, "..", commitTested, " --abbrev-commit | grep 'Merge pull request'"), intern = TRUE)
@@ -228,11 +228,12 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
 
   colSep <- "  "
   coltitles <- c(
-    "Run                                          ", "Runtime    ", "", "RunType    ", "RunStatus         ",
-    "Iter            ", "Conv                 ", "modelstat          ", "Mif     ", "inAppResults"
+    "Run                                           ", "Runtime    ", "", "RunType    ", "RunStatus         ",
+    "Iter            ", "Conv                 ", "modelstat          ", "Mif", "AppResults"
   )
   write(paste(coltitles, collapse = colSep), myfile, append = TRUE)
-  
+  lenCols <- c(nchar(coltitles)[-length(coltitles)], 1)
+
   isdir <- NULL
   if (model != "MAgPIE") {
     gRSold <- readRDS("gRS.rds")
@@ -259,7 +260,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
   message("Starting analysis for the list of the following runs:\n", paste0(paths, collapse = "\n"))
   for (i in paths) {
     grsi <- getRunStatus(i)
-    write(sub("\n$", "", printOutput(grsi, lenCols = nchar(coltitles), colSep = colSep)), myfile, append = TRUE)
+    write(sub("\n$", "", printOutput(grsi, lenCols = lenCols, colSep = colSep)), myfile, append = TRUE)
     if (model == "REMIND") {
       if (grsi[, "RunType"] != "Calib_nash" && grsi[, "Conv"] != "converged" && !grepl("testOneRegi", i)) {
         errorList <- c(errorList, "Some run(s) did not converge")
@@ -320,7 +321,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       message("Finished analysis for ", i, " and changed back to ", normalizePath("."))
     }
   }
-  
+
   if (model == "REMIND") {
     # Find and print runs not started
     if (length(paths) < length(rownames(runsToStart)) + 1) {
@@ -331,7 +332,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       write(" ", myfile, append = TRUE)
     }
   }
-  
+
   if (iamccheck) {
     a <- NULL
     if (length(paths) > 0) {
@@ -358,12 +359,12 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         append = TRUE)
   write("```", myfile, append = TRUE)
   message("Finished compiling README.md")
-  
+
   if (email) {
     message("Copying updated README.md to ", gitdir, " and pushing from there.")
     sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
   }
-  
+
   if (!is.null(errorList) && !is.null(mattermostToken)) {
     message <- paste0("Some ",
                       model,
@@ -372,7 +373,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
                       "/testing_suite")
     .mattermostBotMessage(message = message, token = mattermostToken)
   }
-  
+
   if (!test) saveRDS(commitTested, file = paste0(mydir, "/lastcommit.rds"))
   message("Function 'evaluateRuns' finished.")
 }
