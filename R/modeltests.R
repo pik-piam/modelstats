@@ -276,7 +276,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         errorList <- c(errorList, "Some run(s) did not converge")
       }
     }
-    if (grsi[, "runInAppResults"] != "TRUE") errorList <- c(errorList, "Some run(s) did not report correctly")
+    if (grsi[, "runInAppResults"] != "yes") errorList <- c(errorList, "Some run(s) did not report correctly")
     if (grsi[, "Conv"] == "converged") {
       setwd(i)
       message("Changed to ", normalizePath("."))
