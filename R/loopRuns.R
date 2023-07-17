@@ -63,7 +63,7 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
         cat(out)
       } else if (status[["Runtime"]] %in% "pending") {
         cat(yellow(out))
-      } else if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted", status[["RunStatus"]])) {
+      } else if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted|Abort", status[["RunStatus"]])) {
         cat(red(out))
       } else if (grepl("converged|Clb_converged", status[["RunStatus"]])) {
         cat(underline(green(out)))
