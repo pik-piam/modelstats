@@ -56,6 +56,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     fulllog         <- file.path(ii, "full.log")
     logtxt          <- file.path(ii, "log.txt")
     logmagtxt       <- file.path(ii, "log-mag.txt")
+    abortgdx        <- file.path(ii, "abort.gdx")
     if (! file.exists(logmagtxt)) logmagtxt <- logtxt
     gdxfiles <- c(gdx, gdx_non_optimal)[file.exists(c(gdx, gdx_non_optimal))]
     latest_gdx <- NULL
@@ -168,6 +169,15 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         endrep <- suppressWarnings(system(paste0("tac ", logtxt, " | grep -m 1 'Finished output generation for'"), intern = TRUE))
         if (length(startrep) > length(endrep) && out[i, "jobInSLURM"] != "no") {
           out[i, "RunStatus"] <- "Running reporting"
+        }
+      }
+      if (out[i, "RunStatus"] == "Execution error" && file.exists(abortgdx)) {
+        # check if error was due to consecutive infes
+        maxinfes <- try(as.numeric(readGDX(gdx = abortgdx, "cm_abortOnConsecFail", format = "simplest")), silent = TRUE)
+        cf <- try(quitte::as.quitte(readGDX(gdx = abortgdx, "p80_trackConsecFail")), silent = TRUE)
+        if (! inherits(maxinfes, "try-error") && isTRUE(maxinfes > 0) && ! inherits(cf, "try-error") && ! is.null(cf)) {
+          cf <- unique(cf[cf$value == maxinfes, ]$region)
+          if (length(cf) > 0) out[i, "RunStatus"] <- paste0("Abort ", if (length(cf) == 1) paste0(cf, " "), maxinfes, "*Infes")
         }
       }
       if (file.exists(logmagtxt) && out[i, "jobInSLURM"] != "no" && (out[i, "RunStatus"] == "Normal completion" || grepl("log-mag.txt", logmagtxt))) {
