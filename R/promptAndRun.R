@@ -3,7 +3,7 @@
 #' prompts runs, will be called by rs2
 #'
 #' @param mydir a dir or vector of dirs
-#' @param user the user whose runs will be shown
+#' @param user the user whose runs will be shown. For -t, the pattern used for matching
 #' @param daysback integer defining the number of days -c will look back in time to find runs
 #'
 #' @author Anastasis Giannousakis, Oliver Richters
@@ -17,9 +17,16 @@
 #'
 promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
   mydir <- strsplit(mydir, ',')[[1]]
+  colors <- ! any(grepl("-.*b.*", mydir))
+  if (isTRUE(mydir == "-t")) {
+    amtPath <- "/p/projects/remind/modeltests/remind/output/"
+    amtPattern <- if (is.null(user) || user == "") readRDS("/p/projects/remind/modeltests/remind/runcode.rds") else user
+    amtDirs <- dir(path = amtPath, pattern = amtPattern, full.names = TRUE)
+    loopRuns(amtDirs, user = NULL, colors = colors)
+    return(invisible())
+  }
   if (is.null(user) || user == "") user <- Sys.info()[["user"]]
   if (daysback == "") daysback <- 3
-  colors <- ! any(grepl("-.*b.*", mydir))
   if (isFALSE(colors)) mydir <- gsub("b", "", mydir)
   if (isTRUE(mydir == ".")) {
     loopRuns(".", user = user, colors = colors)
@@ -36,11 +43,6 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     folder <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "output" else "."
     # load all directories with a config file plus all that look like coupled runs to include them if they are pending
     loopRuns(file.path(folder, dir(folder)), user = user, colors = colors)
-  } else if (isTRUE(mydir == "-t")) {
-    amtPath <- "/p/projects/remind/modeltests/output/"
-    amtPattern <- readRDS("/p/projects/remind/modeltests/runcode.rds")
-    amtDirs <- dir(path = amtPath, pattern = amtPattern, full.names = TRUE)
-    loopRuns(amtDirs, user = user, colors = colors)
   } else if (isTRUE(mydir %in% c("-p", "-s"))) {
     folders <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "output" else "."
     if (isTRUE(mydir %in% "-p") && dir.exists(file.path("magpie", "output"))) folders <- c(folders, file.path("magpie", "output"))

@@ -9,7 +9,7 @@ promptAndRun(mydir = ".", user = NULL, daysback = 3)
 \arguments{
 \item{mydir}{a dir or vector of dirs}
 
-\item{user}{the user whose runs will be shown}
+\item{user}{the user whose runs will be shown. For -t, the pattern used for matching}
 
 \item{daysback}{integer defining the number of days -c will look back in time to find runs}
 }
