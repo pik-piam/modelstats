@@ -8,7 +8,7 @@
 #'
 #' @author Anastasis Giannousakis, Oliver Richters
 #' @import crayon
-#' @importFrom gtools mixedsort
+#' @importFrom gtools mixedsort mixedorder
 #' @export
 #' @examples
 #' \dontrun{
@@ -49,7 +49,7 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     if (isTRUE(mydir %in% "-p") && dir.exists(file.path("magpie", "output"))) folders <- c(folders, file.path("magpie", "output"))
     dirs <- NULL
     for (folder in folders) {
-      fdirs <- mixedsort(grep("^C_.*-(rem|mag)-[0-9]+$", dir(folder), value = TRUE))
+      fdirs <- mixedsort(grep("^C_.*-(rem|mag)-[0-9]+$", dir(folder), value = TRUE), scientific = FALSE, numeric.type = "decimal")
       if (isTRUE(mydir %in% "-p")) {
         dirs <- c(dirs, file.path(folder, fdirs))
       } else { # -s shows only last run
@@ -60,7 +60,9 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
         dirs <- c(dirs, file.path(folder, lastdirs))
       }
     }
-    loopRuns(sort(dirs), user = user, colors = colors, sortbytime = FALSE)
+    # order and make sure rem-1 is not interpreted as negative number
+    dirs <- dirs[mixedorder(gsub("-", "", dirs), scientific = FALSE, numeric.type = "decimal")]
+    loopRuns(dirs, user = user, colors = colors, sortbytime = FALSE)
   } else if (all(mydir %in% c("-cr", "-a", "-c"))) {
     myruns <- system(paste0("squeue -u ", user, " -h -o '%Z'"), intern = TRUE)
     runnames <- system(paste0("squeue -u ", user, " -h -o '%j'"), intern = TRUE)
