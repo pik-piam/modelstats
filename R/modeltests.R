@@ -232,7 +232,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     "Iter            ", "Conv                 ", "modelstat          ", "Mif", "AppResults"
   )
   write(paste(coltitles, collapse = colSep), myfile, append = TRUE)
-  lenCols <- c(nchar(coltitles)[-length(coltitles)], 1)
+  lenCols <- c(nchar(coltitles)[-length(coltitles)], 3)
 
   isdir <- NULL
   if (model != "MAgPIE") {
@@ -276,19 +276,19 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         errorList <- c(errorList, "Some run(s) did not converge")
       }
     }
-    if (grsi[, "runInAppResults"] != "TRUE") errorList <- c(errorList, "Some run(s) did not report correctly")
+    if (grsi[, "runInAppResults"] != "yes") errorList <- c(errorList, "Some run(s) did not report correctly")
     if (grsi[, "Conv"] == "converged") {
       setwd(i)
       message("Changed to ", normalizePath("."))
       cfg <- NULL
-      if (any(grepl(sub("^.*./output/", "", getwd()), rownames(filter(gRS, Conv == "converged", Mif == TRUE))))) {
+      if (any(grepl(sub("^.*./output/", "", getwd()), rownames(filter(gRS, Conv == "converged", Mif == "yes"))))) {
         load("config.Rdata")
       } else {
         setwd("../")
         message("Skipping ", i, " and changed back to ", normalizePath("."))
         next
       }
-      sameRuns <- grep(cfg$title, rownames(filter(gRS, Conv == "converged", Mif == TRUE)), value = TRUE)
+      sameRuns <- grep(cfg$title, rownames(filter(gRS, Conv == "converged", Mif == "yes")), value = TRUE)
       rmRun <- grep(sub("output/", "", cfg$results_folder), sameRuns)
       sameRuns <- sameRuns[-rmRun]
       if (length(sameRuns) > 0) {
