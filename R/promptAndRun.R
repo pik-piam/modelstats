@@ -20,6 +20,7 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
   colors <- ! any(grepl("-.*b.*", mydir))
   if (isTRUE(mydir == "-t")) {
     amtPath <- "/p/projects/remind/modeltests/remind/output/"
+    cat("Results from", amtPath, "\n")
     amtPattern <- if (is.null(user) || user == "") readRDS("/p/projects/remind/modeltests/remind/runcode.rds") else user
     amtDirs <- dir(path = amtPath, pattern = amtPattern, full.names = TRUE)
     loopRuns(amtDirs, user = NULL, colors = colors)
