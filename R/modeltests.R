@@ -262,7 +262,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     grsi <- getRunStatus(i)
     write(sub("\n$", "", printOutput(grsi, lenCols = lenCols, colSep = colSep)), myfile, append = TRUE)
     if (model == "REMIND") {
-      if (grsi[, "RunType"] != "Calib_nash" && grsi[, "Conv"] != "converged" && !grepl("testOneRegi", i)) {
+      if (grsi[, "RunType"] != "Calib_nash" && grsi[, "Conv"] %in% c("converged", "converged (had INFES)") && ! grepl("testOneRegi", i)) {
         errorList <- c(errorList, "Some run(s) did not converge")
       }
       if (grsi[, "RunType"] == "Calib_nash" && grsi[, "Conv"] != "Clb_converged") {
@@ -277,7 +277,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       }
     }
     if (grsi[, "runInAppResults"] != "yes") errorList <- c(errorList, "Some run(s) did not report correctly")
-    if (grsi[, "Conv"] == "converged") {
+    if (grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
       setwd(i)
       message("Changed to ", normalizePath("."))
       cfg <- NULL
@@ -288,7 +288,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         message("Skipping ", i, " and changed back to ", normalizePath("."))
         next
       }
-      sameRuns <- grep(cfg$title, rownames(filter(gRS, Conv == "converged", Mif == "yes")), value = TRUE)
+      sameRuns <- grep(cfg$title, rownames(filter(gRS, Conv %in% c("converged", "converged (had INFES)"), Mif == "yes")), value = TRUE)
       rmRun <- grep(sub("output/", "", cfg$results_folder), sameRuns)
       sameRuns <- sameRuns[-rmRun]
       if (length(sameRuns) > 0) {
