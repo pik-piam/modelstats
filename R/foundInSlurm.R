@@ -23,7 +23,7 @@ foundInSlurm <- function(mydir = ".", user = NULL) {
   # try to find REMIND slurm job corresponding to coupled MAgPIE run
   if (length(squeuefiltered) == 0 && grepl("^C_.*-mag-[0-9]+$", runname)) {
     runrem <- gsub("-mag-", "-rem-", runname)
-    squeuefiltered <- grep(runrem, squeueresult, value = TRUE, fixed = TRUE)
+    squeuefiltered <- grep(paste0(runrem, " "), squeueresult, value = TRUE, fixed = TRUE)
     squeuefiltered <- grep(dirname(mydir), squeuefiltered, value = TRUE, fixed = TRUE)
   }
   if (length(squeuefiltered) == 1) {
