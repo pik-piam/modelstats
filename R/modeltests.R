@@ -262,13 +262,13 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     grsi <- getRunStatus(i)
     write(sub("\n$", "", printOutput(grsi, lenCols = lenCols, colSep = colSep)), myfile, append = TRUE)
     if (model == "REMIND") {
-      if (grsi[, "RunType"] != "Calib_nash" && grsi[, "Conv"] %in% c("converged", "converged (had INFES)") && ! grepl("testOneRegi", i)) {
+      if (grsi[, "RunType"] != "Calib_nash" && grsi[, "Conv"] %in% c("converged", "converged (had INFES)") && ! grepl("1Regi|testOneRegi", i)) {
         errorList <- c(errorList, "Some run(s) did not converge")
       }
       if (grsi[, "RunType"] == "Calib_nash" && grsi[, "Conv"] != "Clb_converged") {
         errorList <- c(errorList, "Some run(s) did not converge")
       }
-      if (grsi[, "modelstat"] != "2: Locally Optimal" && grepl("testOneRegi", i)) {
+      if (grsi[, "modelstat"] != "2: Locally Optimal" && grepl("1Regi|testOneRegi", i)) {
         errorList <- c(errorList, "testOneRegi does not return an optimal solution")
       }
     } else if (model == "MAgPIE") {
