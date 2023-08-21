@@ -227,7 +227,9 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
     # Runtime
     out[i, "Runtime"] <- "NA"
-    if (file.exists(fle)) {
+    if (grepl("pending$", out[i, "jobInSLURM"])) {
+      out[i, "Runtime"] <- "pending"
+    } else if (file.exists(fle)) {
       load(fle)
       if (exists("stats")) {
         if (any(grepl("GAMSEnd", names(stats)))) {
@@ -237,12 +239,8 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         }
       }
     }
-    if (out[i, "Runtime"] == "NA") {
-      if (grepl("pending$", out[i, "jobInSLURM"])) {
-        out[i, "Runtime"] <- "pending"
-      } else if (grepl("startup$", out[i, "jobInSLURM"])) {
-        out[i, "Runtime"] <- "startup"
-      }
+    if (out[i, "Runtime"] == "NA" && grepl("startup$", out[i, "jobInSLURM"])) {
+      out[i, "Runtime"] <- "startup"
     }
     out[i, "jobInSLURM"] <- gsub(" *pending$", "", out[i, "jobInSLURM"])
     out[i, "jobInSLURM"] <- gsub(" *startup$", "", out[i, "jobInSLURM"])
