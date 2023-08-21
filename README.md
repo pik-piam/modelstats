@@ -1,6 +1,6 @@
 # Run Analysis Tools
 
-R package **modelstats**, version **0.14.22**
+R package **modelstats**, version **0.14.23**
 
 [![CRAN status](https://www.r-pkg.org/badges/version/modelstats)](https://cran.r-project.org/package=modelstats)  [![R build status](https://github.com/pik-piam/modelstats/workflows/check/badge.svg)](https://github.com/pik-piam/modelstats/actions) [![codecov](https://codecov.io/gh/pik-piam/modelstats/branch/master/graph/badge.svg)](https://app.codecov.io/gh/pik-piam/modelstats) [![r-universe](https://pik-piam.r-universe.dev/badges/modelstats)](https://pik-piam.r-universe.dev/builds)
 
@@ -47,7 +47,7 @@ In case of questions / problems please contact Anastasis Giannousakis <giannou@p
 
 To cite package **modelstats** in publications use:
 
-Giannousakis A (2023). _modelstats: Run Analysis Tools_. R package version 0.14.22, <URL: https://github.com/pik-piam/modelstats>.
+Giannousakis A (2023). _modelstats: Run Analysis Tools_. R package version 0.14.23, <URL: https://github.com/pik-piam/modelstats>.
 
 A BibTeX entry for LaTeX users is
 
@@ -56,7 +56,7 @@ A BibTeX entry for LaTeX users is
   title = {modelstats: Run Analysis Tools},
   author = {Anastasis Giannousakis},
   year = {2023},
-  note = {R package version 0.14.22},
+  note = {R package version 0.14.23},
   url = {https://github.com/pik-piam/modelstats},
 }
 ```
