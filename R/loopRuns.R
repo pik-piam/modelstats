@@ -56,6 +56,21 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
       cat(basename(i), "skipped because of error\n")
       next
     }
+    t <- Sys.time()
+    # format Runtime which is given in seconds. Prepend > if run is still active.
+    # Use pending/startup dependent on slurm status
+    if (grepl("pending$", status[["jobInSLURM"]])) {
+      status["Runtime"] <- "pending"
+    } else if (! is.na(status[["Runtime"]])) {
+      status["Runtime"] <- format(round(difftime(t + status[["Runtime"]], t), 1))
+      if (! status["jobInSLURM"] == "no") status["Runtime"] <- paste(">", status["Runtime"])
+    } else if (grepl("startup$", status[["jobInSLURM"]])) {
+      status["Runtime"] <- "startup"
+    }
+    status["jobInSLURM"] <- gsub(" *startup$| *pending$", "", status["jobInSLURM"])
+
+    status["RunType"] <- gsub("testOneRegi", "1Regi", status["RunType"])
+
     out <- trimws(printOutput(status, lenCols = lenCols, colSep = colSep), which = "right", whitespace = " ")
     status <- unlist(status)
     if (grepl("^y[12]", status[["Iter"]]) || grepl("^nlp_", status[["RunType"]])) {
