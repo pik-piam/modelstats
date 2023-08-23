@@ -9,6 +9,7 @@
 #'
 #' @author Anastasis Giannousakis
 #' @import crayon
+#' @importFrom lubridate make_difftime
 #' @export
 #' @examples
 #' \dontrun{
@@ -56,6 +57,24 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
       cat(basename(i), "skipped because of error\n")
       next
     }
+    # format Runtime which is given in seconds. Prepend > if run is still active.
+    # Use pending/startup dependent on slurm status
+    if (grepl("pending$", status[["jobInSLURM"]])) {
+      status["Runtime"] <- "pending"
+    } else if (! is.na(status[["Runtime"]])) {
+      status["Runtime"] <- format(round(make_difftime(second = status[["Runtime"]]), 1))
+      if (! status["jobInSLURM"] == "no") {
+        status["Runtime"] <- paste0(">", if (nchar(status["Runtime"]) < 10) " ", status["Runtime"])
+      }
+    } else if (grepl("startup$", status[["jobInSLURM"]])) {
+      status["Runtime"] <- "startup"
+    } else {
+      status["Runtime"] <- format(status["Runtime"])
+    }
+    status["jobInSLURM"] <- gsub(" *startup$| *pending$", "", status["jobInSLURM"])
+
+    status["RunType"] <- gsub("testOneRegi", "1Regi", status["RunType"])
+
     out <- trimws(printOutput(status, lenCols = lenCols, colSep = colSep), which = "right", whitespace = " ")
     status <- unlist(status)
     if (grepl("^y[12]", status[["Iter"]]) || grepl("^nlp_", status[["RunType"]])) {

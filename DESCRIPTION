@@ -1,8 +1,8 @@
 Package: modelstats
 Type: Package
 Title: Run Analysis Tools
-Version: 0.14.23
-Date: 2023-08-21
+Version: 0.15.0
+Date: 2023-08-23
 Authors@R: c(person("Anastasis", "Giannousakis", email = "giannou@pik-potsdam.de", role = c("aut","cre")))
 Description: A collection of tools to analyze model runs.
 Imports: 
@@ -12,6 +12,7 @@ Imports:
     gdx,
     gtools,
     piamModelTests,
+    lubridate,
     lucode2,
     utils,
     magclass,

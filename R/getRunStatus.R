@@ -226,27 +226,19 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     }
 
     # Runtime
-    out[i, "Runtime"] <- "NA"
-    if (grepl("pending$", out[i, "jobInSLURM"])) {
-      out[i, "Runtime"] <- "pending"
-    } else if (file.exists(fle)) {
+    out[i, "Runtime"] <- NA
+    if (file.exists(fle)) {
       load(fle)
       if (exists("stats")) {
         if (any(grepl("GAMSEnd", names(stats)))) {
-          out[i, "Runtime"] <- format(round(stats[["timeGAMSEnd"]] - stats[["timeGAMSStart"]], 1))
+          out[i, "Runtime"] <- as.numeric(round(difftime(stats[["timeGAMSEnd"]], stats[["timeGAMSStart"]], units = "secs"), 0))
         } else if (any(grepl("timePrepareStart", names(stats))) && ! out[i, "jobInSLURM"] %in% "no") {
-          out[i, "Runtime"] <- paste0("> ", format(round(Sys.time() - stats[["timePrepareStart"]], 1)))
+          out[i, "Runtime"] <- as.numeric(round(difftime(Sys.time(), stats[["timePrepareStart"]], units = "secs"), 0))
         }
       }
     }
-    if (out[i, "Runtime"] == "NA" && grepl("startup$", out[i, "jobInSLURM"])) {
-      out[i, "Runtime"] <- "startup"
-    }
-    out[i, "jobInSLURM"] <- gsub(" *pending$", "", out[i, "jobInSLURM"])
-    out[i, "jobInSLURM"] <- gsub(" *startup$", "", out[i, "jobInSLURM"])
 
   } # END DIR LOOP
-
   return(out)
 
 }

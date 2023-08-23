@@ -236,7 +236,10 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
 
   isdir <- NULL
   if (model != "MAgPIE") {
-    gRSold <- readRDS("gRS.rds")
+    gRSold <- NULL
+    if (file.exists("gRS.rds")) {
+      gRSold <- readRDS("gRS.rds")
+    }
     try(gRS <- rbind(gRSold, getRunStatus(setdiff(dir(), rownames(gRSold)))))
     if (exists("gRS")) {
       saveRDS(gRS, "gRS.rds")
