@@ -38,7 +38,7 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
       folder <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "./output" else "."
       dirs <- c(folder, list.dirs(folder, recursive = FALSE))
       chosendirs <- gms::chooseFromList(dirs, type = "folders")
-      loopRuns(if (length(chosendirs) == 0) "exit" else chosendirs, user = user)
+      loopRuns(if (length(chosendirs) == 0) "exit" else chosendirs, user = user, sortbytime = FALSE)
     }
   } else if (isTRUE(mydir == "-f")) {
     folder <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "output" else "."
