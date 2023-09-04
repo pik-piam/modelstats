@@ -328,7 +328,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
   if (model == "REMIND") {
     # Find and print runs not started
     if (length(paths) < length(rownames(runsToStart)) + 1) {
-      runsNotStarted <- setdiff(c("default-AMT-", rownames(runsToStart)), sub("_.*", "", paths))
+      runsNotStarted <- setdiff(c("default-AMT", rownames(runsToStart)), sub("_.*", "", paths))
       write(" ", myfile, append = TRUE)
       write(paste0("These scenarios did not start at all:"), myfile, append = TRUE)
       write(runsNotStarted, myfile, append = TRUE)
