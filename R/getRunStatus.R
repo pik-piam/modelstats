@@ -173,8 +173,8 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       }
       if (out[i, "RunStatus"] == "Execution error" && file.exists(abortgdx)) {
         # check if error was due to consecutive infes
-        maxinfes <- try(as.numeric(readGDX(gdx = abortgdx, "cm_abortOnConsecFail", format = "simplest")), silent = TRUE)
-        cf <- try(quitte::as.quitte(readGDX(gdx = abortgdx, "p80_trackConsecFail")), silent = TRUE)
+        maxinfes <- try(as.numeric(readGDX(gdx = abortgdx, "cm_abortOnConsecFail", format = "simplest", react = "silent")), silent = TRUE)
+        cf <- try(quitte::as.quitte(readGDX(gdx = abortgdx, "p80_trackConsecFail", react = "silent")), silent = TRUE)
         if (! inherits(maxinfes, "try-error") && isTRUE(maxinfes > 0) && ! inherits(cf, "try-error") && ! is.null(cf)) {
           cf <- unique(cf[cf$value == maxinfes, ]$region)
           if (length(cf) > 0) out[i, "RunStatus"] <- paste0("Abort ", if (length(cf) == 1) paste0(cf, " "), maxinfes, "*Infes")
