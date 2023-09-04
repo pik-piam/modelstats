@@ -263,6 +263,9 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
   message("Starting analysis for the list of the following runs:\n", paste0(paths, collapse = "\n"))
   for (i in paths) {
     grsi <- getRunStatus(i)
+    if ("Runtime" %in% names(grsi) && is.numeric(grsi[["Runtime"]])) {
+      grsi["Runtime"] <- format(round(make_difftime(second = grsi[["Runtime"]]), 1))
+    }
     write(sub("\n$", "", printOutput(grsi, lenCols = lenCols, colSep = colSep)), myfile, append = TRUE)
     if (model == "REMIND") {
       if (grsi[, "RunType"] != "Calib_nash" && grsi[, "Conv"] %in% c("converged", "converged (had INFES)") && ! grepl("1Regi|testOneRegi", i)) {
