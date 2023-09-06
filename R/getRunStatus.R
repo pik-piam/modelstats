@@ -177,7 +177,8 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         cf <- try(quitte::as.quitte(readGDX(gdx = abortgdx, "p80_trackConsecFail", react = "silent")), silent = TRUE)
         if (! inherits(maxinfes, "try-error") && isTRUE(maxinfes > 0) && ! inherits(cf, "try-error") && ! is.null(cf)) {
           cf <- unique(cf[cf$value == maxinfes, ]$region)
-          if (length(cf) > 0) out[i, "RunStatus"] <- paste0("Abort ", if (length(cf) == 1) paste0(cf, " "), maxinfes, "*Infes")
+          cf <- if (length(cf) == 1) paste0(cf, " ") else paste0(length(cf), "R*")
+          if (length(cf) > 0) out[i, "RunStatus"] <- paste0("Abort ", cf, maxinfes, "*Infes")
         }
       }
       if (file.exists(logmagtxt) && out[i, "jobInSLURM"] != "no" && (out[i, "RunStatus"] == "Normal completion" || grepl("log-mag.txt", logmagtxt))) {
