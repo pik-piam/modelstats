@@ -29,10 +29,12 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
         underline(green("converged")), ", ", blue("converged (had INFES)"), ", ",
         green("finished"), ", ", red("error"), ".\n\n", sep = "")
   }
+  a <- file.info(mydir)
+  a <- a[a[, "isdir"] == TRUE, ]
   if (isTRUE(sortbytime)) {
-    a <- file.info(mydir)
-    a <- a[a[, "isdir"] == TRUE, ]
     mydir <- rownames(a[order(a[, "mtime"], decreasing = TRUE), ])
+  } else {
+    mydir <- rownames(a)
   }
   len <- max(c(15, nchar(basename(normalizePath(mydir, mustWork = FALSE)))))
   len <- min(67, len)
