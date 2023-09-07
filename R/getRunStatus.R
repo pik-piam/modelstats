@@ -66,13 +66,18 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     }
 
     # Initialize objects
-    stats <- runtype <- cfg <- NULL
+    runtype <- cfg <- NULL
     # Runtype and load cfg
     if (length(cfgf) == 0) {
       out[i, "RunType"] <- "NA"
     } else {
       ifelse(grepl("yml$", cfgf), cfg <- loadConfig(paste0(ii, "/", cfgf)), load(paste0(ii, "/", cfgf)))
       out[i, "RunType"] <- colRunType(ii)
+    }
+
+    runstatistics <- new.env()
+    if (file.exists(fle)) {
+      suppressWarnings(load(fle, envir = runstatistics))
     }
 
     # modelstat
@@ -83,13 +88,12 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         out[i, "modelstat"] <- gsub("0", ".", paste0(o_modelstat, collapse = ""))
       }
     }
-    if (file.exists(fle) && out[i, "modelstat"] == "NA") {
-      load(fle)
-      if (exists("stats")) if (any(grepl("config", names(stats)))) {
-        if (stats[["config"]][["model_name"]] == "MAgPIE") {
-          if (any(grepl("modelstat", names(stats)))) out[i, "modelstat"] <- paste0(as.character(stats[["modelstat"]]), collapse = "")
+    if (out[i, "modelstat"] == "NA") {
+      if (! is.null(runstatistics$stats) && any(grepl("config", names(runstatistics$stats)))) {
+        if (runstatistics$stats[["config"]][["model_name"]] == "MAgPIE") {
+          if (any(grepl("modelstat", names(runstatistics$stats)))) out[i, "modelstat"] <- paste0(as.character(runstatistics$stats[["modelstat"]]), collapse = "")
         } else {
-          if (any(grepl("modelstat", names(stats)))) try(out[i, "modelstat"] <- stats[["modelstat"]], silent = TRUE)
+          if (any(grepl("modelstat", names(runstatistics$stats)))) try(out[i, "modelstat"] <- runstatistics$stats[["modelstat"]], silent = TRUE)
         }
       }
     }
@@ -102,18 +106,15 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     # runInAppResults
     if (onCluster) {
       out[i, "runInAppResults"] <- "no"
-      if (file.exists(fle)) {
-        load(fle)
-        if (any(grepl("id", names(stats)))) {
-          if (exists("stats") && any(grepl("config", names(stats))) && stats[["config"]][["model_name"]] == "MAgPIE") {
-            ovdir <- "/p/projects/rd3mod/models/results/magpie/"
-          } else {
-            ovdir <- "/p/projects/rd3mod/models/results/remind/"
-          }
-          try(id <- paste0(ovdir, stats[["id"]], ".rds"))
-          if (file.exists(id) && all((file.info(Sys.glob(paste0(ovdir, "overview.rds")))$mtime + 600) > file.info(id)$mtime)) {
-            out[i, "runInAppResults"] <- "yes"
-          }
+      if (any(grepl("id", names(runstatistics$stats)))) {
+        if (any(grepl("config", names(runstatistics$stats))) && runstatistics$stats[["config"]][["model_name"]] == "MAgPIE") {
+          ovdir <- "/p/projects/rd3mod/models/results/magpie/"
+        } else {
+          ovdir <- "/p/projects/rd3mod/models/results/remind/"
+        }
+        try(id <- paste0(ovdir, runstatistics$stats[["id"]], ".rds"))
+        if (file.exists(id) && all((file.info(Sys.glob(paste0(ovdir, "overview.rds")))$mtime + 600) > file.info(id)$mtime)) {
+          out[i, "runInAppResults"] <- "yes"
         }
       }
     }
@@ -121,7 +122,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     # MIF
     out[i, "Mif"] <- "NA"
     if (length(cfgf) != 0 && file.exists(paste0(ii, "/", cfgf))) {
-      if (exists("stats") && isTRUE(stats[["config"]][["model_name"]] == "MAgPIE")) {
+      if (isTRUE(runstatistics$stats[["config"]][["model_name"]] == "MAgPIE")) {
         miffile <- paste0(ii, "/validation.mif")
         out[i, "Mif"] <- if (file.exists(miffile) && file.info(miffile)[["size"]] > 99999) "yes" else "no"
       } else {
@@ -230,15 +231,10 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
     # Runtime
     out[i, "Runtime"] <- NA
-    if (file.exists(fle)) {
-      load(fle)
-      if (exists("stats")) {
-        if (any(grepl("GAMSEnd", names(stats)))) {
-          out[i, "Runtime"] <- as.numeric(round(difftime(stats[["timeGAMSEnd"]], stats[["timeGAMSStart"]], units = "secs"), 0))
-        } else if (any(grepl("timePrepareStart", names(stats))) && ! out[i, "jobInSLURM"] %in% "no") {
-          out[i, "Runtime"] <- as.numeric(round(difftime(Sys.time(), stats[["timePrepareStart"]], units = "secs"), 0))
-        }
-      }
+    if (any(grepl("GAMSEnd", names(runstatistics$stats)))) {
+      out[i, "Runtime"] <- as.numeric(round(difftime(runstatistics$stats[["timeGAMSEnd"]], runstatistics$stats[["timeGAMSStart"]], units = "secs"), 0))
+    } else if (any(grepl("timePrepareStart", names(runstatistics$stats))) && ! out[i, "jobInSLURM"] %in% "no") {
+      out[i, "Runtime"] <- as.numeric(round(difftime(Sys.time(), runstatistics$stats[["timePrepareStart"]], units = "secs"), 0))
     }
 
   } # END DIR LOOP

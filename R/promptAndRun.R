@@ -43,13 +43,13 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
   } else if (isTRUE(mydir %in% c("-d", "-f"))) {
     folder <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "output" else "."
     # load all directories with a config file plus all that look like coupled runs to include them if they are pending
-    loopRuns(file.path(folder, dir(folder)), user = user, colors = colors, sortbytime = mydir %in% "-f")
+    loopRuns(list.dirs(folder, recursive = FALSE), user = user, colors = colors, sortbytime = mydir %in% "-f")
   } else if (isTRUE(mydir %in% c("-p", "-s"))) {
     folders <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "output" else "."
     if (isTRUE(mydir %in% "-p") && dir.exists(file.path("magpie", "output"))) folders <- c(folders, file.path("magpie", "output"))
     dirs <- NULL
     for (folder in folders) {
-      fdirs <- mixedsort(grep("^C_.*-(rem|mag)-[0-9]+$", dir(folder), value = TRUE), scientific = FALSE, numeric.type = "decimal")
+      fdirs <- mixedsort(grep("^C_.*-(rem|mag)-[0-9]+$", basename(list.dirs(folder, recursive = FALSE)), value = TRUE), scientific = FALSE, numeric.type = "decimal")
       if (isTRUE(mydir %in% "-p")) {
         dirs <- c(dirs, file.path(folder, fdirs))
       } else { # -s shows only last run

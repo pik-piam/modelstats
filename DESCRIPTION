@@ -1,7 +1,7 @@
 Package: modelstats
 Type: Package
 Title: Run Analysis Tools
-Version: 0.15.8
+Version: 0.15.9
 Date: 2023-09-07
 Authors@R: c(
     person("Anastasis", "Giannousakis", email = "giannou@pik-potsdam.de", role = c("aut","cre")),
