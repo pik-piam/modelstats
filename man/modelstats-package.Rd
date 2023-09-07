@@ -19,4 +19,9 @@ Useful links:
 \author{
 \strong{Maintainer}: Anastasis Giannousakis \email{giannou@pik-potsdam.de}
 
+Authors:
+\itemize{
+  \item Oliver Richters
+}
+
 }

@@ -40,10 +40,10 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
       chosendirs <- gms::chooseFromList(dirs, type = "folders")
       loopRuns(if (length(chosendirs) == 0) "exit" else chosendirs, user = user, sortbytime = FALSE)
     }
-  } else if (isTRUE(mydir == "-f")) {
+  } else if (isTRUE(mydir %in% c("-d", "-f"))) {
     folder <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "output" else "."
     # load all directories with a config file plus all that look like coupled runs to include them if they are pending
-    loopRuns(file.path(folder, dir(folder)), user = user, colors = colors)
+    loopRuns(file.path(folder, dir(folder)), user = user, colors = colors, sortbytime = mydir %in% "-f")
   } else if (isTRUE(mydir %in% c("-p", "-s"))) {
     folders <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "output" else "."
     if (isTRUE(mydir %in% "-p") && dir.exists(file.path("magpie", "output"))) folders <- c(folders, file.path("magpie", "output"))
