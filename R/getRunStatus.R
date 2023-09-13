@@ -157,6 +157,8 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
               out[i, "RunStatus"] <- "Timeout interrupt"
             } else if (isTRUE(any(grepl("memory|oom-kill", slurmerror)))) {
               out[i, "RunStatus"] <- "Memory interrupt"
+            } else if (isTRUE(any(grepl("DUE TO PREEMPTION", slurmerror)))) {
+              out[i, "RunStatus"] <- "Preempt interrupt"
             }
           }
         } else {
