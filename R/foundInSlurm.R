@@ -13,7 +13,7 @@ foundInSlurm <- function(mydir = ".", user = NULL) {
   if (is.null(user)) user <- Sys.info()[["user"]]
   suppressWarnings(mydir <- normalizePath(mydir))
   runname <- basename(mydir)
-  if (grepl("C_.*-(rem|mag)-[0-9]+$", mydir)) {
+  if (grepl("-(rem|mag)-[0-9]+$", mydir)) {
     mydir <- dirname(dirname(mydir))
   }
 
