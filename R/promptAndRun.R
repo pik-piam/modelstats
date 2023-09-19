@@ -49,13 +49,24 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     if (isTRUE(mydir %in% "-p") && dir.exists(file.path("magpie", "output"))) folders <- c(folders, file.path("magpie", "output"))
     dirs <- NULL
     for (folder in folders) {
-      fdirs <- mixedsort(grep("^C_.*-(rem|mag)-[0-9]+$", basename(list.dirs(folder, recursive = FALSE)), value = TRUE), scientific = FALSE, numeric.type = "decimal")
+      fdirs <- mixedsort(grep("-(rem|mag)-[0-9]+$", basename(list.dirs(folder, recursive = FALSE)), value = TRUE), scientific = FALSE, numeric.type = "decimal")
       if (isTRUE(mydir %in% "-p")) {
         dirs <- c(dirs, file.path(folder, fdirs))
       } else { # -s shows only last run
         lastdirs <- NULL
         for (r in unique(gsub("-(rem|mag)-[0-9]+$", "", fdirs))) {
           lastdirs <- c(lastdirs, fdirs[min(which(gsub("-(rem|mag)-[0-9]+$", "", fdirs) == r))])
+        }
+        dirs <- c(dirs, file.path(folder, lastdirs))
+      }
+      fdirs <- grep("-(rem|mag)-[0-9]+$", basename(list.dirs(folder, recursive = FALSE)), value = TRUE, invert = TRUE)
+      fdirs <- fdirs[mixedorder(gsub("-", "", fdirs), scientific = FALSE, numeric.type = "decimal")]
+      if (isTRUE(mydir %in% "-p")) {
+        dirs <- c(dirs, file.path(folder, fdirs))
+      } else {
+        lastdirs <- NULL
+        for (r in unique(gsub("_[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}\\.[0-9]{2}\\.[0-9]{2}$", "", fdirs))) {
+          lastdirs <- c(lastdirs, fdirs[max(which(gsub("_[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}\\.[0-9]{2}\\.[0-9]{2}$", "", fdirs) == r))])
         }
         dirs <- c(dirs, file.path(folder, lastdirs))
       }
