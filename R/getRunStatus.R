@@ -147,9 +147,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       if (length(cm_iteration_max) > 0) out[i, "Iter"] <- paste0(out[i, "Iter"], "/", cm_iteration_max)
       suppressWarnings(try(out[i, "RunStatus"] <- substr(sub("\\(s\\)", "", sub("\\*\\*\\* Status: ", "", system(paste0("grep '*** Status: ' ", fulllog), intern = TRUE))), start = 1, stop = 17), silent = TRUE))
       if (onCluster && out[i, "RunStatus"] == "NA") {
-        if (out[i, "jobInSLURM"] == "no") {
-          out[i, "RunStatus"] <- "Run interrupted"
-          slurmerror <- NULL
+        if (out[i, "jobInSLURM"] == "no" || grepl("pending$", out[i, "jobInSLURM"])) {
           if (file.exists(logtxt)) {
             slurmerror <- NULL
             suppressWarnings(try(slurmerror <- system(paste0("grep 'slurmstepd: error' ", logtxt), intern = TRUE), silent = TRUE))
@@ -159,7 +157,11 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
               out[i, "RunStatus"] <- "Memory interrupt"
             } else if (isTRUE(any(grepl("DUE TO PREEMPTION", slurmerror)))) {
               out[i, "RunStatus"] <- "Preempt interrupt"
+            } else if (isTRUE(any(grepl("DUE TO JOB REQUEUE", slurmerror)))) {
+              out[i, "RunStatus"] <- "Run requeued"
             }
+          } else {
+            out[i, "RunStatus"] <- if (out[i, "jobInSLURM"] == "no") "Run interrupted" else "Run restarted"
           }
         } else {
           out[i, "RunStatus"] <- "Run in progress"
