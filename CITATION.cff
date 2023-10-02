@@ -2,8 +2,8 @@ cff-version: 1.2.0
 message: If you use this software, please cite it using the metadata from this file.
 type: software
 title: 'modelstats: Run Analysis Tools'
-version: 0.15.12
-date-released: '2023-09-19'
+version: 0.15.13
+date-released: '2023-10-02'
 abstract: A collection of tools to analyze model runs.
 authors:
 - family-names: Giannousakis
