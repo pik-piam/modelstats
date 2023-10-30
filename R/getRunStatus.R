@@ -228,7 +228,9 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     if ((isTRUE(grepl("Calib", out[i, "RunType"])) || isTRUE(cfg$gms$CES_parameters == "calibrate")) && file.exists(logtxt)) {
       calibiter <- tail(suppressWarnings(system(paste0("grep 'CES calibration iteration' ", logtxt, " |  grep -Eo  '[0-9]{1,2}'"), intern = TRUE)), n = 1)
       if (isTRUE(as.numeric(calibiter) > 0)) out[i, "Iter"] <- paste0(out[i, "Iter"], " ", "Clb: ", calibiter)
-      if (isTRUE(out[i, "Conv"] == "converged") && length(system(paste0("find ", ii, " -name 'input_*.gdx'"), intern = TRUE)) > 10) {
+      if (isTRUE(out[i, "Conv"] %in% c("converged", "converged (had INFES)")) &&
+          (length(system(paste0("find ", ii, " -name 'fulldata_*.gdx'"), intern = TRUE)) > 10 ||
+           length(system(paste0("find ", ii, " -name 'input_*.gdx'"), intern = TRUE)) > 10)) {
         out[i, "Conv"] <- "Clb_converged"
       }
     }
