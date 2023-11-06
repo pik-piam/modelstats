@@ -17,7 +17,7 @@
 #'
 promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
   mydir <- strsplit(mydir, ',')[[1]]
-  colors <- ! any(grepl("-.*b.*", mydir))
+  colors <- ! any(grepl("^-.*b.*", mydir))
   if (isTRUE(mydir == "-t")) {
     amtPath <- "/p/projects/remind/modeltests/remind/output/"
     cat("Results from", amtPath, "\n")
@@ -28,7 +28,7 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
   }
   if (is.null(user) || user == "") user <- Sys.info()[["user"]]
   if (daysback == "") daysback <- 3
-  if (isFALSE(colors)) mydir <- gsub("b", "", mydir)
+  if (isFALSE(colors) && grepl("^-[a-zA-Z]+", mydir)) mydir <- gsub("b", "", mydir)
   if (isTRUE(mydir == ".")) {
     loopRuns(".", user = user, colors = colors)
   } else if (length(mydir) == 0 || isTRUE(mydir == "")) {
