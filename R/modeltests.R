@@ -371,15 +371,29 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
   }
 
-  if (!is.null(errorList) && !is.null(mattermostToken)) {
-    message <- paste0("Some ",
+  if (!test) saveRDS(commitTested, file = paste0(mydir, "/lastcommit.rds"))
+
+  # send message to mattermost channel (for MAgPIE only if warnings/errors occur, for REMIND always display AMT status)
+  if (!is.null(mattermostToken)) {
+    message <- NULL
+    if (model == "REMIND") {
+      rs2 <- utils::capture.output(loopRuns(paths, user = NULL, colors = FALSE))
+      message <- paste(c("Please find below the status of the latest REMIND automated model tests (AMT): ", "```", rs2, "```\n"), collapse = "\n")
+    }
+    if (!is.null(errorList)) {
+        message <- paste0(message, "Some ",
                       model,
-                      " tests produce warnings, check https://gitlab.pik-potsdam.de/",
+                      " tests produce warnings. Please check ",
+                      "https://gitlab.pik-potsdam.de/",
                       ifelse(model == "MAgPIE", "landuse", model),
-                      "/testing_suite")
-    .mattermostBotMessage(message = message, token = mattermostToken)
+                      "/testing_suite",
+                      ifelse(model == "REMIND", " or `rs2 -t`", "")
+                      )
+    }
+    if (!is.null(message)) {
+      .mattermostBotMessage(message = message, token = mattermostToken)
+    }
   }
 
-  if (!test) saveRDS(commitTested, file = paste0(mydir, "/lastcommit.rds"))
   message("Function 'evaluateRuns' finished.")
 }
