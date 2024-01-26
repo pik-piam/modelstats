@@ -169,16 +169,18 @@ startRuns <- function(test, model, mydir, gitPath, user) {
   message("Function 'startRuns' finished.")
 }
 
-evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken, gitdir, iamccheck, user) {
+evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken, gitdir, iamccheck, user, test = NULL) {
   message("Current working directory ", normalizePath("."))
-  message("Writing 'wait' to ", normalizePath(paste0(mydir, "../.testsstatus")))
-  writeLines("wait", con = paste0(mydir, "../.testsstatus"))
-  test <- readRDS(paste0(mydir, "/test.rds"))
+  if (is.null(test)) test <- readRDS(paste0(mydir, "/test.rds"))
+  if (!test) {
+    message("Writing 'wait' to ", normalizePath(paste0(mydir, "../.testsstatus")))
+    writeLines("wait", con = paste0(mydir, "../.testsstatus"))
+  }
   runcode <- readRDS(paste0(mydir, "/runcode.rds"))
   lastCommit <- readRDS(paste0(mydir, "/lastcommit.rds"))
-  if (model == "REMIND") runsToStart <- readRDS(paste0(mydir, "runsToStart.rds"))
   out <- list()
   errorList <- NULL
+  today <- format(Sys.time(), "%Y-%m-%d")
 
   # wait for all AMT runs to finish
   if (!test) {
@@ -196,23 +198,23 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
 
   message("Compiling the README.md to be committed to testing_suite repo.")
   commitTested <- sub("commit ", "", system(paste0(gitPath, " log -1"), intern = TRUE)[[1]])
+  if (!test) saveRDS(commitTested, file = paste0(mydir, "/lastcommit.rds"))
   commitsSinceLastTest <- system(paste0(gitPath, " log --merges --pretty=oneline ",
                            lastCommit, "..", commitTested, " --abbrev-commit | grep 'Merge pull request'"), intern = TRUE)
   myfile <- paste0(tempdir(), "/README.md")
   write("```", myfile)
-  write(paste0("This is the result of the automated ", model, " testing suite on ",
-               format(Sys.time(), "%Y-%m-%d"), "."), myfile, append = TRUE)
+  write(paste0("This is the result of the automated model tests for ", model, " on ", today, "."), myfile, append = TRUE)
   write(paste0("Path to runs: ", mydir, "output/"), myfile, append = TRUE)
   if (model == "REMIND") {
     write(paste0(c("Responsibilities:",
                    "  Robert     : SSP2EU-EU21",
-                   "  Jess / Oli: SSP2EU",
+                   "  Jess / Oli : SSP2EU",
                    "  Bjoern     : SDP",
                    "             : SSP1",
                    "             : SSP5"), collapse = "\n"), myfile, append = TRUE)
   }
   write(paste0("Direct and interactive access to plots: open shinyResults::appResults, then use '",
-               ifelse(model == "MAgPIE", "weeklyTests", strsplit(runcode, "\\.")[[1]][1]),
+               ifelse(model == "MAgPIE", "weeklyTests", "AMT"),
                "' as keyword in the title search"), myfile, append = TRUE)
   if (model == "REMIND" && compScen == TRUE) {
     write(paste0("Each run folder below should contain a compareScenarios PDF comparing the output of the current and",
@@ -222,17 +224,11 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         myfile, append = TRUE)
   write(paste0("If you are currently viewing the email: Overview of the last test is in red, ",
                "and of the current test in green"), myfile, append = TRUE)
-  write(paste0("Tested commit: ", commitTested), myfile, append = TRUE)
-  write(paste0("The test of ", format(Sys.time(), "%Y-%m-%d"), " contains these merges:"), myfile, append = TRUE)
-  write(commitsSinceLastTest, myfile, append = TRUE)
-
-  colSep <- "  "
-  coltitles <- c(
-    "Run                                           ", "Runtime    ", "", "RunType    ", "RunStatus         ",
-    "Iter            ", "Conv                 ", "modelstat          ", "Mif", "AppResults"
-  )
-  write(paste(coltitles, collapse = colSep), myfile, append = TRUE)
-  lenCols <- c(nchar(coltitles)[-length(coltitles)], 3)
+  
+  gitInfo <- c(paste("Tested commit:", commitTested), 
+               paste("The test of", today, "contains these merges:"),
+               commitsSinceLastTest)
+  write(gitInfo, myfile, append = TRUE)
 
   isdir <- NULL
   if (model != "MAgPIE") {
@@ -260,6 +256,14 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     paths <- rownames(paths[which(as.Date(format(paths[, "ctime"], "%Y-%m-%d")) > threeDaysAgo), ])
   }
 
+  colSep <- "  "
+  coltitles <- c(
+    "Run                                           ", "Runtime    ", "", "RunType    ", "RunStatus         ",
+    "Iter            ", "Conv                 ", "modelstat          ", "Mif", "AppResults"
+  )
+  write(paste(coltitles, collapse = colSep), myfile, append = TRUE)
+  lenCols <- c(nchar(coltitles)[-length(coltitles)], 3)
+
   message("Starting analysis for the list of the following runs:\n", paste0(paths, collapse = "\n"))
   for (i in paths) {
     grsi <- getRunStatus(i)
@@ -283,6 +287,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       }
     }
     if (grsi[, "runInAppResults"] != "yes") errorList <- c(errorList, "Some run(s) did not report correctly")
+    # For a successful run compare runtime and results with previous AMT run
     if (grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
       setwd(i)
       message("Changed to ", normalizePath("."))
@@ -330,6 +335,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
 
   if (model == "REMIND") {
     # Find and print runs not started
+    runsToStart <- readRDS(paste0(mydir, "runsToStart.rds"))
     if (length(paths) < length(rownames(runsToStart)) + 1) {
       runsNotStarted <- setdiff(c("default-AMT", rownames(runsToStart)), sub("_.*", "", paths))
       write(" ", myfile, append = TRUE)
@@ -354,15 +360,13 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         }
       }
     }
-    write(paste0("The IAMC check of these runs is found in /p/projects/remind/modeltests/output/iamccheck-",
+    write(paste0("The IAMC check of these runs can be found in /p/projects/remind/modeltests/output/iamccheck-",
                  commitTested, ".rds", "\n"), myfile, append = TRUE)
   }
-  tmp <- ifelse(length(paths) > 0, paste0(unlist(unique(errorList)), collapse = ". "), "No runs started")
-  write(paste0("Summary of ", format(Sys.time(), "%Y-%m-%d"),
-               ": ",
-               ifelse(tmp == "", "Tests look good", tmp)),
-        myfile,
-        append = TRUE)
+  
+  summary <- ifelse(length(paths) > 0, paste0(unlist(unique(errorList)), collapse = ". "), "No runs started")
+  summary <- paste0("Summary of ", today, ": ", ifelse(summary == "", "Tests look good", summary))
+  write(summary, myfile, append = TRUE)
   write("```", myfile, append = TRUE)
   message("Finished compiling README.md")
 
@@ -371,26 +375,33 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
   }
 
-  if (!test) saveRDS(commitTested, file = paste0(mydir, "/lastcommit.rds"))
-
-  # send message to mattermost channel (for MAgPIE only if warnings/errors occur, for REMIND always display AMT status)
+  message("Composing message and sending it to mattermost channel") 
+  # for MAgPIE only if warnings/errors occur, for REMIND always display AMT status
   if (!is.null(mattermostToken)) {
+    # compose message, each vector element will appear in a new line in the final message.
     message <- NULL
     if (model == "REMIND") {
       rs2 <- utils::capture.output(loopRuns(paths, user = NULL, colors = FALSE))
-      message <- paste(c("Please find below the status of the latest REMIND automated model tests (AMT): ", "```", rs2, "```\n"), collapse = "\n")
+      message <- paste0("Please find below the status of the REMIND automated model tests (AMT) of ", today, ":")
+      message <- c(message, "```", gitInfo, "```")
+      message <- c(message, "```", rs2, "```")
+      message <- c(message, summary)
+      if (exists("runsNotStarted")) {
+        message <- c(message, "These scenarios did not start at all:", runsNotStarted)
+      }
     }
     if (!is.null(errorList)) {
-        message <- paste0(message, "Some ",
+        message <- c(message, paste0("Some ",
                       model,
                       " tests produce warnings. Please check ",
                       "https://gitlab.pik-potsdam.de/",
                       ifelse(model == "MAgPIE", "landuse", model),
                       "/testing_suite",
                       ifelse(model == "REMIND", " or `rs2 -t`", "")
-                      )
+                      ))
     }
     if (!is.null(message)) {
+      message <- paste0(message, collapse = "\n") # put each vector elements into new line
       .mattermostBotMessage(message = message, token = mattermostToken)
     }
   }
