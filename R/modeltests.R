@@ -198,6 +198,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
 
   message("Compiling the README.md to be committed to testing_suite repo.")
   commitTested <- sub("commit ", "", system(paste0(gitPath, " log -1"), intern = TRUE)[[1]])
+  if (!test) saveRDS(commitTested, file = paste0(mydir, "/lastcommit.rds"))
   commitsSinceLastTest <- system(paste0(gitPath, " log --merges --pretty=oneline ",
                            lastCommit, "..", commitTested, " --abbrev-commit | grep 'Merge pull request'"), intern = TRUE)
   myfile <- paste0(tempdir(), "/README.md")
@@ -359,7 +360,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         }
       }
     }
-    write(paste0("The IAMC check of these runs is found in /p/projects/remind/modeltests/output/iamccheck-",
+    write(paste0("The IAMC check of these runs can be found in /p/projects/remind/modeltests/output/iamccheck-",
                  commitTested, ".rds", "\n"), myfile, append = TRUE)
   }
   
@@ -373,13 +374,11 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     message("Copying updated README.md to ", gitdir, " and pushing from there.")
     sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
   }
-  
-  if (test) file.copy(file, paste0(path, "/README.md"), overwrite = TRUE)
-  
-  if (!test) saveRDS(commitTested, file = paste0(mydir, "/lastcommit.rds"))
 
-  # send message to mattermost channel (for MAgPIE only if warnings/errors occur, for REMIND always display AMT status)
+  message("Composing message and sending it to mattermost channel") 
+  # for MAgPIE only if warnings/errors occur, for REMIND always display AMT status
   if (!is.null(mattermostToken)) {
+    # compose message, each vector element will appear in a new line in the final message.
     message <- NULL
     if (model == "REMIND") {
       rs2 <- utils::capture.output(loopRuns(paths, user = NULL, colors = FALSE))
@@ -387,22 +386,22 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       message <- c(message, "```", gitInfo, "```")
       message <- c(message, "```", rs2, "```")
       message <- c(message, summary)
-      message <- paste0(message, collapse = "\n")
       if (exists("runsNotStarted")) {
-        message <- paste0(message, "\nThese scenarios did not start at all:\n", paste0(runsNotStarted, collapse = "\n"), "\n")
+        message <- c(message, "These scenarios did not start at all:", runsNotStarted)
       }
     }
     if (!is.null(errorList)) {
-        message <- paste0(message, "Some ",
+        message <- c(message, paste0("Some ",
                       model,
                       " tests produce warnings. Please check ",
                       "https://gitlab.pik-potsdam.de/",
                       ifelse(model == "MAgPIE", "landuse", model),
                       "/testing_suite",
                       ifelse(model == "REMIND", " or `rs2 -t`", "")
-                      )
+                      ))
     }
     if (!is.null(message)) {
+      message <- paste0(message, collapse = "\n") # put each vector elements into new line
       .mattermostBotMessage(message = message, token = mattermostToken)
     }
   }
