@@ -27,6 +27,7 @@
 #' @importFrom lucode2 sendmail
 #' @importFrom remind2 compareScenarios2
 #' @importFrom magclass read.report write.report collapseNames
+#' @importFrom rlang .data
 #' @export
 modeltests <- function(
     mydir = ".",
@@ -224,8 +225,8 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         myfile, append = TRUE)
   write(paste0("If you are currently viewing the email: Overview of the last test is in red, ",
                "and of the current test in green"), myfile, append = TRUE)
-  
-  gitInfo <- c(paste("Tested commit:", commitTested), 
+
+  gitInfo <- c(paste("Tested commit:", commitTested),
                paste("The test of", today, "contains these merges:"),
                commitsSinceLastTest)
   write(gitInfo, myfile, append = TRUE)
@@ -291,17 +292,17 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       setwd(i)
       message("Changed to ", normalizePath("."))
       cfg <- NULL
-      if (any(grepl(basename(getwd()), rownames(filter(gRS, Conv == "converged", Mif == "yes"))))) {
+      if (any(grepl(basename(getwd()), rownames(filter(gRS, .data$Conv == "converged", .data$Mif == "yes"))))) {
         load("config.Rdata")
       } else {
         setwd("../")
         message("Skipping ", i, " and changed back to ", normalizePath("."))
         next
       }
-      sameRuns <- gRS %>% filter(Conv %in% c("converged", "converged (had INFES)"),     # runs have to be converged
-                                 Mif == "yes",                                          # need to have mifs
-                                 grepl(cfg$title, rownames(gRS)),                       # must be the same scenario
-                                 ! rownames(gRS) %in% basename(cfg$results_folder)) %>% # but not the current run
+      sameRuns <- gRS %>% filter(.data$Conv %in% c("converged", "converged (had INFES)"), # runs have to be converged
+                                 .data$Mif == "yes",                                      # need to have mifs
+                                 grepl(cfg$title, rownames(gRS)),                         # must be the same scenario
+                                 ! rownames(gRS) %in% basename(cfg$results_folder)) %>%   # but not the current run
                           rownames()
       if (length(sameRuns) > 0) {
         lastRun <- max(sameRuns[sameRuns < basename(cfg$results_folder)])
@@ -363,7 +364,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     write(paste0("The IAMC check of these runs can be found in /p/projects/remind/modeltests/output/iamccheck-",
                  commitTested, ".rds", "\n"), myfile, append = TRUE)
   }
-  
+
   summary <- ifelse(length(runsStarted) > 0, paste0(unlist(unique(errorList)), collapse = ". "), "No runs started")
   summary <- paste0("Summary of ", today, ": ", ifelse(summary == "", "Tests look good", summary))
   write(summary, myfile, append = TRUE)
@@ -375,7 +376,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
   }
 
-  message("Composing message and sending it to mattermost channel") 
+  message("Composing message and sending it to mattermost channel")
   # for MAgPIE only if warnings/errors occur, for REMIND always display AMT status
   if (!is.null(mattermostToken)) {
     # compose message, each vector element will appear in a new line in the final message.
