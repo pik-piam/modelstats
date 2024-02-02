@@ -21,12 +21,13 @@
 #' @author Anastasis Giannousakis
 #' @seealso \code{\link{package2readme}}
 #' @importFrom utils read.csv2
-#' @importFrom dplyr filter
+#' @importFrom dplyr filter %>%
 #' @importFrom piamModelTests iamCheck
 #' @importFrom quitte read.quitte
 #' @importFrom lucode2 sendmail
 #' @importFrom remind2 compareScenarios2
 #' @importFrom magclass read.report write.report collapseNames
+#' @importFrom rlang .data
 #' @export
 modeltests <- function(
     mydir = ".",
@@ -224,8 +225,8 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         myfile, append = TRUE)
   write(paste0("If you are currently viewing the email: Overview of the last test is in red, ",
                "and of the current test in green"), myfile, append = TRUE)
-  
-  gitInfo <- c(paste("Tested commit:", commitTested), 
+
+  gitInfo <- c(paste("Tested commit:", commitTested),
                paste("The test of", today, "contains these merges:"),
                commitsSinceLastTest)
   write(gitInfo, myfile, append = TRUE)
@@ -243,17 +244,16 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       gRS <- getRunStatus(dir())
       saveRDS(gRS, "gRS.rds")
     }
-    paths <- grep(runcode, dir(), value = TRUE)
-    paths <- file.info(paths)
-    paths <- rownames(paths[paths[, "isdir"] == TRUE, ])
+    # List all folders (in 'output') and keep folders only that match the current AMT name (runcode)
+    runsStarted <- grep(runcode, list.dirs(full.names = FALSE, recursive = FALSE), value = TRUE)
   } else {
-    # if model is MAgPIE ignore runcode and find paths to report on based on folder creation time (last 3 days)
+    # if model is MAgPIE ignore runcode and find run folders based on their creation time (last 3 days)
     gRS <- getRunStatus(dir())
     # this happens because test run names are hard coded in MAgPIE scripts and thus not readable
-    paths <- file.info(dir())
-    paths <- filter(paths, isdir == TRUE)
+    runsStarted <- file.info(dir())
+    runsStarted <- filter(runsStarted, isdir == TRUE)
     threeDaysAgo <- Sys.Date() - 3
-    paths <- rownames(paths[which(as.Date(format(paths[, "ctime"], "%Y-%m-%d")) > threeDaysAgo), ])
+    runsStarted <- rownames(runsStarted[which(as.Date(format(runsStarted[, "ctime"], "%Y-%m-%d")) > threeDaysAgo), ])
   }
 
   colSep <- "  "
@@ -264,8 +264,8 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
   write(paste(coltitles, collapse = colSep), myfile, append = TRUE)
   lenCols <- c(nchar(coltitles)[-length(coltitles)], 3)
 
-  message("Starting analysis for the list of the following runs:\n", paste0(paths, collapse = "\n"))
-  for (i in paths) {
+  message("Starting analysis for the list of the following runs:\n", paste0(runsStarted, collapse = "\n"))
+  for (i in runsStarted) {
     grsi <- getRunStatus(i)
     if ("Runtime" %in% names(grsi) && is.numeric(grsi[["Runtime"]])) {
       grsi["Runtime"] <- format(round(make_difftime(second = grsi[["Runtime"]]), 1))
@@ -292,38 +292,36 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       setwd(i)
       message("Changed to ", normalizePath("."))
       cfg <- NULL
-      if (any(grepl(sub("^.*./output/", "", getwd()), rownames(filter(gRS, Conv == "converged", Mif == "yes"))))) {
+      if (any(grepl(basename(getwd()), rownames(filter(gRS, .data$Conv == "converged", .data$Mif == "yes"))))) {
         load("config.Rdata")
       } else {
         setwd("../")
         message("Skipping ", i, " and changed back to ", normalizePath("."))
         next
       }
-      sameRuns <- grep(cfg$title, rownames(filter(gRS, Conv %in% c("converged", "converged (had INFES)"), Mif == "yes")), value = TRUE)
-      rmRun <- grep(sub("output/", "", cfg$results_folder), sameRuns)
-      sameRuns <- sameRuns[-rmRun]
+      sameRuns <- gRS %>% filter(.data$Conv %in% c("converged", "converged (had INFES)"), # runs have to be converged
+                                 .data$Mif == "yes",                                      # need to have mifs
+                                 grepl(cfg$title, rownames(gRS)),                         # must be the same scenario
+                                 ! rownames(gRS) %in% basename(cfg$results_folder)) %>%   # but not the current run
+                          rownames()
       if (length(sameRuns) > 0) {
-        lastRun <- NULL
-        lastRun <- max(sameRuns[sameRuns < sub("output/", "", cfg$results_folder)])
-        currentRunTime <- as.numeric(.readRuntime("."), units = "hours")
-        lastRunTime <- as.numeric(.readRuntime(paste0("../", lastRun)), units = "hours")
+        lastRun <- max(sameRuns[sameRuns < basename(cfg$results_folder)])
+        currentRunTime <- as.numeric(.readRuntime("."),                    units = "hours")
+        lastRunTime    <- as.numeric(.readRuntime(paste0("../", lastRun)), units = "hours")
         if (currentRunTime > (1.25 * lastRunTime)) {
           errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
         }
         if (compScen && !any(grepl("comp_with_.*.pdf", dir()))) {
-          folderCompMif <- Conv <- Mif <- NULL
           miffile <- paste0(getwd(), "/REMIND_generic_", cfg$title, ".mif")
-          folderCompMif <- lastRun
-          compmif <- paste0("../", folderCompMif, paste0("/REMIND_generic_", cfg$title, ".mif"))
-          tmp <- read.report(compmif, as.list = FALSE)
+          compmif <- paste0("../", lastRun, paste0("/REMIND_generic_", cfg$title, ".mif"))
+          tmp <- read.report(compmif, as.list = FALSE, showSeparatorWarning = FALSE) # fix: can this read.report and write report be skipped? What happens if scenarios in both mifs have the same name?
           write.report(x = collapseNames(tmp), file = "tmp.mif", scenario = paste0(cfg$title, "_ref"), model = model)
           if (all(file.exists(miffile, "tmp.mif"))) {
-            print(i)
-            print(compmif)
-            if (!any(grepl("comp_with_.*.pdf", dir()))) {
+            message("Calling compareScenarios2 with ", miffile, " and ", compmif)
+            if(!test) {
               try(compareScenarios2(c(miffile, "tmp.mif"),
                                     mifHist = "historical.mif",
-                                    outputFile = paste0("comp_with_", folderCompMif, ".pdf")))
+                                    outputFile = paste0("comp_with_", lastRun, ".pdf")))
             }
           }
         }
@@ -336,8 +334,11 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
   if (model == "REMIND") {
     # Find and print runs not started
     runsToStart <- readRDS(paste0(mydir, "runsToStart.rds"))
-    if (length(paths) < length(rownames(runsToStart)) + 1) {
-      runsNotStarted <- setdiff(c("default-AMT", rownames(runsToStart)), sub("_.*", "", paths))
+    runsToStart <- rownames(runsToStart)
+    if (length(runsStarted) < length(runsToStart) + 1) {
+      datetimepattern <- "_[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}\\.[0-9]{2}\\.[0-9]{2}"
+      scenariosStarted <- gsub(datetimepattern, "", runsStarted) # remove date and time from folder name
+      runsNotStarted <- setdiff(c("default-AMT", runsToStart), scenariosStarted)
       write(" ", myfile, append = TRUE)
       write(paste0("These scenarios did not start at all:"), myfile, append = TRUE)
       write(runsNotStarted, myfile, append = TRUE)
@@ -347,8 +348,8 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
 
   if (iamccheck) {
     a <- NULL
-    if (length(paths) > 0) {
-      mifs <- paste0(paths, "/REMIND_generic_", sub("_20[0-9][0-9].*.$", "", paths), ".mif")
+    if (length(runsStarted) > 0) {
+      mifs <- paste0(runsStarted, "/REMIND_generic_", sub("_20[0-9][0-9].*.$", "", runsStarted), ".mif")
       mifs <- mifs[file.exists(mifs)]
       try(a <- read.quitte(mifs))
       if (!is.null(a)) {
@@ -363,8 +364,8 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     write(paste0("The IAMC check of these runs can be found in /p/projects/remind/modeltests/output/iamccheck-",
                  commitTested, ".rds", "\n"), myfile, append = TRUE)
   }
-  
-  summary <- ifelse(length(paths) > 0, paste0(unlist(unique(errorList)), collapse = ". "), "No runs started")
+
+  summary <- ifelse(length(runsStarted) > 0, paste0(unlist(unique(errorList)), collapse = ". "), "No runs started")
   summary <- paste0("Summary of ", today, ": ", ifelse(summary == "", "Tests look good", summary))
   write(summary, myfile, append = TRUE)
   write("```", myfile, append = TRUE)
@@ -375,13 +376,13 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
   }
 
-  message("Composing message and sending it to mattermost channel") 
+  message("Composing message and sending it to mattermost channel")
   # for MAgPIE only if warnings/errors occur, for REMIND always display AMT status
   if (!is.null(mattermostToken)) {
     # compose message, each vector element will appear in a new line in the final message.
     message <- NULL
     if (model == "REMIND") {
-      rs2 <- utils::capture.output(loopRuns(paths, user = NULL, colors = FALSE))
+      rs2 <- utils::capture.output(loopRuns(runsStarted, user = NULL, colors = FALSE))
       message <- paste0("Please find below the status of the REMIND automated model tests (AMT) of ", today, ":")
       message <- c(message, "```", gitInfo, "```")
       message <- c(message, "```", rs2, "```")

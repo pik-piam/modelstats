@@ -1,8 +1,8 @@
 Package: modelstats
 Type: Package
 Title: Run Analysis Tools
-Version: 0.16.1
-Date: 2024-01-26
+Version: 0.16.2
+Date: 2024-02-01
 Authors@R: c(
     person("Anastasis", "Giannousakis", email = "giannou@pik-potsdam.de", role = c("aut","cre")),
     person("Oliver", "Richters", role = "aut")
@@ -21,7 +21,8 @@ Imports:
     magclass,
     remind2,
     gms,
-    withr
+    withr,
+    rlang
 Suggests:
     covr,
     knitr,
