@@ -202,7 +202,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
   if (!test) saveRDS(commitTested, file = paste0(mydir, "/lastcommit.rds"))
   commitsSinceLastTest <- system(paste0(gitPath, " log --merges --pretty=oneline ",
                            lastCommit, "..", commitTested, " --abbrev-commit | grep 'Merge pull request'"), intern = TRUE)
-  myfile <- paste0(tempdir(), "/README.md")
+  myfile <- file.path(ifelse(test, ".", tempdir()), "README.md")
   write("```", myfile)
   write(paste0("This is the result of the automated model tests for ", model, " on ", today, "."), myfile, append = TRUE)
   write(paste0("Path to runs: ", mydir, "output/"), myfile, append = TRUE)
