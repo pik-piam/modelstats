@@ -202,7 +202,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
   if (!test) saveRDS(commitTested, file = paste0(mydir, "/lastcommit.rds"))
   commitsSinceLastTest <- system(paste0(gitPath, " log --merges --pretty=oneline ",
                            lastCommit, "..", commitTested, " --abbrev-commit | grep 'Merge pull request'"), intern = TRUE)
-  myfile <- paste0(tempdir(), "/README.md")
+  myfile <- file.path(ifelse(test, ".", tempdir()), "README.md")
   write("```", myfile)
   write(paste0("This is the result of the automated model tests for ", model, " on ", today, "."), myfile, append = TRUE)
   write(paste0("Path to runs: ", mydir, "output/"), myfile, append = TRUE)
@@ -311,19 +311,29 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         if (currentRunTime > (1.25 * lastRunTime)) {
           errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
         }
-        if (compScen && !any(grepl("comp_with_.*.pdf", dir()))) {
-          miffile <- paste0(getwd(), "/REMIND_generic_", cfg$title, ".mif")
-          compmif <- paste0("../", lastRun, paste0("/REMIND_generic_", cfg$title, ".mif"))
-          tmp <- read.report(compmif, as.list = FALSE, showSeparatorWarning = FALSE) # fix: can this read.report and write report be skipped? What happens if scenarios in both mifs have the same name?
-          write.report(x = collapseNames(tmp), file = "tmp.mif", scenario = paste0(cfg$title, "_ref"), model = model)
-          if (all(file.exists(miffile, "tmp.mif"))) {
-            message("Calling compareScenarios2 with ", miffile, " and ", compmif)
-            if(!test) {
-              try(compareScenarios2(c(miffile, "tmp.mif"),
-                                    mifHist = "historical.mif",
-                                    outputFile = paste0("comp_with_", lastRun, ".pdf")))
-            }
-          }
+        fullPathToThisRun <- normalizePath(".")
+        fullPathToLastRun <- normalizePath(file.path("..",lastRun))
+        if (compScen && 
+            all(file.exists(paste0(c(fullPathToThisRun, fullPathToLastRun), "/REMIND_generic_",cfg$title,".mif"))) &&
+            !any(grepl("comp_with_.*.pdf", dir())) &&
+            !test) {
+          message("Calling compareScenarios2 with ", fullPathToThisRun, " and ", fullPathToLastRun)
+          outFileName <- paste0("comp_with_", lastRun)
+          cs2com <- paste0(
+            "sbatch --qos=standby",
+            " --job-name=", outFileName,
+            " --comment=compareScenarios2",
+            " --output=", fullPathToThisRun, "/", outFileName, ".out",
+            " --error=", fullPathToThisRun, "/", outFileName, ".out",
+            " --mail-type=END --time=200 --mem-per-cpu=8000",
+            " --wrap=\"Rscript scripts/cs2/run_compareScenarios2.R",
+            " outputDirs=", paste(c(fullPathToThisRun, fullPathToLastRun), collapse = ","),
+            " profileName=default",
+            " outFileName=", outFileName,
+            "; ", "mv ",outFileName, ".pdf ", fullPathToThisRun,
+            "\"")
+          cat(cs2com, "\n")
+          withr::with_dir(cfg$remind_folder, {system(cs2com)}) # run_compareScenarios2.R works only if called from the main folder 
         }
       }
       setwd("../")
