@@ -23,7 +23,7 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     cat("Results from", amtPath, "\n")
     amtPattern <- if (is.null(user) || user == "") readRDS("/p/projects/remind/modeltests/remind/runcode.rds") else user
     amtDirs <- dir(path = amtPath, pattern = amtPattern, full.names = TRUE)
-    loopRuns(amtDirs, user = NULL, colors = colors)
+    loopRuns(amtDirs, user = NULL, colors = colors, sortbytime = FALSE)
     return(invisible())
   }
   if (is.null(user) || user == "") user <- Sys.info()[["user"]]
