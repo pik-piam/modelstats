@@ -426,7 +426,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     # compose message, each vector element will appear in a new line in the final message.
     message <- NULL
     if (model == "REMIND") {
-      rs2 <- utils::capture.output(loopRuns(runsStarted, user = NULL, colors = FALSE))
+      rs2 <- utils::capture.output(loopRuns(runsStarted, user = NULL, colors = FALSE, sortbytime = FALSE))
       message <- paste0("Please find below the status of the REMIND automated model tests (AMT) of ", today, ":")
       message <- c(message, "```", gitInfo, "```")
       message <- c(message, "```", rs2, "```")
