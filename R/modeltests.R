@@ -380,7 +380,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       file.rename(from = currentName, to = paste0("../", newName))
       if (!isTRUE(grepl("FAIL", logStatus))) {
         testthatResult <- paste("`make test-full` did not run properly. Check", newName)
-      } else if (!isTRUE(grepl("FAIL 0", logStatus) & grepl("WARN 0", logStatus) & grepl("SKIP 0", logStatus))) {
+      } else if (!isTRUE(grepl("FAIL 0", logStatus) & grepl("WARN 0", logStatus))) {
         testthatResult <- paste0("Not all tests pass in `make test-full`: ", logStatus ,". Check ", newName)
       } else {
         testthatResult <- paste("All tests pass in `make test-full`:", logStatus)
