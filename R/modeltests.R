@@ -154,9 +154,7 @@ startRuns <- function(test, model, mydir, gitPath, user) {
       withr::with_dir("magpie", {
             system(paste0(gitPath, " reset --hard origin/develop && ", gitPath, " pull"))
       })
-      # 2. rename old test-full.log
-      system("mv test-full.log test-full-previous.log")
-      # 3. execute test
+      # 2. execute test
       system("make test-full-slurm")
       
     } else if (model == "MAgPIE") {
@@ -371,16 +369,22 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     }
 
     # Evaluate result of tests/testthat
-    logStatus <- NULL
-    try(logStatus <- readLines("../test-full.log", warn = FALSE))
-    if (is.null(logStatus)) {
-      testthatResult <- "Could not check for the results of TESTTHAT, test-full.log not found"
-    } else if (! any(grep("FAIL", logStatus))) {
-      testthatResult <- "`make test-full` did not run properly. Check test-full.log"
-    } else if (any(grep("FAIL 1", logStatus))) {
-      testthatResult <- "Some tests FAIL in `make test-full`. Check test-full.log"
+    currentName <- "../test-full.log"
+    dateTag <- format(file.info(currentName)$mtime, "%Y-%m-%d")
+    if (is.na(dateTag)) {
+      testthatResult <- "Could not check for the results of `make test-full`, test-full.log not found"
     } else {
-      # "make test-full reports all tests PASS"
+      logStatus <- readLines(currentName, warn = FALSE)
+      logStatus <- tail(grep("\\[ FAIL", logStatus, value = TRUE))
+      newName <- paste0("tests/test-full-", dateTag, ".log")
+      file.rename(from = currentName, to = paste0("../", newName))
+      if (!isTRUE(grepl("FAIL", logStatus))) {
+        testthatResult <- paste("`make test-full` did not run properly. Check", newName)
+      } else if (!isTRUE(grepl("FAIL 0", logStatus) & grepl("WARN 0", logStatus) & grepl("SKIP 0", logStatus))) {
+        testthatResult <- paste0("Not all tests pass in `make test-full`: ", logStatus ,". Check ", newName)
+      } else {
+        testthatResult <- paste("All tests pass in `make test-full`:", logStatus)
+      }
     }
   }
 
