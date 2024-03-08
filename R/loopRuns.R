@@ -43,11 +43,11 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
   if (file.exists("/p")) {
     coltitles <- c(paste0("Folder", paste(rep(" ", len - 6), collapse = "")),
       "Runtime    ", "inSlurm ", "RunType    ", "RunStatus        ", "Iter            ",
-      "Conv                 ", "modelstat            ", "Mif", "AppResults")
+      "Conv                 ", "modelstat            ", "Mif   ", "AppResults")
     lenCols <- c(nchar(coltitles)[-length(coltitles)], 3)
   } else {
     coltitles <- c(paste0("Folder", paste(rep(" ", len - 6), collapse = "")),
-      "Runtime    ", "RunType    ", "RunStatus        ", "Mif",
+      "Runtime    ", "RunType    ", "RunStatus        ", "Mif   ",
       "Conv                 ", "Iter            ", "modelstat          ")
     lenCols <- nchar(coltitles)
   }

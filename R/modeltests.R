@@ -267,7 +267,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
   colSep <- "  "
   coltitles <- c(
     "Run                                           ", "Runtime    ", "", "RunType    ", "RunStatus         ",
-    "Iter            ", "Conv                 ", "modelstat          ", "Mif", "AppResults"
+    "Iter            ", "Conv                 ", "modelstat          ", "Mif   ", "AppResults"
   )
   write(paste(coltitles, collapse = colSep), myfile, append = TRUE)
   lenCols <- c(nchar(coltitles)[-length(coltitles)], 3)
@@ -289,6 +289,9 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       if (grepl("testOneRegi", grsi[, "RunType"]) && grsi[, "modelstat"] != "2: Locally Optimal") {
         errorList <- c(errorList, "testOneRegi does not return an optimal solution")
       }
+      if (grsi[, "Mif"] == "sumErr") {
+        errorList <- c(errorList, "Summation checks for some run(s) revealed some gaps")
+      }
     } else if (model == "MAgPIE") {
       if (paste0(unique(unlist(strsplit(gsub("[^0-9]", "", grsi[, "modelstat"]), split = ""))), collapse = "") != "2") {
         errorList <- c(errorList, "Some run(s) did not converge")
@@ -305,7 +308,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       # Doesn't this check exclude runs that have 'converged (had INFES)' and 
       # wouldn't it be useful to also produce compareScenarios for these? The existence of the mif file only
       # matters later on after the runtime check when it comes to compareScenarios. So why testing for it here?
-      if (any(grepl(basename(getwd()), rownames(filter(gRS, .data$Conv == "converged", .data$Mif == "yes"))))) {
+      if (any(grepl(basename(getwd()), rownames(filter(gRS, .data$Conv == "converged", .data$Mif %in% c("yes", "sumErr")))))) {
         load("config.Rdata")
       } else {
         setwd("../")
@@ -313,7 +316,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         next
       }
       sameRuns <- gRS %>% filter(.data$Conv %in% c("converged", "converged (had INFES)"), # runs have to be converged
-                                 .data$Mif == "yes",                                      # need to have mifs
+                                 .data$Mif %in% c("yes", "sumErr"),                       # need to have mifs
                                  grepl(cfg$title, rownames(gRS)),                         # must be the same scenario
                                  ! rownames(gRS) %in% basename(cfg$results_folder)) %>%   # but not the current run
                           rownames()
@@ -403,7 +406,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         }
       }
     }
-    write(paste0("The IAMC check of these runs can be found in /p/projects/remind/modeltests/output/iamccheck-",
+    write(paste0("The IAMC check of these runs can be found in /p/projects/remind/modeltests/remind/output/iamccheck-",
                  commitTested, ".rds", "\n"), myfile, append = TRUE)
   }
 
