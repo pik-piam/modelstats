@@ -128,12 +128,12 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       } else {
         miffile    <- paste0(ii, "/REMIND_generic_", cfg[["title"]], ".mif")
         sumErrFile <- paste0(ii, "/REMIND_generic_", cfg[["title"]], "_summation_errors.csv")
-        if (file.exists(sumErrFile)){ 
-          out[i, "Mif"] <- "sumErr"
-        } else if (file.exists(miffile)){
-          out[i, "Mif"] <- "yes"
-        } else {
+        if (! file.exists(miffile)){ 
           out[i, "Mif"] <- "no"
+        } else if (file.exists(sumErrFile)){
+          out[i, "Mif"] <- "sumErr"
+        } else {
+          out[i, "Mif"] <- "yes"
         }
       }
     }
