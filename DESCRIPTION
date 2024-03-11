@@ -2,7 +2,7 @@ Package: modelstats
 Type: Package
 Title: Run Analysis Tools
 Version: 0.19.0
-Date: 2024-03-08
+Date: 2024-03-11
 Authors@R: c(
     person("Anastasis", "Giannousakis", email = "giannou@pik-potsdam.de", role = c("aut","cre")),
     person("Oliver", "Richters", role = "aut")
@@ -14,7 +14,6 @@ Imports:
     crayon,
     gdx,
     gtools,
-    piamModelTests,
     lubridate,
     lucode2,
     utils,

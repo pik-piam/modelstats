@@ -10,7 +10,6 @@ modeltests(
   model = NULL,
   user = NULL,
   test = NULL,
-  iamccheck = TRUE,
   email = TRUE,
   compScen = TRUE,
   mattermostToken = NULL,
@@ -28,8 +27,6 @@ modeltests(
 
 \item{test}{Use this option to run a test of the workflow (no runs will be submitted)
 The test parameter needs to be of the form "YY-MM-DD"}
-
-\item{iamccheck}{Use this option to turn iamc-style checks on and off}
 
 \item{email}{whether an email notification will be send or not}
 
