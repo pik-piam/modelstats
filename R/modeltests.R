@@ -12,7 +12,6 @@
 #' @param model Model name
 #' @param test Use this option to run a test of the workflow (no runs will be submitted)
 #' The test parameter needs to be of the form "YY-MM-DD"
-#' @param iamccheck Use this option to turn iamc-style checks on and off
 #' @param email whether an email notification will be send or not
 #' @param mattermostToken token used for mattermost notifications
 #' @param compScen whether compScen has to run or not
@@ -22,7 +21,6 @@
 #' @seealso \code{\link{package2readme}}
 #' @importFrom utils read.csv2
 #' @importFrom dplyr filter %>%
-#' @importFrom piamModelTests iamCheck
 #' @importFrom quitte read.quitte
 #' @importFrom lucode2 sendmail
 #' @importFrom remind2 compareScenarios2
@@ -35,7 +33,6 @@ modeltests <- function(
     model = NULL,
     user = NULL,
     test = NULL,
-    iamccheck = TRUE,
     email = TRUE,
     compScen = TRUE,
     mattermostToken = NULL,
@@ -57,7 +54,7 @@ modeltests <- function(
     message("Found 'end' in ", normalizePath("../.testsstatus"), "\nCalling 'evaluateRuns'")
     withr::with_dir("output", {
       evaluateRuns(model = model, mydir = mydir, gitPath = gitPath, compScen = compScen, email = email,
-                   mattermostToken = mattermostToken, gitdir = gitdir, iamccheck = iamccheck, user = user)
+                   mattermostToken = mattermostToken, gitdir = gitdir, user = user)
                    })
     # make sure next call will start runs
     message("Writing 'start' to ", normalizePath("../.testsstatus"))
@@ -178,7 +175,7 @@ startRuns <- function(test, model, mydir, gitPath, user) {
   message("Function 'startRuns' finished.")
 }
 
-evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken, gitdir, iamccheck, user, test = NULL) {
+evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken, gitdir, user, test = NULL) {
   message("Current working directory ", normalizePath("."))
   if (is.null(test)) test <- readRDS(paste0(mydir, "/test.rds"))
   if (!test) {
@@ -389,25 +386,6 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         testthatResult <- paste("All tests pass in `make test-full`:", logStatus)
       }
     }
-  }
-
-  if (iamccheck) {
-    a <- NULL
-    if (length(runsStarted) > 0) {
-      mifs <- paste0(runsStarted, "/REMIND_generic_", sub("_20[0-9][0-9].*.$", "", runsStarted), ".mif")
-      mifs <- mifs[file.exists(mifs)]
-      try(a <- read.quitte(mifs))
-      if (!is.null(a)) {
-        out[["iamCheck"]] <- iamCheck(a, cfg = model)
-        if (!test) {
-          saveRDS(out[["iamCheck"]], file = paste0("iamccheck-", commitTested, ".rds"))
-        } else {
-          saveRDS(out[["iamCheck"]], file = paste0("iamccheck-", test, ".rds"))
-        }
-      }
-    }
-    write(paste0("The IAMC check of these runs can be found in /p/projects/remind/modeltests/remind/output/iamccheck-",
-                 commitTested, ".rds", "\n"), myfile, append = TRUE)
   }
 
   if(length(runsStarted) < 1) errorList <- c(errorList, "No runs started")
