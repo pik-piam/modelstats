@@ -300,6 +300,12 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     if (grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
       setwd(i)
       message("Changed to ", normalizePath("."))
+      # Use the fulldata.gdx of a successful SSP2EU-NPi-AMT to update the gdx on the RSE server that is used for testing convGDX2MIF
+      if (grepl("SSP2EU-NPi-AMT", rownames(grsi))) {
+        gdxOnRseServer <- "rse:/webservice/data/example/remind2_test-convGDX2MIF_fulldata.gdx"
+        message(paste("Updating the gdx on the RSE server", gdxOnRseServer, "with the fulldata.gdx of", rownames(grsi)))
+        system(paste("rsync -e ssh -av fulldata.gdx", gdxOnRseServer))
+      }
       cfg <- NULL
       # Question: is this check really useful? 'Conv' has been checked 4 lines above already.
       # Doesn't this check exclude runs that have 'converged (had INFES)' and 
