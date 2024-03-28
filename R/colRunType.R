@@ -22,10 +22,10 @@ colRunType <- function(mydir = ".") {
     } else {
       out <- cfg$gms$optimization
       if (grepl("^testOneRegi", out)) {
-        out <- paste(if (isTRUE(cfg$gms$cm_nash_mode == "debug")) "debug" else
+        out <- paste(if (isTRUE(cfg$gms$cm_nash_mode == "debug" | cfg$gms$cm_nash_mode == 1)) "debug" else
                      if (isTRUE(cfg$gms$cm_quick_mode == "on")) "quick" else "testOneRegi", cfg$gms$c_testOneRegi_region)
       } else {
-        if (isTRUE(cfg$gms$cm_nash_mode == "debug")) out <- paste0(out, " debug")
+        if (isTRUE(cfg$gms$cm_nash_mode == "debug" | cfg$gms$cm_nash_mode == 1)) out <- paste0(out, " debug")
         if (isTRUE(cfg$gms$CES_parameters == "calibrate")) out <- paste0("Calib_", out)
         if (isTRUE(cfg$gms$cm_MAgPIE_coupling == "on")) out <- paste0(out, " + mag")
       }
