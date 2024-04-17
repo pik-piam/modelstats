@@ -17,14 +17,11 @@
 #' @param compScen whether compScen has to run or not
 #' @param gitPath Path to the git executable
 #'
-#' @author Anastasis Giannousakis
+#' @author Anastasis Giannousakis, David Klein
 #' @seealso \code{\link{package2readme}}
 #' @importFrom utils read.csv2
-#' @importFrom dplyr filter %>%
-#' @importFrom quitte read.quitte
+#' @importFrom dplyr mutate pull filter %>%
 #' @importFrom lucode2 sendmail
-#' @importFrom remind2 compareScenarios2
-#' @importFrom magclass read.report write.report collapseNames
 #' @importFrom rlang .data
 #' @export
 modeltests <- function(
@@ -145,7 +142,7 @@ startRuns <- function(test, model, mydir, gitPath, user) {
       runsToStart <- selectScenarios(settings = settings, interactive = FALSE, startgroup = "AMT")
       row.names(runsToStart) <- paste0(row.names(runsToStart), "-AMT")
       saveRDS(runsToStart, file = paste0(mydir, "/runsToStart.rds"))
-      
+
       # start make test-full
       # 1. pull changes to magpie develop
       withr::with_dir("magpie", {
@@ -153,7 +150,7 @@ startRuns <- function(test, model, mydir, gitPath, user) {
       })
       # 2. execute test
       system("make test-full-slurm")
-      
+
     } else if (model == "MAgPIE") {
       # default run to download input data
       system("Rscript start.R runscripts=default submit=slurmpriority")
@@ -308,7 +305,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       }
       cfg <- NULL
       # Question: is this check really useful? 'Conv' has been checked 4 lines above already.
-      # Doesn't this check exclude runs that have 'converged (had INFES)' and 
+      # Doesn't this check exclude runs that have 'converged (had INFES)' and
       # wouldn't it be useful to also produce compareScenarios for these? The existence of the mif file only
       # matters later on after the runtime check when it comes to compareScenarios. So why testing for it here?
       if (any(grepl(basename(getwd()), rownames(filter(gRS, .data$Conv == "converged", .data$Mif %in% c("yes", "sumErr")))))) {
@@ -392,16 +389,35 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         testthatResult <- paste("All tests pass in `make test-full`:", logStatus)
       }
     }
+
+    # Find (by date in folder name) and move runs older than 'daysback' to archive
+    daysback <- 90
+
+    oldRuns <-
+      list.files(pattern=".*AMT.*", include.dirs = TRUE) %>%
+      file.info() %>%
+      filter(isdir)
+    oldRuns$runname <- row.names(oldRuns)
+    oldRuns <- oldRuns %>%
+      mutate("ctimeDay" = as.Date(gsub(".*_([0-9]{4}-[0-9]{2}-[0-9]{2})_.*$", "\\1", .data$runname))) %>%
+      filter(.data$ctimeDay < (Sys.Date() - daysback)) %>%
+      pull(.data$runname)
+
+    if (length(oldRuns) > 0) {
+      message("Moving ", length(oldRuns), " runs with ctime older than ", daysback, " days (", Sys.Date() - daysback,") to 'archive':")
+      print(oldRuns)
+      system(paste("mv", paste(oldRuns, collapse = " "), "archive"))
+    }
   }
 
   if(length(runsStarted) < 1) errorList <- c(errorList, "No runs started")
-  
+
   if(is.null(errorList)) {
     summary <- paste0("Summary of ", today, ": Tests look good")
   } else {
     summary <- paste0("Summary of ", today, ": ", paste0(unlist(unique(errorList)), collapse = ". "))
   }
-  
+
   write(summary, myfile, append = TRUE)
   write("```", myfile, append = TRUE)
   message("Finished compiling README.md")
@@ -439,7 +455,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     if (exists("testthatResult")) {
       message <- c(message, testthatResult)
     }
-    
+
     if (!is.null(message)) {
       message <- paste0(message, collapse = "\n") # put each vector element into new line
       .mattermostBotMessage(message = message, token = mattermostToken)
