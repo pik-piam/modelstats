@@ -47,5 +47,5 @@ of test results.
 \code{\link{package2readme}}
 }
 \author{
-Anastasis Giannousakis
+Anastasis Giannousakis, David Klein
 }
