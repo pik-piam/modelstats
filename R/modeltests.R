@@ -298,8 +298,8 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       setwd(i)
       message("Changed to ", normalizePath("."))
       # Use the fulldata.gdx of a successful SSP2EU-NPi-AMT to update the gdx on the RSE server that is used for testing convGDX2MIF
-      if (grepl("SSP2EU-PkBudg650-AMT", rownames(grsi))) {
-        gdxOnRseServer <- "rse:/webservice/data/example/remind2_test-convGDX2MIF_SSP2EU-PkBudg650-AMT.gdx"
+      if (grepl("SSP2EU-NPi-AMT", rownames(grsi))) {
+        gdxOnRseServer <- "rse@rse.pik-potsdam.de:/webservice/data/example/remind2_test-convGDX2MIF_SSP2EU-PkBudg650-AMT.gdx"
         message(paste("Updating the gdx on the RSE server", gdxOnRseServer, "with the fulldata.gdx of", rownames(grsi)))
         system(paste("rsync -e ssh -av fulldata.gdx", gdxOnRseServer))
       }
