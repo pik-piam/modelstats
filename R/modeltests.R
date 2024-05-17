@@ -298,7 +298,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       setwd(i)
       message("Changed to ", normalizePath("."))
       # Use the fulldata.gdx of a successful SSP2EU-NPi-AMT to update the gdx on the RSE server that is used for testing convGDX2MIF
-      if (grepl("SSP2EU-NPi-AMT", rownames(grsi))) {
+      if (grepl("SSP2EU-PkBudg650-AMT", rownames(grsi))) {
         gdxOnRseServer <- "rse@rse.pik-potsdam.de:/webservice/data/example/remind2_test-convGDX2MIF_SSP2EU-PkBudg650-AMT.gdx"
         message(paste("Updating the gdx on the RSE server", gdxOnRseServer, "with the fulldata.gdx of", rownames(grsi)))
         system(paste("rsync -e ssh -av fulldata.gdx", gdxOnRseServer))
@@ -413,9 +413,9 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
   if(length(runsStarted) < 1) errorList <- c(errorList, "No runs started")
 
   if(is.null(errorList)) {
-    summary <- paste0("Summary of ", today, ": Tests look good")
+    summary <- paste0("Summary: AMT runs look good.")
   } else {
-    summary <- paste0("Summary of ", today, ": ", paste0(unlist(unique(errorList)), collapse = ". "))
+    summary <- paste0("Summary: ", paste0(unlist(unique(errorList)), collapse = ". "))
   }
 
   write(summary, myfile, append = TRUE)
@@ -434,26 +434,24 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     message <- NULL
     if (model == "REMIND") {
       rs2 <- utils::capture.output(loopRuns(runsStarted, user = NULL, colors = FALSE, sortbytime = FALSE))
-      message <- paste0("Please find below the status of the REMIND automated model tests (AMT) of ", today, ":")
-      message <- c(message, "```", gitInfo, "```")
-      message <- c(message, "```", rs2, "```")
+      message <- paste0("Please find below the status of the REMIND automated model tests (AMT) of ", today, ". Runs are here: `/p/projects/remind/modeltests/remind`.")
       message <- c(message, summary)
+      message <- c(message, testthatResult)
+      message <- c(message, "```", gitInfo, "```")
+      message <- c(message, "`rs2 -t` returns:")
+      message <- c(message, "```", rs2, "```")
       if (exists("runsNotStarted")) {
         message <- c(message, "These scenarios did not start at all:", runsNotStarted)
       }
     }
-    if (!is.null(errorList)) {
+    if (!is.null(errorList) && model == "MAgPIE") {
         message <- c(message, paste0("Some ",
                       model,
                       " tests produce warnings. Please check ",
                       "https://gitlab.pik-potsdam.de/",
                       ifelse(model == "MAgPIE", "landuse", model),
-                      "/testing_suite",
-                      ifelse(model == "REMIND", " or `rs2 -t`", "")
+                      "/testing_suite"
                       ))
-    }
-    if (exists("testthatResult")) {
-      message <- c(message, testthatResult)
     }
 
     if (!is.null(message)) {
