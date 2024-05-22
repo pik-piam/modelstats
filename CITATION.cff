@@ -2,8 +2,8 @@ cff-version: 1.2.0
 message: If you use this software, please cite it using the metadata from this file.
 type: software
 title: 'modelstats: Run Analysis Tools'
-version: 0.21.2
-date-released: '2024-05-17'
+version: 0.21.3
+date-released: '2024-05-22'
 abstract: A collection of tools to analyze model runs.
 authors:
 - family-names: Giannousakis
@@ -12,5 +12,6 @@ authors:
 - family-names: Richters
   given-names: Oliver
 license: LGPL-3.0
+keywords: ~
 repository-code: https://github.com/pik-piam/modelstats
 
