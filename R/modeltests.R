@@ -304,17 +304,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         system(paste("rsync -e ssh -av fulldata.gdx", gdxOnRseServer))
       }
       cfg <- NULL
-      # Question: is this check really useful? 'Conv' has been checked 4 lines above already.
-      # Doesn't this check exclude runs that have 'converged (had INFES)' and
-      # wouldn't it be useful to also produce compareScenarios for these? The existence of the mif file only
-      # matters later on after the runtime check when it comes to compareScenarios. So why testing for it here?
-      if (any(grepl(basename(getwd()), rownames(filter(gRS, .data$Conv == "converged", .data$Mif %in% c("yes", "sumErr")))))) {
-        load("config.Rdata")
-      } else {
-        setwd("../")
-        message("Skipping ", i, " and changed back to ", normalizePath("."))
-        next
-      }
+      load("config.Rdata")
       sameRuns <- gRS %>% filter(.data$Conv %in% c("converged", "converged (had INFES)"), # runs have to be converged
                                  .data$Mif %in% c("yes", "sumErr"),                       # need to have mifs
                                  grepl(cfg$title, rownames(gRS)),                         # must be the same scenario
@@ -354,6 +344,8 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       }
       setwd("../")
       message("Finished analysis for ", i, " and changed back to ", normalizePath("."))
+    } else {
+      message(i, "does not seem to have converged. Skipping!")
     }
   }
 
@@ -404,7 +396,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       pull(.data$runname)
 
     if (length(oldRuns) > 0) {
-      message("Moving ", length(oldRuns), " runs with ctime older than ", daysback, " days (", Sys.Date() - daysback,") to 'archive':")
+      message("Moving ", length(oldRuns), " runs with timestamp older than ", daysback, " days (", Sys.Date() - daysback,") to 'archive':")
       print(oldRuns)
       system(paste("mv", paste(oldRuns, collapse = " "), "archive"))
     }
