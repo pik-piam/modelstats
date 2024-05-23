@@ -32,7 +32,8 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
   if (isTRUE(mydir == ".")) {
     loopRuns(".", user = user, colors = colors)
   } else if (length(mydir) == 0 || isTRUE(mydir == "")) {
-    if (sum(file.exists(c("full.gms", "log.txt", "config.Rdata", "prepare_and_run.R", "prepareAndRun.R"))) >= 4) {
+    if (sum(file.exists(c("full.gms", "log.txt", "config.Rdata", "prepare_and_run.R", "prepareAndRun.R"))) >= 4 ||
+        sum(file.exists(c("full.gms", "submit.R", "config.yml", "magpie_y1995.gdx"))) == 4) {
       loopRuns(".", user = user, colors = colors)
     } else {
       folder <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "./output" else "."
