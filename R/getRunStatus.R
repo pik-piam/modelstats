@@ -61,8 +61,8 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     gdxfiles <- c(gdx, gdx_non_optimal)[file.exists(c(gdx, gdx_non_optimal))]
     latest_gdx <- NULL
     if (length(gdxfiles) > 0) {
-      fileInfo <- file.info(gdxfiles)
-      latest_gdx <- rownames(fileInfo)[which.max(fileInfo$mtime)]
+      itergdx <- as.numeric(unlist(lapply(gdxfiles, readGDX, "o_iterationNumber", format = "simplest")))
+      latest_gdx <- gdxfiles[which.max(itergdx)]
     }
 
     # Initialize objects
