@@ -294,11 +294,11 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     if (grsi[, "runInAppResults"] != "yes") errorList <- c(errorList, "Some run(s) did not report correctly")
     # For a successful run compare runtime and results with previous AMT run
     # Since there is no column 'Conv' for MAgPIE runs the following will only be performed for REMIND runs
-    if (grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
+    if (grsi[, "Conv"] %in% c("converged", "converged (had INFES)", "not_converged")) {
       setwd(i)
       message("Changed to ", normalizePath("."))
       # Use the fulldata.gdx of a successful SSP2EU-NPi-AMT to update the gdx on the RSE server that is used for testing convGDX2MIF
-      if (grepl("SSP2EU-PkBudg650-AMT", rownames(grsi))) {
+      if (grepl("SSP2EU-PkBudg650-AMT", rownames(grsi)) && grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
         gdxOnRseServer <- "rse@rse.pik-potsdam.de:/webservice/data/example/remind2_test-convGDX2MIF_SSP2EU-PkBudg650-AMT.gdx"
         message(paste("Updating the gdx on the RSE server", gdxOnRseServer, "with the fulldata.gdx of", rownames(grsi)))
         system(paste("rsync -e ssh -av fulldata.gdx", gdxOnRseServer))
@@ -311,12 +311,16 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
                                  ! rownames(gRS) %in% basename(cfg$results_folder)) %>%   # but not the current run
                           rownames()
       if (length(sameRuns) > 0) {
-        lastRun <- max(sameRuns[sameRuns < basename(cfg$results_folder)])
-        currentRunTime <- as.numeric(.readRuntime("."),                    units = "hours")
-        lastRunTime    <- as.numeric(.readRuntime(paste0("../", lastRun)), units = "hours")
-        if (currentRunTime > (1.25 * lastRunTime)) {
-          errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
+        # compare runtime for converged run only (skip if not_converged) 
+        if(grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
+          lastRun <- max(sameRuns[sameRuns < basename(cfg$results_folder)])
+          currentRunTime <- as.numeric(.readRuntime("."),                    units = "hours")
+          lastRunTime    <- as.numeric(.readRuntime(paste0("../", lastRun)), units = "hours")
+          if (currentRunTime > (1.25 * lastRunTime)) {
+            errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
+          }
         }
+        # run compareScenarios also for runs that are not_converged
         fullPathToThisRun <- normalizePath(".")
         fullPathToLastRun <- normalizePath(file.path("..",lastRun))
         if (compScen &&
@@ -376,7 +380,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       if (!isTRUE(grepl("FAIL", logStatus))) {
         testthatResult <- paste("`make test-full` did not run properly. Check", newName)
       } else if (!isTRUE(grepl("FAIL 0", logStatus) & grepl("WARN 0", logStatus))) {
-        testthatResult <- paste0("Not all tests pass in `make test-full`: ", logStatus ,". Check ", newName)
+        testthatResult <- paste0("Not all tests pass in `make test-full`: ", logStatus ,". Check `", normalizePath(newName), "`")
       } else {
         testthatResult <- paste("All tests pass in `make test-full`:", logStatus)
       }
