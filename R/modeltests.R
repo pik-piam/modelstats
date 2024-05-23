@@ -294,39 +294,33 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     if (grsi[, "runInAppResults"] != "yes") errorList <- c(errorList, "Some run(s) did not report correctly")
     # For a successful run compare runtime and results with previous AMT run
     # Since there is no column 'Conv' for MAgPIE runs the following will only be performed for REMIND runs
-    if (grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
+    if (grsi[, "Conv"] %in% c("converged", "converged (had INFES)", "not_converged")) {
       setwd(i)
       message("Changed to ", normalizePath("."))
       # Use the fulldata.gdx of a successful SSP2EU-NPi-AMT to update the gdx on the RSE server that is used for testing convGDX2MIF
-      if (grepl("SSP2EU-PkBudg650-AMT", rownames(grsi))) {
+      if (grepl("SSP2EU-PkBudg650-AMT", rownames(grsi)) && grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
         gdxOnRseServer <- "rse@rse.pik-potsdam.de:/webservice/data/example/remind2_test-convGDX2MIF_SSP2EU-PkBudg650-AMT.gdx"
         message(paste("Updating the gdx on the RSE server", gdxOnRseServer, "with the fulldata.gdx of", rownames(grsi)))
         system(paste("rsync -e ssh -av fulldata.gdx", gdxOnRseServer))
       }
       cfg <- NULL
-      # Question: is this check really useful? 'Conv' has been checked 4 lines above already.
-      # Doesn't this check exclude runs that have 'converged (had INFES)' and
-      # wouldn't it be useful to also produce compareScenarios for these? The existence of the mif file only
-      # matters later on after the runtime check when it comes to compareScenarios. So why testing for it here?
-      if (any(grepl(basename(getwd()), rownames(filter(gRS, .data$Conv == "converged", .data$Mif %in% c("yes", "sumErr")))))) {
-        load("config.Rdata")
-      } else {
-        setwd("../")
-        message("Skipping ", i, " and changed back to ", normalizePath("."))
-        next
-      }
+      load("config.Rdata")
       sameRuns <- gRS %>% filter(.data$Conv %in% c("converged", "converged (had INFES)"), # runs have to be converged
                                  .data$Mif %in% c("yes", "sumErr"),                       # need to have mifs
                                  grepl(cfg$title, rownames(gRS)),                         # must be the same scenario
                                  ! rownames(gRS) %in% basename(cfg$results_folder)) %>%   # but not the current run
                           rownames()
       if (length(sameRuns) > 0) {
-        lastRun <- max(sameRuns[sameRuns < basename(cfg$results_folder)])
-        currentRunTime <- as.numeric(.readRuntime("."),                    units = "hours")
-        lastRunTime    <- as.numeric(.readRuntime(paste0("../", lastRun)), units = "hours")
-        if (currentRunTime > (1.25 * lastRunTime)) {
-          errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
+        # compare runtime for converged run only (skip if not_converged) 
+        if(grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
+          lastRun <- max(sameRuns[sameRuns < basename(cfg$results_folder)])
+          currentRunTime <- as.numeric(.readRuntime("."),                    units = "hours")
+          lastRunTime    <- as.numeric(.readRuntime(paste0("../", lastRun)), units = "hours")
+          if (currentRunTime > (1.25 * lastRunTime)) {
+            errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
+          }
         }
+        # run compareScenarios also for runs that are not_converged
         fullPathToThisRun <- normalizePath(".")
         fullPathToLastRun <- normalizePath(file.path("..",lastRun))
         if (compScen &&
@@ -354,6 +348,8 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       }
       setwd("../")
       message("Finished analysis for ", i, " and changed back to ", normalizePath("."))
+    } else {
+      message(i, "does not seem to have converged. Skipping!")
     }
   }
 
@@ -384,7 +380,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       if (!isTRUE(grepl("FAIL", logStatus))) {
         testthatResult <- paste("`make test-full` did not run properly. Check", newName)
       } else if (!isTRUE(grepl("FAIL 0", logStatus) & grepl("WARN 0", logStatus))) {
-        testthatResult <- paste0("Not all tests pass in `make test-full`: ", logStatus ,". Check ", newName)
+        testthatResult <- paste0("Not all tests pass in `make test-full`: ", logStatus ,". Check `", normalizePath(newName), "`")
       } else {
         testthatResult <- paste("All tests pass in `make test-full`:", logStatus)
       }
@@ -404,7 +400,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       pull(.data$runname)
 
     if (length(oldRuns) > 0) {
-      message("Moving ", length(oldRuns), " runs with ctime older than ", daysback, " days (", Sys.Date() - daysback,") to 'archive':")
+      message("Moving ", length(oldRuns), " runs with timestamp older than ", daysback, " days (", Sys.Date() - daysback,") to 'archive':")
       print(oldRuns)
       system(paste("mv", paste(oldRuns, collapse = " "), "archive"))
     }
