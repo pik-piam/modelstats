@@ -14,7 +14,7 @@
 #' }
 #'
 #' @importFrom gdx readGDX
-#' @importFrom utils tail
+#' @importFrom utils head tail
 #' @importFrom gms loadConfig
 #' @export
 getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
@@ -58,11 +58,17 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     logmagtxt       <- file.path(ii, "log-mag.txt")
     abortgdx        <- file.path(ii, "abort.gdx")
     if (! file.exists(logmagtxt)) logmagtxt <- logtxt
+    # select latest gdx file based on iteration, or if that fails based on timestamp
     gdxfiles <- c(gdx, gdx_non_optimal)[file.exists(c(gdx, gdx_non_optimal))]
-    latest_gdx <- NULL
-    if (length(gdxfiles) > 0) {
-      fileInfo <- file.info(gdxfiles)
-      latest_gdx <- rownames(fileInfo)[which.max(fileInfo$mtime)]
+    latest_gdx <- head(gdxfiles, 1)
+    if (length(gdxfiles) > 1) {
+      itergdx <- as.numeric(unlist(lapply(gdxfiles, readGDX, "o_iterationNumber", format = "simplest", react = "silent")))
+      if (length(itergdx) == length(gdxfiles)) {
+        latest_gdx <- gdxfiles[which.max(itergdx)]
+      } else {
+        fileInfo <- file.info(gdxfiles)
+        latest_gdx <- rownames(fileInfo)[which.max(fileInfo$mtime)]
+      }
     }
 
     # Initialize objects
