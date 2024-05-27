@@ -187,13 +187,20 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
   # wait for all AMT runs to finish
   if (!test) {
     message(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " - waiting for all AMT runs to finish.")
+    errCount <- 0
     repeat {
-      jobsInSlurm <- system(paste0("/p/system/slurm/bin/squeue -u ", user,
-                                   " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)
-      if (!any(grepl(mydir, jobsInSlurm))) {
-        Sys.sleep(600)
+      jobsInSlurm <- system(paste0("/p/system/slurm/bin/squeue -u ", user, " -alklksjdf -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)
+      if (isTRUE(attributes(jobsInSlurm)$status > 0)) {
+        # count how often squeue fails
+        errCount <- errCount + 1
+        if (errCount > 3) stop("squeue had exit status > 0 more than 3 times in a row.")
+      } else if (!any(grepl(mydir, jobsInSlurm))) {
         break
+      } else {
+        # reset if squeue was successful
+        errCount <- 0 
       }
+      Sys.sleep(600)
     }
     message(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " - all AMT runs finished.")
   }
