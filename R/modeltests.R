@@ -115,14 +115,9 @@ startRuns <- function(test, model, mydir, gitPath, user) {
     deleteEmptyRealizationFolders()
 
     if (model == "REMIND") {
-      message("Configuring and starting single default-AMT")
-      # Change title before starting the default run
-      system(paste0("sed -i 's/cfg$title <- ", '"default"/cfg$title <- "default-AMT"/', "' config/default.cfg"))
-      # set the slurmConfig before sourcing start.R to avoid questions about the slurm config
-      slurmConfig <- "--qos=priority --nodes=1 --tasks-per-node=12"  # nolint: object_usage_linter
-      selectScenarios <- NA  # will be loaded when sourcing start.R
-      source("start.R", local = TRUE)
-      Sys.sleep(100) # it would be much better to properly wait for the data downloading to finish
+      message("Configuring and starting single testOneRegi-AMT")
+      system(paste("Rscript start.R --testOneRegi titletag=AMT",
+                   "slurmConfig=\"--qos=priority --nodes=1 --tasks-per-node=1 --wait\""))
 
       message("Configuring and starting bundle of AMT runs")
       # do not download input data every run, reset force_download
