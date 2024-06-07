@@ -134,6 +134,10 @@ startRuns <- function(test, model, mydir, gitPath, user) {
                              row.names = 1,
                              comment.char = "#",
                              na.strings = "")
+                             
+      # Source everything from scripts/start so that all functions are available everywhere
+      invisible(sapply(list.files("scripts/start", pattern = "\\.R$", full.names = TRUE), source))
+      selectScenarios <- NA # just to avoid buildLibrary to fail with "no visible global function definition for 'selectScenarios'"
       runsToStart <- selectScenarios(settings = settings, interactive = FALSE, startgroup = "AMT")
       row.names(runsToStart) <- paste0(row.names(runsToStart), "-AMT")
       saveRDS(runsToStart, file = paste0(mydir, "/runsToStart.rds"))
