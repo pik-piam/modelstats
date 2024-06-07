@@ -189,7 +189,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     message(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " - waiting for all AMT runs to finish.")
     errCount <- 0
     repeat {
-      jobsInSlurm <- system(paste0("/p/system/slurm/bin/squeue -u ", user, " -alklksjdf -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)
+      jobsInSlurm <- system(paste0("/p/system/slurm/bin/squeue -u ", user, " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)
       if (isTRUE(attributes(jobsInSlurm)$status > 0)) {
         # count how often squeue fails
         errCount <- errCount + 1
@@ -198,7 +198,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
         break
       } else {
         # reset if squeue was successful
-        errCount <- 0 
+        errCount <- 0
       }
       Sys.sleep(600)
     }
@@ -318,7 +318,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
                                  ! rownames(gRS) %in% basename(cfg$results_folder)) %>%   # but not the current run
                           rownames()
       if (length(sameRuns) > 0) {
-        # compare runtime for converged run only (skip if not_converged) 
+        # compare runtime for converged run only (skip if not_converged)
         if(grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
           lastRun <- max(sameRuns[sameRuns < basename(cfg$results_folder)])
           currentRunTime <- as.numeric(.readRuntime("."),                    units = "hours")
