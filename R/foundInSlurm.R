@@ -42,7 +42,7 @@ foundInSlurm <- function(mydir = ".", user = NULL) {
     runuser <- strsplit(squeuefiltered[[1]], " ")[[1]][[1]]
     return(runuser)
   } else if (length(squeuefiltered) > 1) {
-    return("> 1 user")
+    return(paste(length(squeuefiltered), "users"))
   } else {
     return("no")
   }
