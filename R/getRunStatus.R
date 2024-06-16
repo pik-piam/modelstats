@@ -207,7 +207,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         if (length(startmag) > length(endmag)) {
           fulllogmag <- gsub("-rem-", "-mag-", gsub("output", file.path("magpie", "output"), fulllog))
           loopmag <- NULL
-          if (isTRUE(cfg$gms$cm_MAgPIE_coupling == "on") && file.exists(fulllogmag)) {
+          if (file.exists(fulllogmag)) {
             suppressWarnings(try(loopmag <- sub("^.*.= ", "", system(paste0("grep 'LOOPS' ", fulllogmag, " | tail -1"), intern = TRUE)), silent = TRUE))
           }
           out[i, "RunStatus"] <- paste("Run MAgPIE", loopmag)
