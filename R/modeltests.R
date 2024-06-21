@@ -215,8 +215,8 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
   write(paste0("Path to runs: ", mydir, "output/"), myfile, append = TRUE)
   if (model == "REMIND") {
     write(paste0(c("Responsibilities:",
-                   "  Robert     : SSP2EU-EU21",
-                   "  Jess / Oli : SSP2EU",
+                   "  Robert     : SSP2-EU21",
+                   "  Jess / Oli : SSP2",
                    "  Bjoern     : SDP",
                    "             : SSP1",
                    "             : SSP5"), collapse = "\n"), myfile, append = TRUE)
@@ -303,9 +303,9 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
     if (grsi[, "Conv"] %in% c("converged", "converged (had INFES)", "not_converged")) {
       setwd(i)
       message("Changed to ", normalizePath("."))
-      # Use the fulldata.gdx of a successful SSP2EU-NPi-AMT to update the gdx on the RSE server that is used for testing convGDX2MIF
-      if (grepl("SSP2EU-PkBudg650-AMT", rownames(grsi)) && grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
-        gdxOnRseServer <- "rse@rse.pik-potsdam.de:/webservice/data/example/remind2_test-convGDX2MIF_SSP2EU-PkBudg650-AMT.gdx"
+      # Use the fulldata.gdx of a successful SSP2-NPi-AMT to update the gdx on the RSE server that is used for testing convGDX2MIF
+      if (grepl("SSP2-PkBudg650-AMT", rownames(grsi)) && grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
+        gdxOnRseServer <- "rse@rse.pik-potsdam.de:/webservice/data/example/remind2_test-convGDX2MIF_SSP2-PkBudg650-AMT.gdx"
         message(paste("Updating the gdx on the RSE server", gdxOnRseServer, "with the fulldata.gdx of", rownames(grsi)))
         system(paste("rsync -e ssh -av fulldata.gdx", gdxOnRseServer))
       }
