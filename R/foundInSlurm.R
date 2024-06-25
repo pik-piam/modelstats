@@ -17,7 +17,7 @@ foundInSlurm <- function(mydir = ".", user = NULL) {
     mydir <- dirname(dirname(mydir))
   }
 
-  squeueresult <- system("/p/system/slurm/bin/squeue -h -o '%u %Z %j %M %T %q'", intern = TRUE)
+  squeueresult <- system("squeue -h -o '%u %Z %j %M %T %q'", intern = TRUE)
   squeuefiltered <- grep(mydir, squeueresult, value = TRUE, fixed = TRUE)
   squeuefiltered <- grep(paste0(runname, " "), squeuefiltered, value = TRUE, fixed = TRUE)
   # try to find REMIND slurm job corresponding to coupled MAgPIE run
