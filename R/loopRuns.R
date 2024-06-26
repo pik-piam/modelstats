@@ -27,7 +27,7 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
   if (colors) {
     cat("# Color code: ", yellow("pending"), "/", yellow("startup"), ", ", cyan("running"), ", ",
         underline(green("converged")), ", ", blue("converged (had INFES)"), ", ",
-        green("finished"), ", ", red("error"), ".\n\n", sep = "")
+        green("finished"), ", ", magenta("conopt stalled?"), ", ", red("error"), ".\n\n", sep = "")
   }
   a <- file.info(mydir)
   a <- a[a[, "isdir"] == TRUE, ]
@@ -79,7 +79,7 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
 
     out <- trimws(printOutput(status, lenCols = lenCols, colSep = colSep), which = "right", whitespace = " ")
     status <- unlist(status)
-    if (grepl("^y[12]", status[["Iter"]]) || grepl("^nlp_", status[["RunType"]])) {
+    if (grepl("^y[12]", status[["Iter"]]) || grepl("^nlp_", status[["RunType"]])) { # MAgPIE
       if (isFALSE(colors)) {
         cat(out)
       } else if (status[["Runtime"]] %in% "pending") {
@@ -91,6 +91,8 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
       } else if ((grepl("222", status[["modelstat"]]) && ! grepl(".", status[["modelstat"]], fixed = TRUE))
                  || status[["modelstat"]] == "2: Locally Optimal") {
         cat(green(out))
+      } else if (grepl("conoptspy >", out, fixed = TRUE)) {
+        cat(magenta(out))
       } else if (grepl("Run in progress", out)) {
         cat(cyan(out))
       } else if (all(grepl(" NA ", out) & grepl("FALSE", out))) {
@@ -98,11 +100,13 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
       } else {
         cat(out)
       }
-    } else {
+    } else {  # REMIND
       if (isFALSE(colors)) {
         cat(out)
       } else if (status[["Runtime"]] %in% c("pending", "startup")) {
         cat(yellow(out))
+      } else if (grepl("conoptspy >", out, fixed = TRUE)) {
+        cat(magenta(out))
       } else if (! status[["jobInSLURM"]] == "no") {
         cat(cyan(out))
       } else if (status[["Conv"]] == "converged (had INFES)") {
