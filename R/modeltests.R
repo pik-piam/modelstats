@@ -322,7 +322,7 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
           lastRun <- max(sameRuns[sameRuns < basename(cfg$results_folder)])
           currentRunTime <- as.numeric(.readRuntime("."),                    units = "hours")
           lastRunTime    <- as.numeric(.readRuntime(paste0("../", lastRun)), units = "hours")
-          if (currentRunTime > (1.25 * lastRunTime)) {
+          if (length(currentRunTime) > 0 && length(lastRunTime) > 0 && currentRunTime > (1.25 * lastRunTime)) {
             errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
           }
         }
