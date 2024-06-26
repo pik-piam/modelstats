@@ -16,6 +16,7 @@
 #' @importFrom gdx readGDX
 #' @importFrom utils head tail
 #' @importFrom gms loadConfig
+#' @importFrom piamutils niceround
 #' @export
 getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
   substrRight <- function(x, n) {
@@ -178,6 +179,11 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
           }
         } else {
           out[i, "RunStatus"] <- "Run in progress"
+          gridfiles <- Sys.glob(file.path(ii, "225*", "grid*", "gmsgrid.log"))
+          if (length(gridfiles) > 0) {
+            conoptdelay <- round(difftime(Sys.time(), max(file.info(gridfiles)$mtime), units = "hours") - 0.049, 1)
+            if (conoptdelay > 0) out[i, "RunStatus"] <- paste0("conoptspy >", niceround(conoptdelay, 1), "h")
+          }
         }
       } else {
         if (out[i, "RunStatus"] == "NA") out[i, "RunStatus"] <- "Run interrupted"
