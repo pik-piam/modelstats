@@ -80,12 +80,9 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     runnames <- system(paste0("squeue -u ", user, " -h -o '%j'"), intern = TRUE)
 
     if (all(mydir %in% c("-cr", "-c"))) {
-      myruns2 <- system(paste0("sacct -u ", user, " -s cd,f,cancelled,timeout,oom -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " --format WorkDir -P -n"), intern = TRUE)
-      # myruns2<-myruns2[!grepl("^$",myruns2)]
-      myruns <- c(myruns, myruns2)
-      runnames2 <- system(paste0("sacct -u ", user, " -s cd,f,cancelled,timeout,oom -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " --format JobName -P -n"), intern = TRUE)
-      # runnames2<-runnames2[!grepl("^batch$",runnames2)]
-      runnames <- c(runnames, runnames2)
+      sacctcode <- paste0("sacct -u ", user, " -s cd,f,cancelled,timeout,oom -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " -E now -P -n")
+      myruns   <- c(myruns,   system(paste(sacctcode, "--format WorkDir"), intern = TRUE))
+      runnames <- c(runnames, system(paste(sacctcode, "--format JobName"), intern = TRUE))
     }
 
     if (any(grepl("mag-run", runnames))) {
