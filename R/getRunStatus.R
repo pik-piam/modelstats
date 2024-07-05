@@ -182,7 +182,9 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
           gridfiles <- Sys.glob(file.path(ii, "225*", "grid*", "gmsgrid.log"))
           if (length(gridfiles) > 0) {
             conoptdelay <- round(difftime(Sys.time(), max(file.info(gridfiles)$mtime), units = "hours") - 0.049, 1)
-            if (conoptdelay > 0) out[i, "RunStatus"] <- paste0("conoptspy >", niceround(conoptdelay, 1), "h")
+            gdxdelay <- 1
+            if (length(latest_gdx) > 0 && file.exists(latest_gdx)) gdxdelay <- difftime(Sys.time(), file.info(latest_gdx)$mtime, units = "hours")
+            if (conoptdelay > 0.1 && gdxdelay > 0.25) out[i, "RunStatus"] <- paste0("conoptspy >", niceround(conoptdelay, 1), "h")
           }
         }
       } else {
