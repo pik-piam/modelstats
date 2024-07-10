@@ -134,7 +134,7 @@ startRuns <- function(test, model, mydir, gitPath, user) {
                              row.names = 1,
                              comment.char = "#",
                              na.strings = "")
-                             
+
       # Source everything from scripts/start so that all functions are available everywhere
       invisible(sapply(list.files("scripts/start", pattern = "\\.R$", full.names = TRUE), source))
       selectScenarios <- NA # just to avoid buildLibrary to fail with "no visible global function definition for 'selectScenarios'"
@@ -384,9 +384,9 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
       newName <- paste0("tests/test-full-", dateTag, ".log")
       file.rename(from = currentName, to = paste0("../", newName))
       if (!isTRUE(grepl("FAIL", logStatus))) {
-        testthatResult <- paste("`make test-full` did not run properly. Check", newName)
+        testthatResult <- paste("`make test-full` did not run properly. Check", normalizePath(paste0("../", newName)))
       } else if (!isTRUE(grepl("FAIL 0", logStatus) & grepl("WARN 0", logStatus))) {
-        testthatResult <- paste0("Not all tests pass in `make test-full`: ", logStatus ,". Check `", normalizePath(newName), "`")
+        testthatResult <- paste0("Not all tests pass in `make test-full`: ", logStatus ,". Check `", normalizePath(paste0("../", newName)), "`")
       } else {
         testthatResult <- paste("All tests pass in `make test-full`:", logStatus)
       }
