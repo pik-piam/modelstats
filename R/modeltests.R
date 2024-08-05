@@ -150,7 +150,7 @@ startRuns <- function(test, model, mydir, user) {
 
     } else if (model == "MAgPIE") {
       # default run to download input data
-      system("Rscript start.R runscripts=default submit=slurmpriority")
+      system("Rscript start.R runscripts=default submit='SLURM priority'")
       # wait for default run to finish
       repeat {
         Sys.sleep(300)
@@ -161,7 +161,7 @@ startRuns <- function(test, model, mydir, user) {
         }
       }
       # now start actual test runs
-      system("Rscript start.R runscripts=test_runs submit=slurmpriority")
+      system("Rscript start.R runscripts=test_runs submit='SLURM priority'")
     }
   }
   saveRDS(runcode, file = paste0(mydir, "/runcode.rds"))
