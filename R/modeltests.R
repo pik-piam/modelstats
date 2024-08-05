@@ -15,7 +15,6 @@
 #' @param email whether an email notification will be send or not
 #' @param mattermostToken token used for mattermost notifications
 #' @param compScen whether compScen has to run or not
-#' @param gitPath Path to the git executable
 #'
 #' @author Anastasis Giannousakis, David Klein
 #' @seealso \code{\link{package2readme}}
@@ -32,8 +31,7 @@ modeltests <- function(
     test = NULL,
     email = TRUE,
     compScen = TRUE,
-    mattermostToken = NULL,
-    gitPath = "/p/system/packages/git/2.16.1/bin/git"  # nolint: absolute_path_linter
+    mattermostToken = NULL
 ) {
   setwd(mydir)
 
@@ -43,14 +41,14 @@ modeltests <- function(
 
   if (readLines("../.testsstatus") == "start") {
     message("Found 'start' in ", normalizePath("../.testsstatus"), "\nCalling 'startRuns'")
-    startRuns(test = test, model = model, gitPath = gitPath, user = user, mydir = mydir)
+    startRuns(test = test, model = model, user = user, mydir = mydir)
     # make sure next call will evaluate runs
     message("Writing 'end' to ", normalizePath("../.testsstatus"))
     writeLines("end", con = "../.testsstatus")
   } else if (readLines("../.testsstatus") == "end") {
     message("Found 'end' in ", normalizePath("../.testsstatus"), "\nCalling 'evaluateRuns'")
     withr::with_dir("output", {
-      evaluateRuns(model = model, mydir = mydir, gitPath = gitPath, compScen = compScen, email = email,
+      evaluateRuns(model = model, mydir = mydir, compScen = compScen, email = email,
                    mattermostToken = mattermostToken, gitdir = gitdir, user = user)
                    })
     # make sure next call will start runs
@@ -91,7 +89,7 @@ deleteEmptyRealizationFolders <- function() {
   }
 }
 
-startRuns <- function(test, model, mydir, gitPath, user) {
+startRuns <- function(test, model, mydir, user) {
   if (!is.null(test)) {
     runcode <- paste0(".*.20-AMT", test)
     test <- TRUE
@@ -106,7 +104,7 @@ startRuns <- function(test, model, mydir, gitPath, user) {
   if (is.null(model)) stop("Model cannot be NULL")
 
   if (!test) {
-    system(paste0(gitPath, " reset --hard origin/develop && ", gitPath, " pull"))
+    system("git reset --hard origin/develop && git pull")
     # Force downloading of the input data in the first run
     system("sed -i 's/cfg$force_download <- FALSE/cfg$force_download <- TRUE/' config/default.cfg")
 
@@ -145,7 +143,7 @@ startRuns <- function(test, model, mydir, gitPath, user) {
       # start make test-full
       # 1. pull changes to magpie develop
       withr::with_dir("magpie", {
-            system(paste0(gitPath, " reset --hard origin/develop && ", gitPath, " pull"))
+            system("git reset --hard origin/develop && git pull")
       })
       # 2. execute test
       system("make test-full-slurm")
@@ -171,7 +169,7 @@ startRuns <- function(test, model, mydir, gitPath, user) {
   message("Function 'startRuns' finished.")
 }
 
-evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken, gitdir, user, test = NULL) {
+evaluateRuns <- function(model, mydir, compScen, email, mattermostToken, gitdir, user, test = NULL) {
   message("Current working directory ", normalizePath("."))
   if (is.null(test)) test <- readRDS(paste0(mydir, "/test.rds"))
   if (!test) {
@@ -205,9 +203,9 @@ evaluateRuns <- function(model, mydir, gitPath, compScen, email, mattermostToken
   }
 
   message("Compiling the README.md to be committed to testing_suite repo.")
-  commitTested <- sub("commit ", "", system(paste0(gitPath, " log -1"), intern = TRUE)[[1]])
+  commitTested <- sub("commit ", "", system("git log -1", intern = TRUE)[[1]])
   if (!test) saveRDS(commitTested, file = paste0(mydir, "/lastcommit.rds"))
-  commitsSinceLastTest <- system(paste0(gitPath, " log --merges --pretty=oneline ",
+  commitsSinceLastTest <- system(paste0("git log --merges --pretty=oneline ",
                            lastCommit, "..", commitTested, " --abbrev-commit | grep 'Merge pull request'"), intern = TRUE)
   myfile <- file.path(ifelse(test, ".", tempdir()), "README.md")
   write("```", myfile)
