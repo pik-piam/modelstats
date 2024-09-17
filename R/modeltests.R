@@ -115,7 +115,7 @@ startRuns <- function(test, model, mydir, user) {
     if (model == "REMIND") {
       message("Configuring and starting single testOneRegi-AMT")
       system(paste("Rscript start.R --testOneRegi titletag=AMT",
-                   "slurmConfig=\"--qos=priority --nodes=1 --tasks-per-node=1 --wait\""))
+                   "slurmConfig=\"--qos=priority --nodes=1 --tasks-per-node=1 --wait --time=2:00:00\""))
 
       message("Configuring and starting bundle of AMT runs")
       # do not download input data every run, reset force_download
@@ -123,7 +123,7 @@ startRuns <- function(test, model, mydir, user) {
 
       # now start actual test runs
       system(paste0("Rscript start.R ",
-                    "startgroup=AMT titletag=AMT slurmConfig=\"--qos=standby --nodes=1 --tasks-per-node=12\" ",
+                    "startgroup=AMT titletag=AMT slurmConfig=\"--qos=standby --nodes=1 --tasks-per-node=12 --time=36:00:00\" ",
                     "config/scenario_config.csv"))
 
       # Create and save a list of runs that should have been started in order to determine later which runs were not started
