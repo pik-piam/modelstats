@@ -105,7 +105,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       }
     }
     explain_modelstat <- c("1" = "Optimal", "2" = "Locally Optimal", "3" = "Unbounded", "4" = "Infeasible",
-                           "5" = "Locally Infes", "6" = "Intermed Infes", "7" = "Intermed Nonoptimal", "13" = "Error achieved")
+                           "5" = "Locally Infes", "6" = "Intermed Infes", "7" = "Intermed Nonoptimal", "13" = "Error No Solution")
     if (out[i, "modelstat"] %in% names(explain_modelstat)) {
       out[i, "modelstat"] <- paste0(out[i, "modelstat"], ": ", explain_modelstat[out[i, "modelstat"]])
     }
