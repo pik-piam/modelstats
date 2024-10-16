@@ -220,7 +220,13 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
           }
           out[i, "RunStatus"] <- paste("Run MAgPIE", loopmag)
         }
+        if (isTRUE(grepl("try to acquire model lock", try(system(paste("tail -1", logmagtxt), intern = TRUE), silent = TRUE)))) {
+          out[i, "RunStatus"] <- "Wait MAgPIE lock"
+        }
+
       }
+    } else if (file.exists(logtxt) && isTRUE(grepl("try to acquire model lock", try(system(paste("tail -1", logtxt), intern = TRUE), silent = TRUE)))) {
+      out[i, "RunStatus"] <- "Wait REMIND lock"
     } else {
       out[i, "RunStatus"] <- "full.log missing"
     }
