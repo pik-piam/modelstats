@@ -315,9 +315,9 @@ evaluateRuns <- function(model, mydir, compScen, email, mattermostToken, gitdir,
                                  ! rownames(gRS) %in% basename(cfg$results_folder)) %>%   # but not the current run
                           rownames()
       if (length(sameRuns) > 0) {
+        lastRun <- max(sameRuns[sameRuns < basename(cfg$results_folder)])
         # compare runtime for converged run only (skip if not_converged)
         if(grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
-          lastRun <- max(sameRuns[sameRuns < basename(cfg$results_folder)])
           currentRunTime <- as.numeric(.readRuntime("."),                    units = "hours")
           lastRunTime    <- as.numeric(.readRuntime(paste0("../", lastRun)), units = "hours")
           if (length(currentRunTime) > 0 && length(lastRunTime) > 0 && currentRunTime > (1.25 * lastRunTime)) {
