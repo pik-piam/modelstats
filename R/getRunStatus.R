@@ -164,7 +164,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         if (out[i, "jobInSLURM"] == "no" || grepl("pending$", out[i, "jobInSLURM"])) {
           if (file.exists(logtxt)) {
             slurmerror <- NULL
-            suppressWarnings(try(slurmerror <- system(paste0("grep 'slurmstepd: error' ", logtxt), intern = TRUE), silent = TRUE))
+            suppressWarnings(try(slurmerror <- system(paste0("grep 'slurmstepd.*error' ", logtxt), intern = TRUE), silent = TRUE))
             if (isTRUE(any(grepl("DUE TO TIME LIMIT", slurmerror)))) {
               out[i, "RunStatus"] <- "Timeout interrupt"
             } else if (isTRUE(any(grepl("memory|oom-kill", slurmerror)))) {
@@ -173,6 +173,8 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
               out[i, "RunStatus"] <- "Preempt interrupt"
             } else if (isTRUE(any(grepl("DUE TO JOB REQUEUE", slurmerror)))) {
               out[i, "RunStatus"] <- "Run requeued"
+            } else if (isTRUE(any(grepl("CANCELLED", slurmerror)))) {
+              out[i, "RunStatus"] <- "Run cancelled"
             }
           } else {
             out[i, "RunStatus"] <- if (out[i, "jobInSLURM"] == "no") "Run interrupted" else "Run restarted"
