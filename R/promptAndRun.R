@@ -124,7 +124,13 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     print(myruns[1:min(100, length(myruns))])
     loopRuns(myruns, user = user, colors = colors, sortbytime = FALSE)
   } else {
-    loopRuns(ifelse(dir.exists(mydir), mydir, file.path("output", mydir)), user = user, colors = colors)
+    mydir <- ifelse(! dir.exists(mydir) & dir.exists(file.path("output", mydir)), file.path("output", mydir), mydir)
+    if (! all(dir.exists(mydir))) {
+      folder <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "./output" else "."
+      mydir <- c(mydir[dir.exists(mydir)],
+                 grep(paste0(mydir[! dir.exists(mydir)], collapse = "|"), list.dirs(folder, recursive = FALSE), value = TRUE))
+    }
+    loopRuns(mydir, user = user, colors = colors, sortbytime = FALSE)
   }
 
 }
