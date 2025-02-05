@@ -216,6 +216,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         endmag <- suppressWarnings(system(paste0("tac ", logmagtxt, " | grep -m 1 'MAgPIE output was stored'"), intern = TRUE))
         if (length(startmag) > length(endmag)) {
           fulllogmag <- gsub("-rem-", "-mag-", gsub("output", file.path("magpie", "output"), fulllog))
+          if (! file.exists(fulllogmag)) fulllogmag <- gsub("-rem-", "-mag-", gsub("output", file.path("..", "magpie", "output"), fulllog))
           loopmag <- NULL
           if (file.exists(fulllogmag)) {
             suppressWarnings(try(loopmag <- sub("^.*.= ", "", system(paste0("grep 'LOOPS' ", fulllogmag, " | tail -1"), intern = TRUE)), silent = TRUE))
