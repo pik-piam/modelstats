@@ -221,6 +221,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
           if (file.exists(fulllogmag)) {
             suppressWarnings(try(loopmag <- sub("^.*.= ", "", system(paste0("grep 'LOOPS' ", fulllogmag, " | tail -1"), intern = TRUE)), silent = TRUE))
           }
+          if (length(suppressWarnings(system(paste0("tac ", logmagtxt, " | grep -m 1 'Start getReport'"), intern = TRUE)) > 0)) loopmag <- "report"
           out[i, "RunStatus"] <- paste("Run MAgPIE", loopmag)
         }
         if (isTRUE(grepl("try to acquire model lock", try(system(paste("tail -1", logmagtxt), intern = TRUE), silent = TRUE)))) {
