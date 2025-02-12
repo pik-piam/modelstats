@@ -210,35 +210,35 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
   commitsSinceLastTest <- system(paste0("git log --merges --pretty=oneline ",
                                         lastCommit, "..", commitTested,
                                         " --abbrev-commit | grep 'Merge pull request'"), intern = TRUE)
-  myfile <- file.path(ifelse(test, ".", tempdir()), "README.md")
-  write("```", myfile)
+  readme <- file.path(ifelse(test, ".", tempdir()), "README.md")
+  write("```", readme)
   write(paste0("This is the result of the automated model tests for ", model, " on ", today, "."),
-        myfile, append = TRUE)
-  write(paste0("Path to runs: ", mydir, "output/"), myfile, append = TRUE)
+        readme, append = TRUE)
+  write(paste0("Path to runs: ", mydir, "output/"), readme, append = TRUE)
   if (model == "REMIND") {
     write(paste0(c("Responsibilities:",
                    "  Robert     : SSP2-EU21",
                    "  Jess / Oli : SSP2",
                    "  Bjoern     : SDP",
                    "             : SSP1",
-                   "             : SSP5"), collapse = "\n"), myfile, append = TRUE)
+                   "             : SSP5"), collapse = "\n"), readme, append = TRUE)
   }
   write(paste0("Direct and interactive access to plots: open shinyResults::appResults, then use '",
                ifelse(model == "MAgPIE", "weeklyTests", "AMT"),
-               "' as keyword in the title search"), myfile, append = TRUE)
+               "' as keyword in the title search"), readme, append = TRUE)
   if (model == "REMIND" && compScen == TRUE) {
     write(paste0("Each run folder below should contain a compareScenarios PDF comparing the output of the current and",
-                 " the last successful tests (comp_with_RUN-DATE.pdf)"), myfile, append = TRUE)
+                 " the last successful tests (comp_with_RUN-DATE.pdf)"), readme, append = TRUE)
   }
   write(paste0("Note: 'Mif' = 'no' indicates a possible error in output generation, please check!"),
-        myfile, append = TRUE)
+        readme, append = TRUE)
   write(paste0("If you are currently viewing the email: Overview of the last test is in red, ",
-               "and of the current test in green"), myfile, append = TRUE)
+               "and of the current test in green"), readme, append = TRUE)
 
   gitInfo <- c(paste("Tested commit:", commitTested),
                paste("The test of", today, "contains these merges:"),
                commitsSinceLastTest)
-  write(gitInfo, myfile, append = TRUE)
+  write(gitInfo, readme, append = TRUE)
 
   isdir <- NULL
   if (model != "MAgPIE") {
@@ -271,8 +271,35 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
     "Run                                           ", "Runtime    ", "", "RunType    ", "RunStatus         ",
     "Iter            ", "Conv                 ", "modelstat          ", "Mif   ", "AppResults"
   )
-  write(paste(coltitles, collapse = colSep), myfile, append = TRUE)
+  write(paste(coltitles, collapse = colSep), readme, append = TRUE)
   lenCols <- c(nchar(coltitles)[-length(coltitles)], 3)
+
+  # add to data changelog
+  if (model == "MAgPIE") {
+    for (i in runsStarted[startsWith(runsStarted, "default_")]) {
+      changelogVariables <- c(
+        lucEmis = "Emissions|CO2|Land|+|Land-use Change", # +++++
+        tau = "Productivity|Landuse Intensity Indicator Tau", # +++++
+        cropland = "Resources|Land Cover|+|Cropland", # ++++++
+        irrigated = "Resources|Land Cover|Cropland|Area actually irrigated", # +++
+        pasture = "Resources|Land Cover|+|Pastures and Rangelands", # ++++
+        forest = "Resources|Land Cover|+|Forest", # +++
+        other = "Resources|Land Cover|+|Other Land", # ++
+        # production: in contrast to all other indicators here, this should
+        # be robust to calibration issues, but indicate changes in demand/trade
+        production = "Production", # +++
+        costs = "Costs", # ++
+        foodExp = "Household Expenditure|Food|Expenditure" # +
+      )
+      try({
+        quitte::addToDataChangelog(report = readRDS(file.path(i, "report.rds")),
+                                   changelog = file.path(gitdir, "data-changelog.csv"),
+                                   versionId = i,
+                                   years = c(2020, 2050, 2100),
+                                   variables = changelogVariables)
+      })
+    }
+  }
 
   message("Starting analysis for the list of the following runs:\n", paste0(runsStarted, collapse = "\n"))
   for (i in runsStarted) {
@@ -280,7 +307,7 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
     if ("Runtime" %in% names(grsi) && is.numeric(grsi[["Runtime"]])) {
       grsi["Runtime"] <- format(round(make_difftime(second = grsi[["Runtime"]]), 1))
     }
-    write(sub("\n$", "", printOutput(grsi, lenCols = lenCols, colSep = colSep)), myfile, append = TRUE)
+    write(sub("\n$", "", printOutput(grsi, lenCols = lenCols, colSep = colSep)), readme, append = TRUE)
     if (model == "REMIND") {
       if (!grepl("Calib_nash|testOneRegi", grsi[, "RunType"])
           && !grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
@@ -375,10 +402,10 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
       datetimepattern <- "_[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}\\.[0-9]{2}\\.[0-9]{2}"
       scenariosStarted <- gsub(datetimepattern, "", runsStarted) # remove date and time from folder name
       runsNotStarted <- setdiff(c("default-AMT", runsToStart), scenariosStarted)
-      write(" ", myfile, append = TRUE)
-      write(paste0("These scenarios did not start at all:"), myfile, append = TRUE)
-      write(runsNotStarted, myfile, append = TRUE)
-      write(" ", myfile, append = TRUE)
+      write(" ", readme, append = TRUE)
+      write(paste0("These scenarios did not start at all:"), readme, append = TRUE)
+      write(runsNotStarted, readme, append = TRUE)
+      write(" ", readme, append = TRUE)
     }
 
     # Evaluate result of tests/testthat
@@ -430,13 +457,13 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
     summary <- paste0("Summary: ", paste0(unlist(unique(errorList)), collapse = ". "))
   }
 
-  write(summary, myfile, append = TRUE)
-  write("```", myfile, append = TRUE)
+  write(summary, readme, append = TRUE)
+  write("```", readme, append = TRUE)
   message("Finished compiling README.md")
 
   if (email) {
     message("Copying updated README.md to ", gitdir, " and pushing from there.")
-    sendmail(path = gitdir, file = myfile, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
+    sendmail(path = gitdir, file = readme, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
   }
 
   message("Composing message and sending it to mattermost channel")
