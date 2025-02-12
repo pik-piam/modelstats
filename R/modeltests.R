@@ -161,7 +161,7 @@ startRuns <- function(test, model, mydir, user) {
         }
       }
       # now start actual test runs
-      system("Rscript start.R runscripts=test_runs submit='SLURM priority'")
+      system("Rscript start.R runscripts=test_runs submit='SLURM standby'")
     }
   }
   saveRDS(runcode, file = paste0(mydir, "/runcode.rds"))
