@@ -24,9 +24,10 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
   if (mydir[[1]] == "exit") return(NULL)
 
   red <- make_style("orangered")
+  orange <- make_style("orange")
   if (colors) {
     cat("# Color code: ", yellow("pending"), "/", yellow("startup"), ", ", cyan("running"), ", ",
-        underline(green("converged")), ", ", blue("converged (had INFES)"), ", ",
+        underline(green("converged")), ", ", blue("converged (had INFES)"), ", ", orange("no mif"), ", ",
         green("finished"), ", ", magenta("conopt stalled?"), ", ", red("error"), ".\n\n", sep = "")
   }
   a <- file.info(mydir)
@@ -109,14 +110,16 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
         cat(magenta(out))
       } else if (! status[["jobInSLURM"]] == "no") {
         cat(cyan(out))
-      } else if (status[["Conv"]] == "converged (had INFES)") {
+      } else if (status[["Conv"]] == "converged (had INFES)" && ! status[["Mif"]] == "no") {
         cat(blue(out))
       } else if (grepl("not_converged|Execution erro|Compilation er|interrupted|Intermed Infes", status[["RunStatus"]])) {
         cat(red(out))
-      } else if (status[["Conv"]] %in% c("converged", "Clb_converged")) {
+      } else if (status[["Conv"]] %in% c("converged", "Clb_converged") && ! status[["Mif"]] == "no") {
         cat(underline(green(out)))
       } else if (grepl("2: Locally Optimal", status[["modelstat"]]) && ! grepl("nash", status[["RunType"]])) {
         cat(green(out))
+      } else if (status[["Mif"]] == "no" && status[["Conv"]] %in% c("converged", "Clb_converged", "converged (had INFES)")) {
+        cat(orange(out))
       } else if (status[["jobInSLURM"]] == "no") {
         cat(red(out))
       } else {
