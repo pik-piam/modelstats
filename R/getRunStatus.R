@@ -149,17 +149,17 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     cm_iteration_max <- cfg$gms$cm_iteration_max
     if (isTRUE(cfg$gms$cm_nash_autoconverge > 0) && grepl("nash", out[i, "RunType"])) {
       if (file.exists(fullgms)) {
-        cm_iteration_max <- suppressWarnings(system(paste0("tac ", fullgms, "| grep -m 1 'cm_iteration_max = [1-9].*.;[ ]*$'"), intern = TRUE))
+        cm_iteration_max <- suppressWarnings(system(paste0("tac '", fullgms, "' | grep -m 1 'cm_iteration_max = [1-9].*.;[ ]*$'"), intern = TRUE))
         cm_iteration_max <- sub(";[ ]*", "", sub("^.*.= ", "", cm_iteration_max))
       }
     }
     out[i, "Iter"] <- "NA"
     out[i, "RunStatus"] <- "NA"
     if (file.exists(fulllog)) {
-      suppressWarnings(try(loop <- sub("^.*.= ", "", system(paste0("grep 'LOOPS' ", fulllog, " | tail -1"), intern = TRUE)), silent = TRUE))
+      suppressWarnings(try(loop <- sub("^.*.= ", "", system(paste0("grep 'LOOPS' '", fulllog, "' | tail -1"), intern = TRUE)), silent = TRUE))
       if (length(loop) > 0) out[i, "Iter"] <- loop
       if (length(cm_iteration_max) > 0) out[i, "Iter"] <- paste0(out[i, "Iter"], "/", cm_iteration_max)
-      suppressWarnings(try(out[i, "RunStatus"] <- substr(sub("\\(s\\)", "", sub("\\*\\*\\* Status: ", "", system(paste0("grep '*** Status: ' ", fulllog), intern = TRUE))), start = 1, stop = 17), silent = TRUE))
+      suppressWarnings(try(out[i, "RunStatus"] <- substr(sub("\\(s\\)", "", sub("\\*\\*\\* Status: ", "", system(paste0("grep '*** Status: ' '", fulllog, "'"), intern = TRUE))), start = 1, stop = 17), silent = TRUE))
       if (onCluster && out[i, "RunStatus"] == "NA") {
         if (out[i, "jobInSLURM"] == "no" || grepl("pending$", out[i, "jobInSLURM"])) {
           if (file.exists(logtxt)) {
@@ -193,8 +193,8 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         if (out[i, "RunStatus"] == "NA") out[i, "RunStatus"] <- "Run interrupted"
       }
       if (out[i, "RunStatus"] == "Normal completion" && file.exists(logtxt) && out[i, "jobInSLURM"] != "no") {
-        startrep <- suppressWarnings(system(paste0("tac ", logtxt, " | grep -m 1 'Starting output generation for'"), intern = TRUE))
-        endrep <- suppressWarnings(system(paste0("tac ", logtxt, " | grep -m 1 'Finished output generation for'"), intern = TRUE))
+        startrep <- suppressWarnings(system(paste0("tac '", logtxt, "' | grep -m 1 'Starting output generation for'"), intern = TRUE))
+        endrep <- suppressWarnings(system(paste0("tac '", logtxt, "' | grep -m 1 'Finished output generation for'"), intern = TRUE))
         if (length(startrep) > length(endrep) && out[i, "jobInSLURM"] != "no") {
           out[i, "RunStatus"] <- "Running reporting"
         }
@@ -212,16 +212,16 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         }
       }
       if (file.exists(logmagtxt) && out[i, "jobInSLURM"] != "no" && (out[i, "RunStatus"] == "Normal completion" || grepl("log-mag.txt", logmagtxt))) {
-        startmag <- suppressWarnings(system(paste0("tac ", logmagtxt, " | grep -m 1 'Preparing MAgPIE'"), intern = TRUE))
-        endmag <- suppressWarnings(system(paste0("tac ", logmagtxt, " | grep -m 1 'MAgPIE output was stored'"), intern = TRUE))
+        startmag <- suppressWarnings(system(paste0("tac '", logmagtxt, "' | grep -m 1 'Preparing MAgPIE'"), intern = TRUE))
+        endmag <- suppressWarnings(system(paste0("tac '", logmagtxt, "' | grep -m 1 'MAgPIE output was stored'"), intern = TRUE))
         if (length(startmag) > length(endmag)) {
           fulllogmag <- gsub("-rem-", "-mag-", gsub("output", file.path("magpie", "output"), fulllog))
           if (! file.exists(fulllogmag)) fulllogmag <- gsub("-rem-", "-mag-", gsub("output", file.path("..", "magpie", "output"), fulllog))
           loopmag <- NULL
           if (file.exists(fulllogmag)) {
-            suppressWarnings(try(loopmag <- sub("^.*.= ", "", system(paste0("grep 'LOOPS' ", fulllogmag, " | tail -1"), intern = TRUE)), silent = TRUE))
+            suppressWarnings(try(loopmag <- sub("^.*.= ", "", system(paste0("grep 'LOOPS' '", fulllogmag, "' | tail -1"), intern = TRUE)), silent = TRUE))
           }
-          if (length(suppressWarnings(system(paste0("tac ", logmagtxt, " | grep -m 1 'Start getReport'"), intern = TRUE)) > 0)) loopmag <- "report"
+          if (length(suppressWarnings(system(paste0("tac '", logmagtxt, "' | grep -m 1 'Start getReport'"), intern = TRUE)) > 0)) loopmag <- "report"
           out[i, "RunStatus"] <- paste("Run MAgPIE", loopmag)
         }
         if (isTRUE(grepl("try to acquire model lock", try(system(paste("tail -1", logmagtxt), intern = TRUE), silent = TRUE)))) {
@@ -257,7 +257,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
     # Calib Iter
     if ((isTRUE(grepl("Calib", out[i, "RunType"])) || isTRUE(cfg$gms$CES_parameters == "calibrate")) && file.exists(logtxt)) {
-      calibiter <- tail(suppressWarnings(system(paste0("grep 'CES calibration iteration' ", logtxt, " |  grep -Eo  '[0-9]{1,2}'"), intern = TRUE)), n = 1)
+      calibiter <- tail(suppressWarnings(system(paste0("grep 'CES calibration iteration' '", logtxt, "' |  grep -Eo  '[0-9]{1,2}'"), intern = TRUE)), n = 1)
       if (isTRUE(as.numeric(calibiter) > 0)) out[i, "Iter"] <- paste0(out[i, "Iter"], " ", "Clb: ", calibiter)
       if (isTRUE(out[i, "Conv"] %in% c("converged", "converged (had INFES)")) &&
           (length(system(paste0("find ", ii, " -name 'fulldata_*.gdx'"), intern = TRUE)) > 10 ||
