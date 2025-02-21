@@ -278,25 +278,25 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
   if (model == "MAgPIE") {
     for (i in runsStarted[startsWith(runsStarted, "default_")]) {
       changelogVariables <- c(
-        lucEmis = "Emissions|CO2|Land|+|Land-use Change", # +++++
-        tau = "Productivity|Landuse Intensity Indicator Tau", # +++++
-        cropland = "Resources|Land Cover|+|Cropland", # ++++++
-        irrigated = "Resources|Land Cover|Cropland|Area actually irrigated", # +++
-        pasture = "Resources|Land Cover|+|Pastures and Rangelands", # ++++
-        forest = "Resources|Land Cover|+|Forest", # +++
-        other = "Resources|Land Cover|+|Other Land", # ++
+        lucEmis = "Emissions|CO2|Land|+|Land-use Change",
+        tau = "Productivity|Landuse Intensity Indicator Tau",
+        cropland = "Resources|Land Cover|+|Cropland",
+        irrigated = "Resources|Land Cover|Cropland|Area actually irrigated",
+        pasture = "Resources|Land Cover|+|Pastures and Rangelands",
+        forest = "Resources|Land Cover|+|Forest",
+        other = "Resources|Land Cover|+|Other Land",
         # production: in contrast to all other indicators here, this should
         # be robust to calibration issues, but indicate changes in demand/trade
-        production = "Production", # +++
-        costs = "Costs", # ++
-        foodExp = "Household Expenditure|Food|Expenditure" # +
+        production = "Production",
+        costs = "Costs",
+        foodExp = "Household Expenditure|Food|Expenditure"
       )
       try({
-        quitte::addToDataChangelog(report = readRDS(file.path(i, "report.rds")),
-                                   changelog = file.path(gitdir, "data-changelog.csv"),
-                                   versionId = i,
-                                   years = c(2020, 2050, 2100),
-                                   variables = changelogVariables)
+        magpie4::addToDataChangelog(report = readRDS(file.path(i, "report.rds")),
+                                    changelog = file.path(gitdir, "data-changelog.csv"),
+                                    versionId = i,
+                                    years = c(2020, 2050, 2100),
+                                    variables = changelogVariables)
       })
     }
   }
