@@ -464,8 +464,17 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
   message("Finished compiling README.md")
 
   if (email) {
-    message("Copying updated README.md to ", gitdir, " and pushing from there.")
-    sendmail(path = gitdir, file = readme, commitmessage = "Automated Test Results", remote = TRUE, reset = TRUE)
+    withr::local_dir(gitdir, {
+      system("git reset --hard origin/master")
+      system("git pull")
+      file.copy(readme, ".")
+      system("git add README.md")
+      if (file.exists("data-changelog.csv")) {
+        system("git add data-changelog.csv")
+      }
+      system("git commit -m 'Automated Test Results'")
+      system("git push")
+    })
   }
 
   message("Composing message and sending it to mattermost channel")
