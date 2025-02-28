@@ -346,21 +346,23 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
       sameRuns <- gRS %>% filter(.data$Conv %in% c("converged", "converged (had INFES)"), # runs have to be converged
                                  .data$Mif %in% c("yes", "sumErr"),                       # need to have mifs
                                  grepl(cfg$title, rownames(gRS)),                         # must be the same scenario
-                                 !rownames(gRS) %in% basename(cfg$results_folder)) %>%   # but not the current run
-        rownames()
+                                 !rownames(gRS) %in% basename(cfg$results_folder)) %>%    # but not the current run
+                                 rownames()
       if (length(sameRuns) > 0) {
         lastRun <- max(sameRuns[sameRuns < basename(cfg$results_folder)])
+        # If it was too long ago, the lastRun may have been moved to the archive in the meantime.
+        if (!file.exists(lastRun)) lastRun <- file.path("archive", lastRun)
+        fullPathToThisRun <- normalizePath(".")
+        fullPathToLastRun <- normalizePath(file.path("..", lastRun))
         # compare runtime for converged run only (skip if not_converged)
         if (grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
-          currentRunTime <- as.numeric(.readRuntime("."),                    units = "hours")
-          lastRunTime    <- as.numeric(.readRuntime(paste0("../", lastRun)), units = "hours")
+          currentRunTime <- as.numeric(.readRuntime(fullPathToThisRun), units = "hours")
+          lastRunTime    <- as.numeric(.readRuntime(fullPathToLastRun), units = "hours")
           if (length(currentRunTime) > 0 && length(lastRunTime) > 0 && currentRunTime > (1.25 * lastRunTime)) {
             errorList <- c(errorList, "Check runtime! Have some scenarios become slower?")
           }
         }
         # run compareScenarios also for runs that are not_converged
-        fullPathToThisRun <- normalizePath(".")
-        fullPathToLastRun <- normalizePath(file.path("..", lastRun))
         if (compScen &&
               all(file.exists(paste0(c(fullPathToThisRun, fullPathToLastRun),
                                      "/REMIND_generic_", cfg$title, ".mif"))) &&
