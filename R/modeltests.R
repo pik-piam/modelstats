@@ -351,7 +351,7 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
       if (length(sameRuns) > 0) {
         lastRun <- max(sameRuns[sameRuns < basename(cfg$results_folder)])
         # If it was too long ago, the lastRun may have been moved to the archive in the meantime.
-        if (!file.exists(lastRun)) lastRun <- file.path("archive", lastRun)
+        if (!file.exists(file.path("..", lastRun))) lastRun <- file.path("archive", lastRun)
         fullPathToThisRun <- normalizePath(".")
         fullPathToLastRun <- normalizePath(file.path("..", lastRun))
         # compare runtime for converged run only (skip if not_converged)
