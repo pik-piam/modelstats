@@ -464,10 +464,10 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
   message("Finished compiling README.md")
 
   if (email) {
-    withr::local_dir(gitdir, {
+    withr::with_dir(gitdir, {
       system("git reset --hard origin/master")
       system("git pull")
-      file.copy(readme, ".")
+      file.copy(readme, ".", overwrite = TRUE)
       system("git add README.md")
       if (file.exists("data-changelog.csv")) {
         system("git add data-changelog.csv")
