@@ -258,7 +258,7 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
     runsStarted <- grep(runcode, list.dirs(full.names = FALSE, recursive = FALSE), value = TRUE)
   } else {
     # if model is MAgPIE ignore runcode and find run folders based on their creation time (last 3 days)
-    gRS <- getRunStatus(dir())
+    gRS <- getRunStatus(dir()) # this takes a long time
     # this happens because test run names are hard coded in MAgPIE scripts and thus not readable
     runsStarted <- file.info(dir())
     runsStarted <- filter(runsStarted, isdir == TRUE)
@@ -291,9 +291,11 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
         costs = "Costs",
         foodExp = "Household Expenditure|Food|Expenditure"
       )
+      changelog <- file.path(ifelse(test, ".", tempdir()), "data-changelog.csv")
+      file.copy(file.path(gitdir, "data-changelog.csv"), changelog)
       try({
         magpie4::addToDataChangelog(report = readRDS(file.path(i, "report.rds")),
-                                    changelog = file.path(gitdir, "data-changelog.csv"),
+                                    changelog = changelog,
                                     versionId = i,
                                     years = c(2020, 2050, 2100),
                                     variables = changelogVariables)
@@ -391,8 +393,8 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
       }
       withr::local_dir("../")
       message("Finished analysis for ", i, " and changed back to ", normalizePath("."))
-    } else {
-      message(i, "does not seem to have converged. Skipping!")
+    } else if (model != "MAgPIE") {
+      message(i, " does not seem to have converged. Skipping!")
     }
   }
 
@@ -464,10 +466,10 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
   message("Finished compiling README.md")
 
   if (email) {
-    withr::local_dir(gitdir, {
+    withr::with_dir(gitdir, {
       system("git reset --hard origin/master")
       system("git pull")
-      file.copy(readme, ".")
+      file.copy(c(readme, changelog), ".", overwrite = TRUE)
       system("git add README.md")
       if (file.exists("data-changelog.csv")) {
         system("git add data-changelog.csv")
