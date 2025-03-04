@@ -337,9 +337,9 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
       message("Changed to ", normalizePath("."))
       # Use the fulldata.gdx of a successful SSP2-NPi-AMT to update the gdx on the
       # RSE server that is used for testing convGDX2MIF
-      if (grepl("SSP2-PkBudg650-AMT", rownames(grsi)) && grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
+      if (grepl("SSP2-NPi-AMT", rownames(grsi)) && grsi[, "Conv"] %in% c("converged", "converged (had INFES)")) {
         gdxOnRseServer <- paste0("rse@rse.pik-potsdam.de:/webservice/data/example/",
-                                 "remind2_test-convGDX2MIF_SSP2-PkBudg650-AMT.gdx")
+                                 "remind2_test-convGDX2MIF_SSP2-NPi-AMT.gdx")
         message(paste("Updating the gdx on the RSE server", gdxOnRseServer, "with the fulldata.gdx of", rownames(grsi)))
         system(paste("rsync -e ssh -av fulldata.gdx", gdxOnRseServer))
       }
