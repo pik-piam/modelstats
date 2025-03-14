@@ -9,7 +9,6 @@ modeltests(
   gitdir = NULL,
   model = NULL,
   user = NULL,
-  test = NULL,
   email = TRUE,
   compScen = TRUE,
   mattermostToken = NULL
@@ -23,9 +22,6 @@ modeltests(
 \item{model}{Model name}
 
 \item{user}{the user that starts the job and commits the changes}
-
-\item{test}{Use this option to run a test of the workflow (no runs will be submitted)
-The test parameter needs to be of the form "YY-MM-DD"}
 
 \item{email}{whether an email notification will be send or not}
 
