@@ -55,7 +55,7 @@ A BibTeX entry for LaTeX users is
 @Misc{,
   title = {modelstats: Run Analysis Tools},
   author = {Anastasis Giannousakis and Oliver Richters},
-  date = {2025-03-11},
+  date = {2025-03-14},
   year = {2025},
   url = {https://github.com/pik-piam/modelstats},
   note = {Version: 0.23.5},
