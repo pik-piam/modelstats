@@ -251,6 +251,7 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
   lenCols <- c(nchar(coltitles)[-length(coltitles)], 3)
 
   # add to data changelog
+  changelog <- NULL
   if (model == "MAgPIE") {
     for (i in runsStarted[startsWith(runsStarted, "default_")]) {
       changelogVariables <- c(
