@@ -10,8 +10,6 @@
 #' @param gitdir path to the git clone that sends the report via email
 #' @param user the user that starts the job and commits the changes
 #' @param model Model name
-#' @param test Use this option to run a test of the workflow (no runs will be submitted)
-#' The test parameter needs to be of the form "YY-MM-DD"
 #' @param email whether an email notification will be send or not
 #' @param mattermostToken token used for mattermost notifications
 #' @param compScen whether compScen has to run or not
@@ -27,7 +25,6 @@ modeltests <- function(mydir = ".",
                        gitdir = NULL,
                        model = NULL,
                        user = NULL,
-                       test = NULL,
                        email = TRUE,
                        compScen = TRUE,
                        mattermostToken = NULL) {
@@ -37,21 +34,21 @@ modeltests <- function(mydir = ".",
           "Begin of AMT procedure ", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " in ", mydir,
           "\n=========================================================\n")
 
-  if (readLines("../.testsstatus") == "start") {
-    message("Found 'start' in ", normalizePath("../.testsstatus"), "\nCalling 'startRuns'")
-    startRuns(test = test, model = model, user = user, mydir = mydir)
+  if (readLines("../.testsstatus") == "next:start") {
+    message("Found 'next:start' in ", normalizePath("../.testsstatus"), "\nCalling 'startRuns'")
+    startRuns(model = model, user = user, mydir = mydir)
     # make sure next call will evaluate runs
-    message("Writing 'end' to ", normalizePath("../.testsstatus"))
-    writeLines("end", con = "../.testsstatus")
-  } else if (readLines("../.testsstatus") == "end") {
-    message("Found 'end' in ", normalizePath("../.testsstatus"), "\nCalling 'evaluateRuns'")
+    message("Writing 'next:evaluate' to ", normalizePath("../.testsstatus"))
+    writeLines("next:evaluate", con = "../.testsstatus")
+  } else if (readLines("../.testsstatus") == "next:evaluate") {
+    message("Found 'next:evaluate' in ", normalizePath("../.testsstatus"), "\nCalling 'evaluateRuns'")
     withr::with_dir("output", {
       evaluateRuns(model = model, mydir = mydir, compScen = compScen, email = email,
                    mattermostToken = mattermostToken, gitdir = gitdir, user = user)
     })
     # make sure next call will start runs
-    message("Writing 'start' to ", normalizePath("../.testsstatus"))
-    writeLines("start", con = "../.testsstatus")
+    message("Writing 'next:start' to ", normalizePath("../.testsstatus"))
+    writeLines("next:start", con = "../.testsstatus")
   } else {
     message("Found ", readLines("../.testsstatus"), " in ", normalizePath("../.testsstatus"), ". Doing nothing")
   }
@@ -87,142 +84,121 @@ deleteEmptyRealizationFolders <- function() {
   }
 }
 
-startRuns <- function(test, model, mydir, user) {
-  if (!is.null(test)) {
-    runcode <- paste0(".*.20-AMT", test)
-    test <- TRUE
-  } else {
-    test <- FALSE
-    runcode <- paste0(".*-AMT_",
-                      format(Sys.Date(), "%Y-%m-%d"),
-                      "|",
-                      ".*-AMT_",
-                      as.Date(format(Sys.Date(), "%Y-%m-%d")) + 1)
-  }
+startRuns <- function(model, mydir, user) {
+
   if (is.null(model)) stop("Model cannot be NULL")
+  
+  runcode <- paste0(".*-AMT_",
+                    format(Sys.Date(), "%Y-%m-%d"),
+                    "|",
+                    ".*-AMT_",
+                    as.Date(format(Sys.Date(), "%Y-%m-%d")) + 1)
 
-  if (!test) {
-    system("git reset --hard origin/develop && git pull")
-    # Force downloading of the input data in the first run
-    system("sed -i 's/cfg$force_download <- FALSE/cfg$force_download <- TRUE/' config/default.cfg")
+  system("git reset --hard origin/develop && git pull")
+  # Force downloading of the input data in the first run
+  system("sed -i 's/cfg$force_download <- FALSE/cfg$force_download <- TRUE/' config/default.cfg")
 
-    # empty realization folders break the models, but can be left over because git does not
-    # delete empty folders if all files in the folder are deleted.
-    deleteEmptyRealizationFolders()
+  # empty realization folders break the models, but can be left over because git does not
+  # delete empty folders if all files in the folder are deleted.
+  deleteEmptyRealizationFolders()
 
-    if (model == "REMIND") {
-      message("Configuring and starting single testOneRegi-AMT")
-      system(paste("Rscript start.R --testOneRegi titletag=AMT",
-                   "slurmConfig=\"--qos=priority --nodes=1 --tasks-per-node=1 --wait --time=2:00:00\""))
+  if (model == "REMIND") {
+    message("Configuring and starting single testOneRegi-AMT")
+    system(paste("Rscript start.R --testOneRegi titletag=AMT",
+                 "slurmConfig=\"--qos=priority --nodes=1 --tasks-per-node=1 --wait --time=2:00:00\""))
 
-      message("Configuring and starting bundle of AMT runs")
-      # do not download input data every run, reset force_download
-      system("sed -i 's/cfg$force_download <- TRUE/cfg$force_download <- FALSE/' config/default.cfg")
+    message("Configuring and starting bundle of AMT runs")
+    # do not download input data every run, reset force_download
+    system("sed -i 's/cfg$force_download <- TRUE/cfg$force_download <- FALSE/' config/default.cfg")
 
-      # now start actual test runs
-      system(paste0("Rscript start.R ",
-                    "startgroup=AMT titletag=AMT ",
-                    "slurmConfig=\"--qos=standby --nodes=1 --tasks-per-node=12 --time=36:00:00\" ",
-                    "config/scenario_config.csv"))
+    # now start actual test runs
+    system(paste0("Rscript start.R ",
+                  "startgroup=AMT titletag=AMT ",
+                  "slurmConfig=\"--qos=standby --nodes=1 --tasks-per-node=12 --time=36:00:00\" ",
+                  "config/scenario_config.csv"))
 
-      # Create and save a list of runs that should have been started in order
-      # to determine later which runs were not started
-      settings <- read.csv2("config/scenario_config.csv",
-                            stringsAsFactors = FALSE,
-                            row.names = 1,
-                            comment.char = "#",
-                            na.strings = "")
+    # Create and save a list of runs that should have been started in order
+    # to determine later which runs were not started
+    settings <- read.csv2("config/scenario_config.csv",
+                          stringsAsFactors = FALSE,
+                          row.names = 1,
+                          comment.char = "#",
+                          na.strings = "")
 
-      # Source everything from scripts/start so that all functions are available everywhere
-      invisible(sapply(list.files("scripts/start", pattern = "\\.R$", full.names = TRUE), source)) # nolint
-      selectScenarios <- NA # avoid buildLibrary to fail with "no visible global function"
-      runsToStart <- selectScenarios(settings = settings, interactive = FALSE, startgroup = "AMT")
-      row.names(runsToStart) <- paste0(row.names(runsToStart), "-AMT")
-      saveRDS(runsToStart, file = paste0(mydir, "/runsToStart.rds"))
+    # Source everything from scripts/start so that all functions are available everywhere
+    invisible(sapply(list.files("scripts/start", pattern = "\\.R$", full.names = TRUE), source)) # nolint
+    selectScenarios <- NA # avoid buildLibrary to fail with "no visible global function"
+    runsToStart <- selectScenarios(settings = settings, interactive = FALSE, startgroup = "AMT")
+    row.names(runsToStart) <- paste0(row.names(runsToStart), "-AMT")
+    saveRDS(runsToStart, file = paste0(mydir, "/runsToStart.rds"))
 
-      # start make test-full
-      # 1. pull changes to magpie develop
-      withr::with_dir("magpie", {
-        system("git reset --hard origin/develop && git pull")
-      })
-      # 2. execute test
-      system("make test-full-slurm")
+    # start make test-full
+    # 1. pull changes to magpie develop
+    withr::with_dir("magpie", {
+      system("git reset --hard origin/develop && git pull")
+    })
+    # 2. execute test
+    system("make test-full-slurm")
 
-    } else if (model == "MAgPIE") {
-      # default run to download input data
-      system("Rscript start.R runscripts=default submit='SLURM priority'")
-      # wait for default run to finish
-      repeat {
-        Sys.sleep(300)
-        jobsInSlurm <- system(paste0("squeue -u ",
-                                     user, " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)
-        if (!any(grepl(paste0(mydir, "$"), jobsInSlurm))) {
-          break
-        }
+  } else if (model == "MAgPIE") {
+    # default run to download input data
+    system("Rscript start.R runscripts=default submit='SLURM priority'")
+    # wait for default run to finish
+    repeat {
+      Sys.sleep(300)
+      jobsInSlurm <- system(paste0("squeue -u ",
+                                   user, " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)
+      if (!any(grepl(paste0(mydir, "$"), jobsInSlurm))) {
+        break
       }
-      # now start actual test runs
-      system("Rscript start.R runscripts=test_runs submit='SLURM standby'")
     }
+    # now start actual test runs
+    system("Rscript start.R runscripts=test_runs submit='SLURM standby'")
   }
+
   saveRDS(runcode, file = paste0(mydir, "/runcode.rds"))
-  saveRDS(test, file = paste0(mydir, "/test.rds"))
   message("Function 'startRuns' finished.")
 }
 
 evaluateRuns <- function(model, # nolint: cyclocomp_linter.
-                         mydir, compScen, email, mattermostToken, gitdir, user, test = NULL) {
+                         mydir, compScen, email, mattermostToken, gitdir, user) {
   message("Current working directory ", normalizePath("."))
-  if (is.null(test)) {
-    test <- readRDS(paste0(mydir, "/test.rds"))
-  }
-  if (!test) {
-    message("Writing 'wait' to ", normalizePath(paste0(mydir, "../.testsstatus")))
-    writeLines("wait", con = paste0(mydir, "../.testsstatus"))
-  }
+  message("Writing 'evaluateRuns() is running or stopped due to an error' to ", normalizePath(paste0(mydir, "../.testsstatus")))
+  writeLines("evaluateRuns() is running or stopped due to an error", con = paste0(mydir, "../.testsstatus"))
+
   lastCommit <- readRDS(paste0(mydir, "/lastcommit.rds"))
   errorList <- NULL
   today <- format(Sys.time(), "%Y-%m-%d")
 
   # wait for all AMT runs to finish
-  if (!test) {
-    message(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " - waiting for all AMT runs to finish.")
-    errCount <- 0
-    repeat {
-      jobsInSlurm <- system(paste0("squeue -u ", user, " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)
-      if (isTRUE(attributes(jobsInSlurm)$status > 0)) {
-        # count how often squeue fails
-        errCount <- errCount + 1
-        if (errCount > 3) stop("squeue had exit status > 0 more than 3 times in a row.")
-      } else if (!any(grepl(mydir, jobsInSlurm))) {
-        break
-      } else {
-        # reset if squeue was successful
-        errCount <- 0
-      }
-      Sys.sleep(600)
+  message(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " - waiting for all AMT runs to finish.")
+  errCount <- 0
+  repeat {
+    jobsInSlurm <- system(paste0("squeue -u ", user, " -h -o '%i %q %T %C %M %j %V %L %e %Z'"), intern = TRUE)
+    if (isTRUE(attributes(jobsInSlurm)$status > 0)) {
+      # count how often squeue fails
+      errCount <- errCount + 1
+      if (errCount > 3) stop("squeue had exit status > 0 more than 3 times in a row.")
+    } else if (!any(grepl(mydir, jobsInSlurm))) {
+      break
+    } else {
+      # reset if squeue was successful
+      errCount <- 0
     }
-    message(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " - all AMT runs finished.")
+    Sys.sleep(600)
   }
+  message(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " - all AMT runs finished.")
 
   message("Compiling the README.md to be committed to testing_suite repo.")
   commitTested <- sub("commit ", "", system("git log -1", intern = TRUE)[[1]])
-  if (!test) saveRDS(commitTested, file = paste0(mydir, "/lastcommit.rds"))
   commitsSinceLastTest <- system(paste0("git log --merges --pretty=oneline ",
                                         lastCommit, "..", commitTested,
                                         " --abbrev-commit | grep 'Merge pull request'"), intern = TRUE)
-  readme <- file.path(ifelse(test, ".", tempdir()), "README.md")
+  readme <- file.path(tempdir(), "README.md")
   write("```", readme)
   write(paste0("This is the result of the automated model tests for ", model, " on ", today, "."),
         readme, append = TRUE)
   write(paste0("Path to runs: ", mydir, "output/"), readme, append = TRUE)
-  if (model == "REMIND") {
-    write(paste0(c("Responsibilities:",
-                   "  Robert     : SSP2-EU21",
-                   "  Jess / Oli : SSP2",
-                   "  Bjoern     : SDP",
-                   "             : SSP1",
-                   "             : SSP5"), collapse = "\n"), readme, append = TRUE)
-  }
   write(paste0("Direct and interactive access to plots: open shinyResults::appResults, then use '",
                ifelse(model == "MAgPIE", "weeklyTests", "AMT"),
                "' as keyword in the title search"), readme, append = TRUE)
@@ -291,7 +267,7 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
         costs = "Costs",
         foodExp = "Household Expenditure|Food|Expenditure"
       )
-      changelog <- file.path(ifelse(test, ".", tempdir()), "data-changelog.csv")
+      changelog <- file.path(tempdir(), "data-changelog.csv")
       file.copy(file.path(gitdir, "data-changelog.csv"), changelog)
       try({
         magpie4::addToDataChangelog(report = readRDS(file.path(i, "report.rds")),
@@ -368,8 +344,7 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
         if (compScen &&
               all(file.exists(paste0(c(fullPathToThisRun, fullPathToLastRun),
                                      "/REMIND_generic_", cfg$title, ".mif"))) &&
-              !any(grepl("comp_with_.*.pdf", dir())) &&
-              !test) {
+              !any(grepl("comp_with_.*.pdf", dir()))) {
           message("Calling compareScenarios2 with ", fullPathToThisRun, " and ", fullPathToLastRun)
           outFileName <- paste0("comp_with_", lastRun)
           cs2com <- paste0(
@@ -512,6 +487,9 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
       .mattermostBotMessage(message = message, token = mattermostToken)
     }
   }
+  
+  # only save this if everyting went well
+  saveRDS(commitTested, file = paste0(mydir, "/lastcommit.rds"))
 
   message("Function 'evaluateRuns' finished.")
 }
