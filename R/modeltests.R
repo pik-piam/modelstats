@@ -255,7 +255,7 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
   if (model == "MAgPIE") {
     for (i in runsStarted[startsWith(runsStarted, "default_")]) {
       changelogVariables <- c(
-        lucEmis = "Emissions|CO2|Land|+|Land-use Change",
+        lucEmisRaw = "Emissions|CO2|Land RAW|+|Land-use Change",
         tau = "Productivity|Landuse Intensity Indicator Tau",
         cropland = "Resources|Land Cover|+|Cropland",
         irrigated = "Resources|Land Cover|Cropland|Area actually irrigated",
