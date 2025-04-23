@@ -37,7 +37,7 @@ the generated README.md for documentation and automated reporting
 of test results.
 }
 \seealso{
-\code{\link{package2readme}}
+\code{\link[lucode2]{package2readme}}
 }
 \author{
 Anastasis Giannousakis, David Klein

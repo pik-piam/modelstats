@@ -15,7 +15,7 @@
 #' @param compScen whether compScen has to run or not
 #'
 #' @author Anastasis Giannousakis, David Klein
-#' @seealso \code{\link{package2readme}}
+#' @seealso \code{\link[lucode2]{package2readme}}
 #' @importFrom utils read.csv2
 #' @importFrom dplyr mutate pull filter %>%
 #' @importFrom lucode2 sendmail
