@@ -15,7 +15,7 @@
 #' @param compScen whether compScen has to run or not
 #'
 #' @author Anastasis Giannousakis, David Klein
-#' @seealso \code{\link{package2readme}}
+#' @seealso \code{\link[lucode2]{package2readme}}
 #' @importFrom utils read.csv2
 #' @importFrom dplyr mutate pull filter %>%
 #' @importFrom lucode2 sendmail
@@ -103,6 +103,10 @@ startRuns <- function(model, mydir, user) {
   deleteEmptyRealizationFolders()
 
   if (model == "REMIND") {
+    
+    # Do not ask when installing dependencies in piamenv::fixDeps
+    Sys.setenv(autoRenvFixDeps = "TRUE") 
+    
     message("Configuring and starting single testOneRegi-AMT")
     system(paste("Rscript start.R --testOneRegi titletag=AMT",
                  "slurmConfig=\"--qos=priority --nodes=1 --tasks-per-node=1 --wait --time=2:00:00\""))
