@@ -19,16 +19,23 @@ printOutput <- function(string, len1stcol = 67, lenCols = NULL, colSep = "   ") 
   }
 
   if (length(string) == 0) return("")
+
   out <- ""
-  templ <- data.frame("modelstat" = "NA",   "Iter" = "NA",      "Conv" = "NA", "Mif" = "NA", "RunStatus" = "NA", "RunType" = "NA", stringsAsFactors = FALSE)
-  if (file.exists("/p")) templ <- data.frame("runInAppResults" = "NA", "Mif" = "NA", "modelstat" = "NA",   "Conv" = "NA",   "Iter" = "NA", "RunStatus" = "NA", "RunType" = "NA", "jobInSLURM" = "NA", stringsAsFactors = FALSE)
-  templ[, names(string)] <- string
-  rownames(templ) <- rownames(string)
-  string <- templ
-  for (i in 1:length(string)) {
-    out <- paste0(formatstr(unname(string)[[i]],
-           ifelse(i >= length(lenCols), i + 12, lenCols[length(string) + 2 - i])), ifelse(is.null(lenCols) || i == 1, "", colSep), out)
+
+  if (file.exists("/p")) {
+    cols <- rev(c("Runtime", "jobInSLURM", "RunType", "RunStatus", "Iter", "Conv",
+                  "modelstat", "Mif", "runInAppResults"))
+  } else {
+    cols <- rev(c("Runtime", "RunType", "RunStatus", "Iter", "Conv", "modelstat", "Mif"))
   }
-  return(paste0(formatstr(rownames(string), len1stcol), colSep, out, "\n"))
-#  if(is.data.frame(string)) print(unname(string))
+
+  string <- string[, cols]
+
+  for (i in seq_along(string)) {
+    out <- paste0(formatstr(unname(string)[[i]], ifelse(i >= length(lenCols), i + 12, lenCols[length(string) + 2 - i])),
+                  ifelse(is.null(lenCols) || i == 1, "", colSep), out)
+  }
+  out <- paste0(formatstr(rownames(string), len1stcol), colSep, out, "\n")
+
+  return(out)
 }

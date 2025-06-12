@@ -19,11 +19,6 @@
 #' @importFrom piamutils niceround
 #' @export
 getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
-  substrRight <- function(x, n) {
-    substr(x, nchar(x) - n + 1, nchar(x))
-  }
-
-  rem <- function(x) return(x[-which(x == "")])
 
   if (is.null(user)) user <- Sys.info()[["user"]]
   mydir <- normalizePath(mydir)
@@ -39,21 +34,14 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     ii <- i
     i <- sub(paste0(dirname(i), "/"), "", i)
 
-    if (onCluster) out[i, "jobInSLURM"] <- foundInSlurm(ii, user)
-
-#    if (onCluster) if (!out[i, "jobInSLURM"] & onlyrunning) {
-#     out <- out[setdiff(rownames(out),i),]
-#     next
-#    }
+    out[i, "jobInSLURM"] <- if (onCluster) foundInSlurm(ii, user) else "NA"
 
     # Define files
-
     cfgf            <- grep("config.Rdata|config.yml", dir(ii), value = TRUE)
     fle             <- file.path(ii, "runstatistics.rda")
     gdx             <- file.path(ii, "fulldata.gdx")
     gdx_non_optimal <- file.path(ii, "non_optimal.gdx")
     fullgms         <- file.path(ii, "full.gms")
-    fulllst         <- file.path(ii, "full.lst")
     fulllog         <- file.path(ii, "full.log")
     logtxt          <- file.path(ii, "log.txt")
     logmagtxt       <- file.path(ii, "log-mag.txt")
@@ -73,7 +61,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     }
 
     # Initialize objects
-    runtype <- cfg <- NULL
+    cfg <- NULL
     # Runtype and load cfg
     if (length(cfgf) == 0) {
       out[i, "RunType"] <- "NA"
@@ -128,6 +116,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
     # MIF
     out[i, "Mif"] <- "NA"
+
     if (length(cfgf) != 0 && file.exists(paste0(ii, "/", cfgf))) {
       if (isTRUE(runstatistics$stats[["config"]][["model_name"]] == "MAgPIE")) {
         miffile <- paste0(ii, "/validation.mif")
@@ -135,16 +124,16 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       } else {
         miffile    <- paste0(ii, "/REMIND_generic_", cfg[["title"]], ".mif")
         sumErrFile <- paste0(ii, "/REMIND_generic_", cfg[["title"]], "_summation_errors.csv")
-        if (! file.exists(miffile)){ 
+        if (! file.exists(miffile)) { 
           out[i, "Mif"] <- "no"
-        } else if (file.exists(sumErrFile)){
+        } else if (file.exists(sumErrFile)) {
           out[i, "Mif"] <- "sumErr"
         } else {
           out[i, "Mif"] <- "yes"
         }
       }
     }
-
+    
     # Iter
     cm_iteration_max <- cfg$gms$cm_iteration_max
     if (isTRUE(cfg$gms$cm_nash_autoconverge > 0) && grepl("nash", out[i, "RunType"])) {
