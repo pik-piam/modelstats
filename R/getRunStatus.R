@@ -124,7 +124,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       } else {
         miffile    <- paste0(ii, "/REMIND_generic_", cfg[["title"]], ".mif")
         sumErrFile <- paste0(ii, "/REMIND_generic_", cfg[["title"]], "_summation_errors.csv")
-        if (! file.exists(miffile)) { 
+        if (! file.exists(miffile)) {
           out[i, "Mif"] <- "no"
         } else if (file.exists(sumErrFile)) {
           out[i, "Mif"] <- "sumErr"
@@ -133,7 +133,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         }
       }
     }
-    
+
     # Iter
     cm_iteration_max <- cfg$gms$cm_iteration_max
     if (isTRUE(cfg$gms$cm_nash_autoconverge > 0) && grepl("nash", out[i, "RunType"])) {
@@ -261,6 +261,54 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       out[i, "Runtime"] <- as.numeric(round(difftime(runstatistics$stats[["timeGAMSEnd"]], runstatistics$stats[["timeGAMSStart"]], units = "secs"), 0))
     } else if (any(grepl("timePrepareStart", names(runstatistics$stats))) && ! out[i, "jobInSLURM"] %in% "no") {
       out[i, "Runtime"] <- as.numeric(round(difftime(Sys.time(), runstatistics$stats[["timePrepareStart"]], units = "secs"), 0))
+    }
+
+    # additional info on plausibility checks in REMIND runs
+    if (length(cfgf) != 0 && file.exists(file.path(ii, cfgf)) &&
+        !isTRUE(runstatistics$stats[["config"]][["model_name"]] == "MAgPIE")) {
+      miffile <- paste0(ii, "/REMIND_generic_", cfg[["title"]], ".mif")
+      sumErrFile <- paste0(ii, "/REMIND_generic_", cfg[["title"]], "_summation_errors.csv")
+      if (!file.exists(miffile)) {
+        next
+      }
+
+      # summation checks
+      if (file.exists(sumErrFile)) {
+        tmp <- read.csv2(sumErrFile, sep = ",")
+        out[i, "summationErrors"] <- length(unique(tmp$variable))
+      } else {
+        out[i, "summationErrors"] <- 0
+      }
+
+      # range checks
+      rangeErrFile <- paste0(ii, "/REMIND_generic_", cfg[["title"]], "_range_errors.txt")
+      if (file.exists(rangeErrFile)) {
+        tmp <- read.csv2(rangeErrFile)
+        out[i, "rangeErrors"] <- length(tmp)
+      } else {
+        out[i, "rangeErrors"] <- 0
+      }
+
+      # fix on ref checks
+      fixErrFile <- file.path(ii, "log_fixOnRef.csv")
+      if (file.exists(fixErrFile)) {
+        tmp <- read.csv2(fixErrFile, sep = ",")
+        out[i, "fixErrors"] <- length(unique(tmp$variable))
+      } else {
+        out[i, "fixErrors"] <- 0
+      }
+      # project summations
+      projectSumFile <- paste0(ii, "/projectSummations.rds")
+      if (file.exists(projectSumFile)) {
+        tmp <- readRDS(projectSumFile)
+        out[i, "missingProjVars"] <- tmp[["ScenarioMIP"]][["missingVars"]]
+        out[i, "projSummationErrors"] <- tmp[["ScenarioMIP"]][["checkSummations"]]
+        out[i, "projSummationErrorsRegional"] <- tmp[["ScenarioMIP"]][["checkSummationsRegional"]]
+      } else {
+        out[i, "missingVars"] <- NA
+        out[i, "projSummationErrors"] <- NA
+        out[i, "projSummationErrorsRegional"] <- NA
+      }
     }
 
   } # END DIR LOOP
