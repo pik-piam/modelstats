@@ -17,7 +17,6 @@
 #' @export
 #' @md
 getSanityChecks <- function(dirs = NULL) {
-
   if (is.null(dirs)) {
     amtPath <- "/p/projects/remind/modeltests/remind/output/"
     cat("Results from", amtPath, "\n")
@@ -45,6 +44,8 @@ getSanityChecks <- function(dirs = NULL) {
 
   for (i in dirs) {
     status <- getRunStatus(i)
-    cat(printOutput(status, lenCols = lenCols, cols = cols))
+    if (all(cols %in% names(status))) {
+      cat(printOutput(status, lenCols = lenCols, cols = cols))
+    }
   }
 }
