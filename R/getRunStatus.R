@@ -305,7 +305,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         out[i, "projSummationErrors"] <- tmp[["ScenarioMIP"]][["checkSummations"]]
         out[i, "projSummationErrorsRegional"] <- tmp[["ScenarioMIP"]][["checkSummationsRegional"]]
       } else {
-        out[i, "missingVars"] <- NA
+        out[i, "missingProjVars"] <- NA
         out[i, "projSummationErrors"] <- NA
         out[i, "projSummationErrorsRegional"] <- NA
       }

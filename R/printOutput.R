@@ -2,14 +2,16 @@
 #'
 #' Returns the output for getRunStatus nicely
 #'
-#' @param string String to print
+#' @param string list with information to print
 #' @param len1stcol length of first column
 #' @param lenCols vector with length information for all columns
 #' @param colSep string separating the columns
+#' @param cols optional vector of elements to retrieve from the passed list.
+#' Default NULL corresponds to a predefined set of elements.
 #'
-#' @author Anastasis Giannousakis
+#' @author Anastasis Giannousakis, Falk Benke
 #' @export
-printOutput <- function(string, len1stcol = 67, lenCols = NULL, colSep = "   ") {
+printOutput <- function(string, len1stcol = 67, lenCols = NULL, colSep = "   ", cols = NULL) {
 
   if (length(lenCols) > 0) len1stcol <- lenCols[1]
 
@@ -22,11 +24,15 @@ printOutput <- function(string, len1stcol = 67, lenCols = NULL, colSep = "   ") 
 
   out <- ""
 
-  if (file.exists("/p")) {
-    cols <- rev(c("Runtime", "jobInSLURM", "RunType", "RunStatus", "Iter", "Conv",
-                  "modelstat", "Mif", "runInAppResults"))
+  if (is.null(cols)) {
+    if (file.exists("/p")) {
+      cols <- rev(c("Runtime", "jobInSLURM", "RunType", "RunStatus", "Iter", "Conv",
+                    "modelstat", "Mif", "runInAppResults"))
+    } else {
+      cols <- rev(c("Runtime", "RunType", "RunStatus", "Iter", "Conv", "modelstat", "Mif"))
+    }
   } else {
-    cols <- rev(c("Runtime", "RunType", "RunStatus", "Iter", "Conv", "modelstat", "Mif"))
+    cols <- rev(cols)
   }
 
   string <- string[, cols]
