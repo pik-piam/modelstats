@@ -48,8 +48,8 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
     lenCols <- c(nchar(coltitles)[-length(coltitles)], 3)
   } else {
     coltitles <- c(paste0("Folder", paste(rep(" ", len - 6), collapse = "")),
-      "Runtime    ", "RunType    ", "RunStatus        ", "Mif   ",
-      "Conv                 ", "Iter            ", "modelstat          ")
+      "Runtime    ", "RunType    ", "RunStatus        ", "Iter            ",
+      "Conv                 ",  "modelstat          ", "Mif   ")
     lenCols <- nchar(coltitles)
   }
   cat(underline(paste(coltitles, collapse = colSep)), "\n")
@@ -83,6 +83,7 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
 
     out <- trimws(printOutput(status, lenCols = lenCols, colSep = colSep), which = "right", whitespace = " ")
     status <- unlist(status)
+
     if (grepl("^y[12]", status[["Iter"]]) || grepl("^nlp_", status[["RunType"]])) { # MAgPIE
       if (isFALSE(colors)) {
         cat(out)
@@ -111,7 +112,7 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
         cat(yellow(out))
       } else if (grepl("conoptspy >", out, fixed = TRUE)) {
         cat(magenta(out))
-      } else if (! status[["jobInSLURM"]] == "no") {
+      } else if (! status[["jobInSLURM"]] == "no" && !status[["jobInSLURM"]] == "NA") {
         cat(cyan(out))
       } else if (status[["Conv"]] == "converged (had INFES)" && ! status[["Mif"]] == "no") {
         cat(blue(out))
@@ -129,7 +130,5 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
         cat(cyan(out))
       }
     }
-
   }
-
 }

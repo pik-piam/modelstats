@@ -3,6 +3,7 @@
 export(colRunType)
 export(foundInSlurm)
 export(getRunStatus)
+export(getSanityChecks)
 export(loopRuns)
 export(modeltests)
 export(printOutput)
