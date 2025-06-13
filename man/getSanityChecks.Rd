@@ -4,22 +4,25 @@
 \alias{getSanityChecks}
 \title{getSanityChecks}
 \usage{
-getSanityChecks(dirs)
+getSanityChecks(dirs = NULL)
 }
 \arguments{
-\item{dirs}{a vector of paths to REMIND runs}
+\item{dirs}{a vector of paths to REMIND runs.
+When NULL, the latest AMTs are used (only works on PIK cluster)}
 }
 \description{
 Get overview of sanity check results for a list of REMIND runs
 }
 \details{
-Currently the following columns are printed
-- SumErr Summation Errors found when running [remind2::convGDX2MIF]
-- RangeErr Range Errors found when running [remind2::convGDX2MIF]
-- FixingErr Fixing Errors found when running [piamInterfaces::fixOnRef]
-- MissingVar Missing Variables found when running [piamInterfaces::checkMissingVars]
-- ProjSumErr Summation Errors found when running [piamInterfaces::checkSummations] for Scenario MIP
-- ProjSumErrReg Regional Summation Errors found when running [piamInterfaces::checkSummationsRegional] for Scenario MIP
+Currently the following columns are printed:
+\itemize{
+\item SumErr Summation Errors found when running \code{remind2::convGDX2MIF}
+\item RangeErr Range Errors found when running \code{remind2::convGDX2MIF}
+\item FixingErr Fixing Errors found when running `piamInterfaces::fixOnRef]
+\item MissingVar Missing Variables found when running \code{piamInterfaces::checkMissingVars}
+\item ProjSumErr Summation Errors found when running \code{piamInterfaces::checkSummations} for ScenarioMIP
+\item ProjSumErrReg Regional Summation Errors found when running \code{piamInterfaces::checkSummationsRegional} for ScenarioMIP
+}
 }
 \author{
 Falk Benke

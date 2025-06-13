@@ -1,20 +1,30 @@
 #' getSanityChecks
 #'
 #' Get overview of sanity check results for a list of REMIND runs
+#' @details
+#' Currently the following columns are printed:
+#' * SumErr Summation Errors found when running `remind2::convGDX2MIF`
+#' * RangeErr Range Errors found when running `remind2::convGDX2MIF`
+#' * FixingErr Fixing Errors found when running `piamInterfaces::fixOnRef]
+#' * MissingVar Missing Variables found when running `piamInterfaces::checkMissingVars`
+#' * ProjSumErr Summation Errors found when running `piamInterfaces::checkSummations` for ScenarioMIP
+#' * ProjSumErrReg Regional Summation Errors found when running `piamInterfaces::checkSummationsRegional` for ScenarioMIP
 #'
-#' Currently the following columns are printed
-#' - SumErr Summation Errors found when running [remind2::convGDX2MIF]
-#' - RangeErr Range Errors found when running [remind2::convGDX2MIF]
-#' - FixingErr Fixing Errors found when running [piamInterfaces::fixOnRef]
-#' - MissingVar Missing Variables found when running [piamInterfaces::checkMissingVars]
-#' - ProjSumErr Summation Errors found when running [piamInterfaces::checkSummations] for Scenario MIP
-#' - ProjSumErrReg Regional Summation Errors found when running [piamInterfaces::checkSummationsRegional] for Scenario MIP
-#'
-#' @param dirs a vector of paths to REMIND runs
+#' @param dirs a vector of paths to REMIND runs.
+#' When NULL, the latest AMTs are used (only works on PIK cluster)
 #'
 #' @author Falk Benke
 #' @export
-getSanityChecks <- function(dirs) {
+#' @md
+getSanityChecks <- function(dirs = NULL) {
+
+  if (is.null(dirs)) {
+    amtPath <- "/p/projects/remind/modeltests/remind/output/"
+    cat("Results from", amtPath, "\n")
+    amtPattern <- readRDS("/p/projects/remind/modeltests/remind/runcode.rds")
+    dirs <- dir(path = amtPath, pattern = amtPattern, full.names = TRUE)
+  }
+
   colSep <- "  "
   len <- max(c(15, nchar(basename(normalizePath(dirs, mustWork = TRUE)))))
   len <- min(67, len)
