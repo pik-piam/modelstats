@@ -284,7 +284,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       rangeErrFile <- paste0(ii, "/REMIND_generic_", cfg[["title"]], "_range_errors.txt")
       if (file.exists(rangeErrFile)) {
         tmp <- read.csv2(rangeErrFile)
-        out[i, "rangeErrors"] <- length(tmp)
+        out[i, "rangeErrors"] <- nrow(tmp)
       } else {
         out[i, "rangeErrors"] <- 0
       }
