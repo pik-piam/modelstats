@@ -46,12 +46,12 @@ getSanityChecks <- function(dirs = NULL) {
   )
 
   cat("\n")
-  cat("For column explanations see: https://github.com/remind/remind/blob/develop/tutorials/05_AnalysingModelOutputs.md#7-visualizing-run-status-und-summation-checks-for-runs\n")
+  cat(cyan("For column explanations see: https://github.com/remind/remind/blob/develop/tutorials/05_AnalysingModelOutputs.md#7-visualizing-run-status-und-summation-checks-for-runs\n"))
   cat(underline(paste(coltitles, collapse = colSep)), "\n")
 
   cat("\n")
 
-  for (i in dirs) {
+  for (i in chosendirs) {
     status <- getRunStatus(i)
     if (all(cols %in% names(status))) {
       cat(printOutput(status, lenCols = lenCols, cols = cols))
