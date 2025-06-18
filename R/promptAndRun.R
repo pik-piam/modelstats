@@ -155,5 +155,4 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     }
     loopRuns(mydir, user = user, colors = colors, sortbytime = FALSE)
   }
-
 }

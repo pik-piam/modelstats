@@ -4,20 +4,29 @@
 \alias{printOutput}
 \title{printOutput}
 \usage{
-printOutput(string, len1stcol = 67, lenCols = NULL, colSep = "   ")
+printOutput(
+  string,
+  len1stcol = 67,
+  lenCols = NULL,
+  colSep = "   ",
+  cols = NULL
+)
 }
 \arguments{
-\item{string}{String to print}
+\item{string}{list with information to print}
 
 \item{len1stcol}{length of first column}
 
 \item{lenCols}{vector with length information for all columns}
 
 \item{colSep}{string separating the columns}
+
+\item{cols}{optional vector of elements to retrieve from the passed list.
+Default NULL corresponds to a predefined set of elements.}
 }
 \description{
 Returns the output for getRunStatus nicely
 }
 \author{
-Anastasis Giannousakis
+Anastasis Giannousakis, Falk Benke
 }
