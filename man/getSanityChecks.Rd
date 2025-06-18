@@ -18,8 +18,8 @@ Currently the following columns are printed:
 \itemize{
 \item SumErr Summation Errors found when running \code{remind2::convGDX2MIF}
 \item RangeErr Range Errors found when running \code{remind2::convGDX2MIF}
-\item FixingErr Fixing Errors found when running `piamInterfaces::fixOnRef]
-\item MissingVar Missing Variables found when running \code{piamInterfaces::checkMissingVars}
+\item FixingErr Fixing Errors found when running \code{piamInterfaces::fixOnRef}
+\item MissingVar Missing Variables found when running \code{piamInterfaces::checkMissingVars} for ScenarioMIP
 \item ProjSumErr Summation Errors found when running \code{piamInterfaces::checkSummations} for ScenarioMIP
 \item ProjSumErrReg Regional Summation Errors found when running \code{piamInterfaces::checkSummationsRegional} for ScenarioMIP
 }
