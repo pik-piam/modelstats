@@ -466,6 +466,7 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
     message <- NULL
     if (model == "REMIND") {
       rs2 <- utils::capture.output(loopRuns(runsStarted, user = NULL, colors = FALSE, sortbytime = FALSE))
+      rss <- utils::capture.output(getSanityChecks())
       message <- paste0("Please find below the status of the REMIND automated model tests (AMT) of ",
                         today, ". Runs are here: `/p/projects/remind/modeltests/remind`.")
       message <- c(message, summary)
@@ -473,6 +474,8 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
       message <- c(message, "```", gitInfo, "```")
       message <- c(message, "`rs2 -t` returns:")
       message <- c(message, "```", rs2, "```")
+      message <- c(message, "`Sanity checks (`rss`) return:")
+      message <- c(message, "```", rss, "```")
       if (exists("runsNotStarted")) {
         message <- c(message, "These scenarios did not start at all:", runsNotStarted)
       }
