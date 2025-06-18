@@ -143,15 +143,16 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
   } else {
 ### PATHs or REGEX 
     mydir <- ifelse(! dir.exists(mydir) & dir.exists(file.path("output", mydir)), file.path("output", mydir), mydir)
+    user <- mydir
     if (! all(dir.exists(mydir))) {
       folder <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "./output" else "."
       mydir <- c(mydir[dir.exists(mydir)],
                  grep(paste0(mydir[! dir.exists(mydir)], collapse = "|"), list.dirs(folder, recursive = FALSE), value = TRUE))
     }
     # if mydir yields no results it may be a user name -> try with username
-    if length(mydir == 0) {
-      message(paste0("Did not find any runs for ", mydir, ". Looking for runs of user ", mydir))
-      promptAndRun(mydir = "-c", user = mydir, daysback = daysback)
+    if (length(mydir) == 0) {
+      message(paste0("Did not find any runs for ", user, ". Looking for runs of user ", user))
+      promptAndRun(mydir = "-c", user = user, daysback = daysback)
     }
     loopRuns(mydir, user = user, colors = colors, sortbytime = FALSE)
   }
