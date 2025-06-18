@@ -22,10 +22,10 @@ getSanityChecks <- function(dirs = NULL) {
     amtPath <- "/p/projects/remind/modeltests/remind/output/"
     cat("Results from", amtPath, "\n")
     amtPattern <- readRDS("/p/projects/remind/modeltests/remind/runcode.rds")
-    chosendirs <- dir(path = amtPath, pattern = amtPattern, full.names = TRUE)
+    dirs <- dir(path = amtPath, pattern = amtPattern, full.names = TRUE)
   } else {
     dirs <- list.dirs(dirs, recursive = FALSE)
-    chosendirs <- gms::chooseFromList(dirs, type = "folders")
+    dirs <- gms::chooseFromList(dirs, type = "folders")
   }
 
   colSep <- "  "
@@ -51,7 +51,7 @@ getSanityChecks <- function(dirs = NULL) {
 
   cat("\n")
 
-  for (i in chosendirs) {
+  for (i in dirs) {
     status <- getRunStatus(i)
     if (all(cols %in% names(status))) {
       cat(printOutput(status, lenCols = lenCols, cols = cols))
