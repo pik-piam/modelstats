@@ -15,9 +15,17 @@
 #'   promptAndRun()
 #' }
 #'
+
+# Temporary note: this function is called by rs2 
+# with the following arguments coming from the command line
+# "$2" == number -> promptAndRun('$1', ''  , '$2') # only daysback
+# "$2" == string -> promptAndRun('$1', '$2', '$3') # parameter and daysback
+
 promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
   mydir <- strsplit(mydir, ',')[[1]]
   colors <- ! any(grepl("^-.*b.*", mydir))
+  
+### AMTs ### rs2 -t
   if (isTRUE(mydir == "-t")) {
     amtPath <- "/p/projects/remind/modeltests/remind/output/"
     cat("Results from", amtPath, "\n")
@@ -26,26 +34,34 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     loopRuns(amtDirs, user = NULL, colors = colors, sortbytime = FALSE)
     return(invisible())
   }
+  
   if (is.null(user) || user == "") user <- Sys.info()[["user"]]
   if (daysback == "") daysback <- 3
   if (isFALSE(colors) && grepl("^-[a-zA-Z]+", mydir)) mydir <- gsub("b", "", mydir)
+  
   if (isTRUE(mydir == ".")) {
+### CURRENT FOLDER: list single run ### rs2 .
     loopRuns(".", user = user, colors = colors)
   } else if (length(mydir) == 0 || isTRUE(mydir == "")) {
+    # detect if in run folder or in main folder
     if (sum(file.exists(c("full.gms", "log.txt", "config.Rdata", "prepare_and_run.R", "prepareAndRun.R"))) >= 4 ||
         sum(file.exists(c("full.gms", "submit.R", "config.yml", "magpie_y1995.gdx"))) == 4) {
+### IN RUN FOLDER: list single run ### rs2
       loopRuns(".", user = user, colors = colors)
     } else {
+### IN MAIN FOLDER: prompt list of all runs in "output" ### rs2
       folder <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "./output" else "."
       dirs <- c(folder, list.dirs(folder, recursive = FALSE))
       chosendirs <- gms::chooseFromList(dirs, type = "folders")
       loopRuns(if (length(chosendirs) == 0) "exit" else chosendirs, user = user, sortbytime = FALSE)
     }
   } else if (isTRUE(mydir %in% c("-d", "-f"))) {
+### IN CURRENT OR IN MAIN FOLER: list alphabetically (-d) or by time (-f)
     folder <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "output" else "."
     # load all directories with a config file plus all that look like coupled runs to include them if they are pending
     loopRuns(list.dirs(folder, recursive = FALSE), user = user, colors = colors, sortbytime = mydir %in% "-f")
   } else if (isTRUE(mydir %in% c("-p", "-s"))) {
+### COUPLED RUNS
     folders <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "output" else "."
     if (isTRUE(mydir %in% "-p") && dir.exists(file.path("magpie", "output"))) folders <- c(folders, file.path("magpie", "output"))
     dirs <- NULL
@@ -76,7 +92,8 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     dirs <- dirs[mixedorder(gsub("-", "", dirs), scientific = FALSE, numeric.type = "decimal")]
     loopRuns(dirs, user = user, colors = colors, sortbytime = FALSE)
   } else if (all(mydir %in% c("-cr", "-a", "-c"))) {
-    myruns <- system(paste0("squeue -u ", user, " -h -o '%Z'"), intern = TRUE)
+### CURRENT OR ACTIVE RUNS
+    myruns   <- system(paste0("squeue -u ", user, " -h -o '%Z'"), intern = TRUE)
     runnames <- system(paste0("squeue -u ", user, " -h -o '%j'"), intern = TRUE)
 
     if (all(mydir %in% c("-cr", "-c"))) {
@@ -115,7 +132,7 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     myruns <- sort(unique(myruns[!is.na(myruns)]))
 
     if (length(myruns) == 0) {
-      return("No runs found for this user. To change the reporting period (days) of the tool you need to specify also a user, e.g. rs2 -c USER 1")
+      return("No runs found for this user. To change the reporting period (days) you need to specify also a user, e.g. rs2 -c USER 1")
     } else {
       message("")
       message("Found ", length(myruns), if (mydir == "-a") " active", " runs.",
@@ -124,11 +141,17 @@ promptAndRun <- function(mydir = ".", user = NULL, daysback = 3) {
     print(myruns[1:min(100, length(myruns))])
     loopRuns(myruns, user = user, colors = colors, sortbytime = FALSE)
   } else {
+### PATHs or REGEX 
     mydir <- ifelse(! dir.exists(mydir) & dir.exists(file.path("output", mydir)), file.path("output", mydir), mydir)
     if (! all(dir.exists(mydir))) {
       folder <- if (sum(file.exists(c("output", "output.R", "start.R", "main.gms"))) == 4) "./output" else "."
       mydir <- c(mydir[dir.exists(mydir)],
                  grep(paste0(mydir[! dir.exists(mydir)], collapse = "|"), list.dirs(folder, recursive = FALSE), value = TRUE))
+    }
+    # if mydir yields no results it may be a user name -> try with username
+    if length(mydir == 0) {
+      message(paste0("Did not find any runs for ", mydir, ". Looking for runs of user ", mydir))
+      promptAndRun(mydir = "-c", user = mydir, daysback = daysback)
     }
     loopRuns(mydir, user = user, colors = colors, sortbytime = FALSE)
   }
