@@ -5,8 +5,8 @@
 #' Currently the following columns are printed:
 #' * SumErr Summation Errors found when running `remind2::convGDX2MIF`
 #' * RangeErr Range Errors found when running `remind2::convGDX2MIF`
-#' * FixingErr Fixing Errors found when running `piamInterfaces::fixOnRef]
-#' * MissingVar Missing Variables found when running `piamInterfaces::checkMissingVars`
+#' * FixingErr Fixing Errors found when running `piamInterfaces::fixOnRef`
+#' * MissingVar Missing Variables found when running `piamInterfaces::checkMissingVars` for ScenarioMIP
 #' * ProjSumErr Summation Errors found when running `piamInterfaces::checkSummations` for ScenarioMIP
 #' * ProjSumErrReg Regional Summation Errors found when running `piamInterfaces::checkSummationsRegional` for ScenarioMIP
 #'
@@ -17,11 +17,15 @@
 #' @export
 #' @md
 getSanityChecks <- function(dirs = NULL) {
+
   if (is.null(dirs)) {
     amtPath <- "/p/projects/remind/modeltests/remind/output/"
     cat("Results from", amtPath, "\n")
     amtPattern <- readRDS("/p/projects/remind/modeltests/remind/runcode.rds")
     dirs <- dir(path = amtPath, pattern = amtPattern, full.names = TRUE)
+  } else {
+    dirs <- list.dirs(dirs, recursive = FALSE)
+    dirs <- gms::chooseFromList(dirs, type = "folders")
   }
 
   colSep <- "  "
@@ -40,7 +44,12 @@ getSanityChecks <- function(dirs = NULL) {
     "summationErrors", "rangeErrors", "fixErrors",
     "missingProjVars", "projSummationErrors", "projSummationErrorsRegional"
   )
+
+  cat("\n")
+  cat(cyan("For column explanations see: https://github.com/remind/remind/blob/develop/tutorials/05_AnalysingModelOutputs.md#7-visualizing-run-status-und-summation-checks-for-runs\n"))
   cat(underline(paste(coltitles, collapse = colSep)), "\n")
+
+  cat("\n")
 
   for (i in dirs) {
     status <- getRunStatus(i)
