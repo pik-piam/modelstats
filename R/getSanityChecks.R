@@ -46,7 +46,7 @@ getSanityChecks <- function(dirs = NULL) {
   )
 
   cat("\n")
-  cat(cyan("For column explanations see: https://github.com/remind/remind/blob/develop/tutorials/05_AnalysingModelOutputs.md#7-visualizing-run-status-und-summation-checks-for-runs\n"))
+  cat(cyan("For column explanations see: https://github.com/remindmodel/remind/blob/develop/tutorials/05_AnalysingModelOutputs.md#7-visualizing-run-status-and-summation-checks-for-runs\n"))
   cat(underline(paste(coltitles, collapse = colSep)), "\n")
 
   cat("\n")
