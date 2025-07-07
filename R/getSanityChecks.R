@@ -16,14 +16,14 @@
 #' @author Falk Benke
 #' @export
 #' @md
-getSanityChecks <- function(dirs = NULL) {
+getSanityChecks <- function(dirs = NULL, prompt = TRUE) {
 
   if (is.null(dirs)) {
     amtPath <- "/p/projects/remind/modeltests/remind/output/"
     cat("Results from", amtPath, "\n")
     amtPattern <- readRDS("/p/projects/remind/modeltests/remind/runcode.rds")
     dirs <- dir(path = amtPath, pattern = amtPattern, full.names = TRUE)
-  } else {
+  } else if (prompt) {
     dirs <- list.dirs(dirs, recursive = FALSE)
     dirs <- gms::chooseFromList(dirs, type = "folders")
   }

@@ -21,7 +21,8 @@ Imports:
     utils,
     gms,
     withr,
-    rlang
+    rlang,
+    optparse
 Suggests:
     covr,
     knitr,
