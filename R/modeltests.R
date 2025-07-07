@@ -50,7 +50,7 @@ modeltests <- function(mydir = ".",
     message("Writing 'next:start' to ", normalizePath("../.testsstatus"))
     writeLines("next:start", con = "../.testsstatus")
   } else {
-    message("Found ", readLines("../.testsstatus"), " in ", normalizePath("../.testsstatus"), ". Doing nothing")
+    message("Found '", readLines("../.testsstatus"), "' in ", normalizePath("../.testsstatus"), ". Doing nothing")
   }
 }
 
