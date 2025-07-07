@@ -37,9 +37,6 @@ commandLineInterface <- function(argv) {
   #  Define command line arguments, help, and hints
   # ================================================
 
-  # Questions about optparse:
-  # - is it possible to define optional arguments to an option?
-
   option_list <- list(
     make_option(c("-A", "--amt"     ), type = "logical", action = "store_true", default = FALSE, help = "print most recent REMIND automated model test runs. With -f: of all AMTs, show only those that match the regular expression REGEX -f REGEX"),
     make_option(c("-b", "--nocolor" ), type = "logical", action = "store_true", default = FALSE, help = "black&white: print table without colors"),
@@ -96,25 +93,26 @@ commandLineInterface <- function(argv) {
     "To get info about a specific AMT scenario, run: rs -A -f SSP2EU-Base",
     "Get a more detailed assessment of a specific run: remindstatus folder")
 
-  # Create the parser object
+  # create the parser object
   opt_parser <- OptionParser(usage = usage, option_list = option_list, description = description, epilogue = epilogue) # , formatter = TitledHelpFormatter
 
-  # Parse the arguments, allow for one optional positional argument that takes the paths
+  # parse the arguments, allow for one optional positional argument that takes the paths
   arguments <- parse_args(opt_parser, args = argv, positional_arguments = c(0,1))
 
-  # Print hint
+  # print hint
   message("Did you know? ", sample(hints, 1))
 
+  # retrieve options (flags) and positional arguments (paths)
   opt  <- arguments$options
   paths <- arguments$args
 
-  # Set default for user
+  # set default for user
   if (opt$user == "you") opt$user <- Sys.info()[["user"]]
 
-  # Set default for paths
+  # set default for paths
   if (length(paths) < 1) paths <- "."
 
-  # Split comma separated parameters into vectors
+  # split comma separated parameters into vectors
   paths <- strsplit(paths, ',')[[1]]
   opt$filter <- paste0(strsplit(opt$filter, ",")[[1]], collapse = "|")
 
@@ -124,7 +122,7 @@ commandLineInterface <- function(argv) {
   #           and decide what to do
   # =============================================
 
-  # AMT runs  
+  # AMT runs: hardcode AMT path and use regular expression from 'runode.rds' for filtering the latest AMTs
   if (opt$amt) {
     paths <- "/p/projects/remind/modeltests/remind/output/"
     cat("Results from", paths, "\n")
@@ -133,7 +131,7 @@ commandLineInterface <- function(argv) {
   }
 
   if (opt$current) {
-    # OPTION A: get current runs
+    # OPTION A: get current runs (code recycled from promptAndRun)
     myruns   <- system(paste0("squeue -u ", opt$user, " -h -o '%Z'"), intern = TRUE)
     runnames <- system(paste0("squeue -u ", opt$user, " -h -o '%j'"), intern = TRUE)
 
@@ -195,6 +193,7 @@ commandLineInterface <- function(argv) {
         unidentified <- c(unidentified, dir)
       }
     }
+    
     # report unidentified folders
     if(!is.null(unidentified)) {
       message("No runs found in the following folders:")
@@ -204,7 +203,7 @@ commandLineInterface <- function(argv) {
 
   # filter coupling iterations
   if (opt$magpie & !is.null(runfolders)) {
-    # add magpie run folders if 'magpie/output' exists in current folder
+    # add magpie run folders if 'magpie/output' exists inside current folder
     if (dir.exists(file.path("magpie", "output"))) runfolders <- c(runfolders, file.path("magpie", "output"))
     
     # find iterations using only the basename (to ignore rem|mag if they exist in the path before the basename)
@@ -227,7 +226,7 @@ commandLineInterface <- function(argv) {
 
   if(!is.null(runfolders)) {
 
-    # print hint to reduce number of runs
+    # print hint how to reduce number of runs
     if (length(runfolders) > 40) message("To reduce the number of runs, filter the runs with -f REGEX or select manually from the list with -p.")
     
     # filter runs. If not changed by the user the default pattern '.*' filters all
