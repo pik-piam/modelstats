@@ -79,24 +79,22 @@ commandLineInterface <- function(argv) {
     "Bugs and feedback: https://github.com/pik-piam/modelstats/issues")
     
   hints <- c(
-    "Show last iterations of coupled runs with: rs -ml",
-    "Show all coupled runs with: rs -m",
-    "Show your active runs with: rs -C",
-    "Show your runs from the last 5 days with: rs -C -d 5",
-    "Sort runs by last change with: rs -t",
-    "List runs found and let me choose for which to print the status with: rs -p",
+    "Show (l)ast iterations of (m)agpie-coupled runs with: rs -ml",
+    "Show all (m)agpie-coupled runs with: rs -m",
+    "Show your runs (C)urrently running with: rs -C",
+    "Show your (C)urrent runs from the last 5 (d)ays with: rs -C -d 5",
+    "Sort runs by (t)ime of last change with: rs -t",
+    "List runs found and (p)rompt me to select for which the status should be printed with: rs -p",
     "Show results from specific folders with: rs folder1,folder2",
-    "Filter runs by regular expression: rs -f PkBudg500,EU21",
-    "Remove the coloring with -b.",
-    "Show results for multiple users with: rs -C -u user1,user2",
-    "Show a help text with: rs -h",
+    "(f)ilter runs by regular expression: rs -f PkBudg500,EU21",
+    "Remove the coloring and print the table in (b)lack and white with -b.",
+    "Show (C)urrent runs for one or more (u)sers with: rs -C -u user1,user2",
+    "Show a (h)elp text with: rs -h",
     "To understand why your pending runs don't start, run: sq -s",
     "To get info about the current run output folder, simply run: rs",
-    "To get info about the most recent automated model tests (AMT), run: rs -A",
+    "List most recent (A)utomated model tests with: rs -A",
     "To get info about a specific AMT scenario, run: rs -A -f SSP2EU-Base",
-    "Get a more detailed assessment of a specific run: remindstatus folder",
-    "Using 'pattern=NDC' with any switch shows matching runs only")
-
+    "Get a more detailed assessment of a specific run: remindstatus folder")
 
   # Create the parser object
   opt_parser <- OptionParser(usage = usage, option_list = option_list, description = description, epilogue = epilogue) # , formatter = TitledHelpFormatter
@@ -249,7 +247,4 @@ commandLineInterface <- function(argv) {
   } else {
     message("No runs found")
   }
-
-  return(invisible())
-
 }
