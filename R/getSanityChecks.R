@@ -12,6 +12,8 @@
 #'
 #' @param dirs a vector of paths to REMIND runs.
 #' When NULL, the latest AMTs are used (only works on PIK cluster)
+#' @param prompt boolean deciding whether the script looks for the directories itself and prompts the user for selection.
+#' Per default this is activated.
 #'
 #' @author Falk Benke
 #' @export
