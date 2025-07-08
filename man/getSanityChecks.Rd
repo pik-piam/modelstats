@@ -4,14 +4,11 @@
 \alias{getSanityChecks}
 \title{getSanityChecks}
 \usage{
-getSanityChecks(dirs = NULL, prompt = TRUE)
+getSanityChecks(dirs = NULL)
 }
 \arguments{
 \item{dirs}{a vector of paths to REMIND runs.
 When NULL, the latest AMTs are used (only works on PIK cluster)}
-
-\item{prompt}{boolean deciding whether the script looks for the directories itself and prompts the user for selection.
-Per default this is activated.}
 }
 \description{
 Get overview of sanity check results for a list of REMIND runs
