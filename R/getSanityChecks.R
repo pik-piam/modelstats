@@ -12,24 +12,19 @@
 #'
 #' @param dirs a vector of paths to REMIND runs.
 #' When NULL, the latest AMTs are used (only works on PIK cluster)
-#' @param prompt boolean deciding whether the script looks for the directories itself and prompts the user for selection.
-#' Per default this is activated.
 #'
 #' @author Falk Benke
 #' @export
 #' @md
-getSanityChecks <- function(dirs = NULL, prompt = TRUE) {
+getSanityChecks <- function(dirs = NULL) {
 
   if (is.null(dirs)) {
     amtPath <- "/p/projects/remind/modeltests/remind/output/"
     cat("Results from", amtPath, "\n")
     amtPattern <- readRDS("/p/projects/remind/modeltests/remind/runcode.rds")
     dirs <- dir(path = amtPath, pattern = amtPattern, full.names = TRUE)
-  } else if (prompt) {
-    dirs <- list.dirs(dirs, recursive = FALSE)
-    dirs <- gms::chooseFromList(dirs, type = "folders")
   }
-
+  
   colSep <- "  "
   len <- max(c(15, nchar(basename(normalizePath(dirs, mustWork = TRUE)))))
   len <- min(67, len)
