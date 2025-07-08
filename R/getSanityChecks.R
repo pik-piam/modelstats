@@ -23,11 +23,8 @@ getSanityChecks <- function(dirs = NULL) {
     cat("Results from", amtPath, "\n")
     amtPattern <- readRDS("/p/projects/remind/modeltests/remind/runcode.rds")
     dirs <- dir(path = amtPath, pattern = amtPattern, full.names = TRUE)
-  } else {
-    dirs <- list.dirs(dirs, recursive = FALSE)
-    dirs <- gms::chooseFromList(dirs, type = "folders")
   }
-
+  
   colSep <- "  "
   len <- max(c(15, nchar(basename(normalizePath(dirs, mustWork = TRUE)))))
   len <- min(67, len)

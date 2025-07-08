@@ -50,7 +50,7 @@ modeltests <- function(mydir = ".",
     message("Writing 'next:start' to ", normalizePath("../.testsstatus"))
     writeLines("next:start", con = "../.testsstatus")
   } else {
-    message("Found ", readLines("../.testsstatus"), " in ", normalizePath("../.testsstatus"), ". Doing nothing")
+    message("Found '", readLines("../.testsstatus"), "' in ", normalizePath("../.testsstatus"), ". Doing nothing")
   }
 }
 
@@ -472,9 +472,9 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
       message <- c(message, summary)
       message <- c(message, testthatResult)
       message <- c(message, "```", gitInfo, "```")
-      message <- c(message, "`rs2 -t` returns:")
+      message <- c(message, "`rs -A` returns:")
       message <- c(message, "```", rs2, "```")
-      message <- c(message, "`Sanity checks (`rss`) return:")
+      message <- c(message, "Sanity checks (`rs -s`) return:")
       message <- c(message, "```", rss, "```")
       if (exists("runsNotStarted")) {
         message <- c(message, "These scenarios did not start at all:", runsNotStarted)
