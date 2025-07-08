@@ -239,7 +239,7 @@ commandLineInterface <- function(argv) {
 
     # decide whether to display sanity cheks or runstatus  
     if (opt$sanity) {
-      modelstats::getSanityChecks(runfolders, prompt = FALSE)
+      modelstats::getSanityChecks(runfolders)
     } else {
       modelstats::loopRuns(runfolders, user = opt$user, colors = !opt$nocolor, sortbytime = opt$time)
     }
