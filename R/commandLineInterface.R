@@ -1,12 +1,13 @@
 #' Provide a command line interface to loopRuns and getSanityChecks
-#' 
+#'
 #' This function is made to be called by the rs tool. It takes the command line arguments
-#' supplied by the user when calling rs, evaluates them, and according to them prepares the 
+#' supplied by the user when calling rs, evaluates them, and according to them prepares the
 #' arguments finally passed to loopRuns or getSanityChecks.
-#' 
+#'
 #' @param argv A character vector containing the command line arguments.
 #' @returns A string containing the status or sanity table.
 #' @importFrom optparse make_option OptionParser parse_args
+#' @importFrom cli cli_alert_warning cli_alert_info
 #' @author David Klein
 #' @export
 
@@ -32,7 +33,7 @@ commandLineInterface <- function(argv) {
   is.mainfolder <- function(dir) {
     return(sum(file.exists(paste0(dir, "/", c("output", "output.R", "start.R", "main.gms")))) == 4)
   }
-  
+
   # decide which message to print before exiting
   stopmessage <- function(opt) {
     if (opt$daysback < 1) {
@@ -84,7 +85,7 @@ commandLineInterface <- function(argv) {
 
   epilogue <- c(
     "Bugs and feedback: https://github.com/pik-piam/modelstats/issues")
-    
+
   hints <- c(
     "Show (l)ast iterations of (m)agpie-coupled runs with: rs -ml",
     "Show all (m)agpie-coupled runs with: rs -m",
@@ -111,7 +112,7 @@ commandLineInterface <- function(argv) {
 
   # print hint
   cli_alert_info("Did you know? {sample(hints, 1)}")
-  
+
   # retrieve options (flags) and positional arguments (paths)
   opt  <- arguments$options
   paths <- arguments$args
@@ -160,10 +161,10 @@ commandLineInterface <- function(argv) {
       myruns <- myruns[-deleteruns]
       runnames <- runnames[-deleteruns]
     }
-    
+
     # exit with the proper message
     if (length(myruns) == 0) stopmessage(opt)
-    
+
     # add REMIND-MAgPIE coupled runs where run directory is not the output directory
     # these lines also drop all other slurm jobs such as remind preprocessing etc.
     coupled <- rem <- NULL
@@ -182,9 +183,9 @@ commandLineInterface <- function(argv) {
 
     # exit with the proper message
     if (length(myruns) == 0) stopmessage(opt)
-    
+
     runfolders <- myruns
-    
+
   } else {
     # OPTION B: create list with run folders from path supplied by user or AMTs
     runfolders <- NULL
@@ -201,7 +202,7 @@ commandLineInterface <- function(argv) {
         unidentified <- c(unidentified, dir)
       }
     }
-    
+
     # report unidentified folders
     if(!is.null(unidentified)) {
       cli_alert_warning("No runs found in the following folders:")
@@ -213,11 +214,11 @@ commandLineInterface <- function(argv) {
   if (opt$magpie & !is.null(runfolders)) {
     # add magpie run folders if 'magpie/output' exists inside current folder
     if (dir.exists(file.path("magpie", "output"))) runfolders <- c(runfolders, file.path("magpie", "output"))
-    
+
     # find iterations using only the basename (to ignore rem|mag if they exist in the path before the basename)
     IndexOfcoupledRuns <- grepl("-(rem|mag)-[0-9]+$", basename(runfolders))
     runfolders <- runfolders[IndexOfcoupledRuns]
-    
+
     # keep last iteration only
     if (opt$last) {
       lastdirs <- NULL
@@ -227,7 +228,7 @@ commandLineInterface <- function(argv) {
     }
     runfolders <- lastdirs
   }
-   
+
   # =============================================
   #   print table (runstatus or sanity)
   # =============================================
@@ -236,16 +237,16 @@ commandLineInterface <- function(argv) {
 
     # print hint how to reduce number of runs
     if (length(runfolders) > 40) cli_alert_info("To reduce the number of runs, filter the runs with -f REGEX or select manually from the list with -p.")
-    
+
     # filter runs. If not changed by the user the default pattern '.*' filters all
     runfolders <- grep(opt$filter, runfolders, value = TRUE)
 
     # list all runs found and prompt the user to select
     if (opt$prompt) {
-      runfolders <- gms::chooseFromList(runfolders, type = "folders") 
+      runfolders <- gms::chooseFromList(runfolders, type = "folders")
     }
 
-    # decide whether to display sanity cheks or runstatus  
+    # decide whether to display sanity cheks or runstatus
     if (opt$sanity) {
       modelstats::getSanityChecks(runfolders)
     } else {
