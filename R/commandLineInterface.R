@@ -34,16 +34,6 @@ commandLineInterface <- function(argv) {
     return(sum(file.exists(paste0(dir, "/", c("output", "output.R", "start.R", "main.gms")))) == 4)
   }
   
-  # decide which message to print before exiting
-  stopmessage <- function(opt) {
-    if (opt$daysback < 1) {
-      cli_alert_warning("No currently running runs found. To include recent runs please expand the time horizon by adding -d DAYS.")
-    } else {
-      cli_alert_warning("No runs found in the past {opt$daysback} days. Try to expand the time horizon.")
-    }
-    quit(save = 'no', status = 0)
-  }
-
   # ================================================
   #  Define command line arguments, help, and hints
   # ================================================
@@ -136,13 +126,13 @@ commandLineInterface <- function(argv) {
   # AMT runs: hardcode AMT path and use regular expression from 'runode.rds' for filtering the latest AMTs
   if (opt$amt) {
     paths <- "/p/projects/remind/modeltests/remind/output/"
-    cat("Results from", paths, "\n")
+    cli_alert_info("Results from {paths}\n")
     if (opt$filter == ".*") opt$filter <- readRDS("/p/projects/remind/modeltests/remind/runcode.rds")
     opt$user <- NULL
   }
 
   if (opt$current) {
-    # OPTION A: get current runs (code recycled from promptAndRun)
+    # OPTION A: get current runs (code mostly recycled from promptAndRun)
     myruns   <- system(paste0("squeue -u ", opt$user, " -h -o '%Z'"), intern = TRUE)
     runnames <- system(paste0("squeue -u ", opt$user, " -h -o '%j'"), intern = TRUE)
 
@@ -162,27 +152,33 @@ commandLineInterface <- function(argv) {
       runnames <- runnames[-deleteruns]
     }
     
-    # exit with the proper message
-    if (length(myruns) == 0) stopmessage(opt)
-    
     # add REMIND-MAgPIE coupled runs where run directory is not the output directory
     # these lines also drop all other slurm jobs such as remind preprocessing etc.
-    coupled <- rem <- NULL
-    for (i in 1:length(runnames)) {
-      if (! any(grepl(runnames[[i]], myruns[[i]]), grepl("mag-run", runnames[[i]]))) {
-        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]])) # for coupled runs in parallel mode
-        rem <- c(rem, i)
+    if (length(myruns) > 0) {
+      coupled <- rem <- NULL
+      for (i in 1:length(runnames)) {
+        if (! any(grepl(runnames[[i]], myruns[[i]]), grepl("mag-run", runnames[[i]]))) {
+          coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]])) # for coupled runs in parallel mode
+          rem <- c(rem, i)
+        }
       }
+      if (!is.null(rem)) {
+        myruns <- myruns[-rem] # remove coupled parent-job and all other slurm jobs
+        myruns <- c(myruns, coupled) # add coupled paths
+      }
+      myruns <- myruns[file.exists(myruns)] # keep only existing paths
+      myruns <- sort(unique(myruns[!is.na(myruns)]))
     }
-    if (!is.null(rem)) {
-      myruns <- myruns[-rem] # remove coupled parent-job and all other slurm jobs
-      myruns <- c(myruns, coupled) # add coupled paths
-    }
-    myruns <- myruns[file.exists(myruns)] # keep only existing paths
-    myruns <- sort(unique(myruns[!is.na(myruns)]))
-
+    
     # exit with the proper message
-    if (length(myruns) == 0) stopmessage(opt)
+    if (length(myruns) == 0) {
+      if (opt$daysback < 1) {
+        cli_alert_warning("No currently running runs found. To include recent runs please expand the time horizon by adding -d DAYS.")
+      } else {
+        cli_alert_warning("No runs found in the past {opt$daysback} days. Try to expand the time horizon.")
+      }
+      quit(save = 'no', status = 0)
+    }
     
     runfolders <- myruns
     
@@ -233,14 +229,15 @@ commandLineInterface <- function(argv) {
   # =============================================
   #   print table (runstatus or sanity)
   # =============================================
+  
+  # filter runs. If not changed by the user the default pattern '.*' filters all
+  runfolders <- grep(opt$filter, runfolders, value = TRUE)
 
-  if(!is.null(runfolders)) {
-
-    # filter runs. If not changed by the user the default pattern '.*' filters all
-    runfolders <- grep(opt$filter, runfolders, value = TRUE)
+  # proceed if there are runs left after filtering
+  if(!identical(runfolders, character(0))) {
 
     # print hint how to reduce number of runs
-    if (length(runfolders) > 40 && opt$filter != ".*" && !opt$prompt) {
+    if (length(runfolders) > 40 && opt$filter == ".*" && !opt$prompt) {
       cli_alert_info("To reduce the number of runs, filter the runs with -f REGEX or select manually from the list with -p.")
     }
     
@@ -256,6 +253,8 @@ commandLineInterface <- function(argv) {
       modelstats::loopRuns(runfolders, user = opt$user, colors = !opt$nocolor, sortbytime = opt$time)
     }
   } else {
+    # this can only happen if the filtering removed all runs
+    # if runfolders is empty already before filtering the script would have stopped earlier (look for 'quit')
     cli_alert_warning("No runs found")
   }
 }
