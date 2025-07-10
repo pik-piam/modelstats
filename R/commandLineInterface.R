@@ -41,14 +41,14 @@ commandLineInterface <- function(argv) {
     make_option(c("-A", "--amt"     ), type = "logical", action = "store_true", default = FALSE, help = "print most recent REMIND automated model test runs. With -f: of all AMTs, show only those that match the regular expression REGEX -f REGEX"),
     make_option(c("-b", "--nocolor" ), type = "logical", action = "store_true", default = FALSE, help = "black&white: print table without colors"),
     make_option(c("-C", "--current" ), type = "logical", action = "store_true", default = FALSE, help = "print currently running runs no matter where they are, i.e. you don't need to be in or right above a run to see it. Add user with -u USER and include recent runs with -d N"),
-    make_option(c("-d", "--daysback"), type = "integer",                        default = 0    , help = "with -c: show recent runs of the last N days", metavar = "N"),
+    make_option(c("-d", "--daysback"), type = "integer",                        default = 0    , help = "only with -C: show recent runs of the last N days", metavar = "N"),
     make_option(c("-f", "--filter"  ), type = "character",                      default = ".*" , help = "print runs that match the regular expression REGEX. Specify multiple REGEX separated by comma.", metavar = "REGEX"),
-    make_option(c("-l", "--last"    ), type = "logical", action = "store_true", default = FALSE, help = "with -m: print the last coupling iterations only"),
+    make_option(c("-l", "--last"    ), type = "logical", action = "store_true", default = FALSE, help = "only with -m: print the last coupling iterations only"),
     make_option(c("-m", "--magpie"  ), type = "logical", action = "store_true", default = FALSE, help = "print all coupling iterations. Add -l to print the last iterations only"),
     make_option(c("-p", "--prompt"  ), type = "logical", action = "store_true", default = FALSE, help = "let the user choose individual runs from a list before printing the status table" ),
     make_option(c("-s", "--sanity"  ), type = "logical", action = "store_true", default = FALSE, help = "show overview of sanity check" ),
     make_option(c("-t", "--time"    ), type = "logical", action = "store_true", default = FALSE, help = "sort runs chronologically" ),
-    make_option(c("-u", "--user"    ), type = "character",                      default = "you", help = "with -c: show runs of user USER", metavar = "USER")
+    make_option(c("-u", "--user"    ), type = "character",                      default = "you", help = "only with -C: show runs of user USER", metavar = "USER")
   )
 
   usage <- c(
@@ -172,7 +172,11 @@ commandLineInterface <- function(argv) {
     myruns <- sort(unique(myruns[!is.na(myruns)]))
 
     if (length(myruns) == 0) {
-      message("No runs found for this user. To change the reporting period (days) you need to specify also a user, e.g. rs2 -c USER 1")
+      if (opt$daysback < 1) {
+        message("No currently running runs found. To include recent runs please expand the time horizon by adding -d DAYS.")
+      } else {
+        message("No runs found in the past ", opt$daysback, " days. Try to expand the time horizon.")
+      }
       quit(save = 'no', status = 0)
     }
     runfolders <- myruns
