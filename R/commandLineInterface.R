@@ -236,12 +236,14 @@ commandLineInterface <- function(argv) {
 
   if(!is.null(runfolders)) {
 
-    # print hint how to reduce number of runs
-    if (length(runfolders) > 40) cli_alert_info("To reduce the number of runs, filter the runs with -f REGEX or select manually from the list with -p.")
-    
     # filter runs. If not changed by the user the default pattern '.*' filters all
     runfolders <- grep(opt$filter, runfolders, value = TRUE)
 
+    # print hint how to reduce number of runs
+    if (length(runfolders) > 40 && opt$filter != ".*" && !opt$prompt) {
+      cli_alert_info("To reduce the number of runs, filter the runs with -f REGEX or select manually from the list with -p.")
+    }
+    
     # list all runs found and prompt the user to select
     if (opt$prompt) {
       runfolders <- gms::chooseFromList(runfolders, type = "folders") 
