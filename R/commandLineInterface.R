@@ -36,9 +36,9 @@ commandLineInterface <- function(argv) {
   # decide which message to print before exiting
   stopmessage <- function(opt) {
     if (opt$daysback < 1) {
-      message("No currently running runs found. To include recent runs please expand the time horizon by adding -d DAYS.")
+      cli_alert_warning("No currently running runs found. To include recent runs please expand the time horizon by adding -d DAYS.")
     } else {
-      message("No runs found in the past ", opt$daysback, " days. Try to expand the time horizon.")
+      cli_alert_warning("No runs found in the past {opt$daysback} days. Try to expand the time horizon.")
     }
     quit(save = 'no', status = 0)
   }
@@ -110,8 +110,8 @@ commandLineInterface <- function(argv) {
   arguments <- parse_args(opt_parser, args = argv, positional_arguments = c(0,1))
 
   # print hint
-  message("Did you know? ", sample(hints, 1))
-
+  cli_alert_info("Did you know? {sample(hints, 1)}")
+  
   # retrieve options (flags) and positional arguments (paths)
   opt  <- arguments$options
   paths <- arguments$args
@@ -204,7 +204,7 @@ commandLineInterface <- function(argv) {
     
     # report unidentified folders
     if(!is.null(unidentified)) {
-      message("No runs found in the following folders:")
+      cli_alert_warning("No runs found in the following folders:")
       print(unidentified)
     }
   }
@@ -235,7 +235,7 @@ commandLineInterface <- function(argv) {
   if(!is.null(runfolders)) {
 
     # print hint how to reduce number of runs
-    if (length(runfolders) > 40) message("To reduce the number of runs, filter the runs with -f REGEX or select manually from the list with -p.")
+    if (length(runfolders) > 40) cli_alert_info("To reduce the number of runs, filter the runs with -f REGEX or select manually from the list with -p.")
     
     # filter runs. If not changed by the user the default pattern '.*' filters all
     runfolders <- grep(opt$filter, runfolders, value = TRUE)
@@ -252,6 +252,6 @@ commandLineInterface <- function(argv) {
       modelstats::loopRuns(runfolders, user = opt$user, colors = !opt$nocolor, sortbytime = opt$time)
     }
   } else {
-    message("No runs found")
+    cli_alert_warning("No runs found")
   }
 }

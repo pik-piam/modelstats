@@ -22,7 +22,8 @@ Imports:
     gms,
     withr,
     rlang,
-    optparse
+    optparse,
+    cli
 Suggests:
     covr,
     knitr,
