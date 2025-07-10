@@ -32,6 +32,16 @@ commandLineInterface <- function(argv) {
   is.mainfolder <- function(dir) {
     return(sum(file.exists(paste0(dir, "/", c("output", "output.R", "start.R", "main.gms")))) == 4)
   }
+  
+  # decide which message to print before exiting
+  stopmessage <- function(opt) {
+    if (opt$daysback < 1) {
+      message("No currently running runs found. To include recent runs please expand the time horizon by adding -d DAYS.")
+    } else {
+      message("No runs found in the past ", opt$daysback, " days. Try to expand the time horizon.")
+    }
+    quit(save = 'no', status = 0)
+  }
 
   # ================================================
   #  Define command line arguments, help, and hints
@@ -150,11 +160,10 @@ commandLineInterface <- function(argv) {
       myruns <- myruns[-deleteruns]
       runnames <- runnames[-deleteruns]
     }
-
-    if (length(myruns) == 0) {
-      message(paste0("No runs found for this user and time horizon of ", opt$daysback, " days"))
-      quit(save = 'no', status = 0)
-    }
+    
+    # exit with the proper message
+    if (length(myruns) == 0) stopmessage(opt)
+    
     # add REMIND-MAgPIE coupled runs where run directory is not the output directory
     # these lines also drop all other slurm jobs such as remind preprocessing etc.
     coupled <- rem <- NULL
@@ -171,14 +180,9 @@ commandLineInterface <- function(argv) {
     myruns <- myruns[file.exists(myruns)] # keep only existing paths
     myruns <- sort(unique(myruns[!is.na(myruns)]))
 
-    if (length(myruns) == 0) {
-      if (opt$daysback < 1) {
-        message("No currently running runs found. To include recent runs please expand the time horizon by adding -d DAYS.")
-      } else {
-        message("No runs found in the past ", opt$daysback, " days. Try to expand the time horizon.")
-      }
-      quit(save = 'no', status = 0)
-    }
+    # exit with the proper message
+    if (length(myruns) == 0) stopmessage(opt)
+    
     runfolders <- myruns
     
   } else {
