@@ -16,7 +16,7 @@ Imports:
     gtools,
     lubridate,
     lucode2,
-    magpie4 (>= 2.18.0),
+    magpie4 (>= 2.33.4),
     piamutils,
     utils,
     gms,
