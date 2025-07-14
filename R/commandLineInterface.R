@@ -224,6 +224,10 @@ commandLineInterface <- function(argv) {
       }
     }
     runfolders <- lastdirs
+    if (is.null(runfolders)) {
+      cli_alert_warning("No coupled runs found")
+      quit(save = 'no', status = 0)
+    }
   }
    
   # =============================================
@@ -245,6 +249,8 @@ commandLineInterface <- function(argv) {
     if (opt$prompt) {
       runfolders <- gms::chooseFromList(runfolders, type = "folders") 
     }
+    
+    cli_alert_info("Runs found: {length(runfolders)}")
 
     # decide whether to display sanity cheks or runstatus  
     if (opt$sanity) {
