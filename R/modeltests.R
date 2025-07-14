@@ -258,28 +258,12 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
   changelog <- NULL
   if (model == "MAgPIE") {
     for (i in runsStarted[startsWith(runsStarted, "default_")]) {
-      changelogVariables <- c(
-        lucEmisRaw = "Emissions|CO2|Land RAW|+|Land-use Change",
-        tau = "Productivity|Landuse Intensity Indicator Tau",
-        cropland = "Resources|Land Cover|+|Cropland",
-        irrigated = "Resources|Land Cover|Cropland|Area actually irrigated",
-        pasture = "Resources|Land Cover|+|Pastures and Rangelands",
-        forest = "Resources|Land Cover|+|Forest",
-        other = "Resources|Land Cover|+|Other Land",
-        # production: in contrast to all other indicators here, this should
-        # be robust to calibration issues, but indicate changes in demand/trade
-        production = "Production",
-        costs = "Costs",
-        foodExp = "Household Expenditure|Food|Expenditure"
-      )
       changelog <- file.path(tempdir(), "data-changelog.csv")
       file.copy(file.path(gitdir, "data-changelog.csv"), changelog)
       try({
         magpie4::addToDataChangelog(report = readRDS(file.path(i, "report.rds")),
                                     changelog = changelog,
-                                    versionId = i,
-                                    years = c(2020, 2050, 2100),
-                                    variables = changelogVariables)
+                                    versionId = i)
       })
     }
   }
