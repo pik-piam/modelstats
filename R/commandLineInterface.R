@@ -24,11 +24,6 @@ commandLineInterface <- function(argv) {
     )
   }
 
-  # return TRUE if dir is the output folder
-  is.outputfolder <- function(dir) {
-    return(basename(normalizePath(dir)) == "output")
-  }
-
   # return TRUE if dir is the REMIND or MAgPIE main folder
   is.mainfolder <- function(dir) {
     return(sum(file.exists(paste0(dir, "/", c("output", "output.R", "start.R", "main.gms")))) == 4)
@@ -125,10 +120,17 @@ commandLineInterface <- function(argv) {
 
   # AMT runs: hardcode AMT path and use regular expression from 'runode.rds' for filtering the latest AMTs
   if (opt$amt) {
-    paths <- "/p/projects/remind/modeltests/remind/output/"
-    cli_alert_info("Results from {paths}\n")
-    if (opt$filter == ".*") opt$filter <- readRDS("/p/projects/remind/modeltests/remind/runcode.rds")
     opt$user <- NULL
+    paths <- "/p/projects/remind/modeltests/remind/output/"
+    if (opt$filter == ".*") {
+      # if user provided no pattern search for latest AMTs
+      opt$filter <- readRDS("/p/projects/remind/modeltests/remind/runcode.rds")
+    } else {
+      # if user provided a pattern include runs from archive folder
+      paths <- c(paths, "/p/projects/remind/modeltests/remind/output/archive")
+    }
+    cli_alert_info("Results from {.file {paths}}\n")
+
   }
 
   if (opt$current) {
@@ -185,26 +187,17 @@ commandLineInterface <- function(argv) {
   } else {
     # OPTION B: create list with run folders from path supplied by user or AMTs
     runfolders <- NULL
-    unidentified <- NULL
 
     for (dir in paths) {
       if(is.runfolder(dir)) {
         runfolders <- c(runfolders, dir)
-      } else if (is.outputfolder(dir)) {
-        runfolders <- c(runfolders, list.dirs(dir, recursive = FALSE))
       } else if (is.mainfolder(dir)) {
         runfolders <- c(runfolders, list.dirs(file.path(dir, "output"), recursive = FALSE))
       } else {
-        unidentified <- c(unidentified, dir)
+        runfolders <- c(runfolders, list.dirs(dir, recursive = FALSE))
       }
     }
     
-    # report unidentified folders
-    if(!is.null(unidentified)) {
-      cli_alert_warning("No runs found in the following folders:")
-      print(unidentified)
-      if (is.null(runfolders)) quit(save = 'no', status = 0)
-    }
   }
 
   # filter coupling iterations
@@ -236,6 +229,9 @@ commandLineInterface <- function(argv) {
   
   # filter runs. If not changed by the user the default pattern '.*' filters all
   runfolders <- grep(opt$filter, runfolders, value = TRUE)
+  
+  # sort strings containing embedded numbers so that the numbers are numerically sorted rather than sorted by character value
+  #runfolders <- runfolders[mixedorder(basename(normalizePath(runfolders)), numeric.type = "decimal", decreasing = FALSE)]
 
   # proceed if there are runs left after filtering
   if(!identical(runfolders, character(0))) {
