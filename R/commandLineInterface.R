@@ -8,7 +8,7 @@
 #' @returns A string containing the status or sanity table.
 #' @importFrom optparse make_option OptionParser parse_args
 #' @importFrom cli cli_alert_warning cli_alert_info
-#' @importFrom stringr str_order
+#' @importFrom stringi stri_order
 #' @author David Klein
 #' @export
 
