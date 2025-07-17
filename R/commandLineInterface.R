@@ -8,6 +8,7 @@
 #' @returns A string containing the status or sanity table.
 #' @importFrom optparse make_option OptionParser parse_args
 #' @importFrom cli cli_alert_warning cli_alert_info
+#' @importFrom stringr str_order
 #' @author David Klein
 #' @export
 
@@ -231,7 +232,7 @@ commandLineInterface <- function(argv) {
   runfolders <- grep(opt$filter, runfolders, value = TRUE)
   
   # sort strings containing embedded numbers so that the numbers are numerically sorted rather than sorted by character value
-  #runfolders <- runfolders[mixedorder(basename(normalizePath(runfolders)), numeric.type = "decimal", decreasing = FALSE)]
+  runfolders <- runfolders[stringi::stri_order(basename(normalizePath(runfolders)), numeric = TRUE)]
 
   # proceed if there are runs left after filtering
   if(!identical(runfolders, character(0))) {

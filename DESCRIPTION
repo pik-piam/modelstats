@@ -23,7 +23,8 @@ Imports:
     withr,
     rlang,
     optparse,
-    cli
+    cli,
+    stringi
 Suggests:
     covr,
     knitr,
