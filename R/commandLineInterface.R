@@ -216,8 +216,9 @@ commandLineInterface <- function(argv) {
       for (r in unique(gsub("-(rem|mag)-[0-9]+$", "", runfolders))) {
         lastdirs <- c(lastdirs, runfolders[max(which(gsub("-(rem|mag)-[0-9]+$", "", runfolders) == r))])
       }
+      runfolders <- lastdirs
     }
-    runfolders <- lastdirs
+    
     if (is.null(runfolders)) {
       cli_alert_warning("No coupled runs found")
       quit(save = 'no', status = 0)
