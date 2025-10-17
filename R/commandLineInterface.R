@@ -207,7 +207,7 @@ commandLineInterface <- function(argv) {
     if (dir.exists(file.path("magpie", "output"))) runfolders <- c(runfolders, file.path("magpie", "output"))
     
     # find iterations using only the basename (to ignore rem|mag if they exist in the path before the basename)
-    IndexOfcoupledRuns <- grepl("-(rem|mag)-[0-9]+$", basename(runfolders))
+    IndexOfcoupledRuns <- grepl("(^C_)|(-(rem|mag)-[0-9]+$)", basename(runfolders))
     runfolders <- runfolders[IndexOfcoupledRuns]
     
     # keep last iteration only
