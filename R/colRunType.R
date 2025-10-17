@@ -27,7 +27,7 @@ colRunType <- function(mydir = ".") {
       } else {
         if (isTRUE(cfg$gms$cm_nash_mode == "debug" | cfg$gms$cm_nash_mode == 1)) out <- paste0(out, " debug")
         if (isTRUE(cfg$gms$CES_parameters == "calibrate")) out <- paste0("Calib_", out)
-        if (isTRUE(cfg$gms$cm_MAgPIE_coupling == "on")) out <- paste0(out, " + mag")
+        if (isTRUE(cfg$gms$cm_MAgPIE_coupling == "on" | cfg$gms$cm_MAgPIE_Nash == 1)) out <- paste0(out, " + mag")
       }
       if (isTRUE(cfg$gms$c_empty_model == "on")) {
         out <- "empty model"
