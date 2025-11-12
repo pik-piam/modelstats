@@ -237,6 +237,12 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       } else {
         out[i, "Warnings"] <- "0"
       }
+    } else if (file.exists(logtxt)) {
+      warnings <- system(paste0("grep -zoP \"There were ([0-9]+) warnings\" ", logtxt), intern = TRUE)
+      if (length(warnings) > 0) {
+        warnings <- gsub("^[^0-9]*([0-9]+)[^0-9]*$","\\1", warnings)
+        out[i, "Warnings"] <- warnings
+      }
     }
 
     # Conv
