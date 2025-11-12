@@ -26,10 +26,10 @@ printOutput <- function(string, len1stcol = 67, lenCols = NULL, colSep = "   ", 
 
   if (is.null(cols)) {
     if (file.exists("/p")) {
-      cols <- rev(c("Runtime", "jobInSLURM", "RunType", "RunStatus", "Iter", "Conv",
+      cols <- rev(c("Runtime", "jobInSLURM", "RunType", "RunStatus", "Warnings", "Iter", "Conv",
                     "modelstat", "Mif", "runInAppResults"))
     } else {
-      cols <- rev(c("Runtime", "RunType", "RunStatus", "Iter", "Conv", "modelstat", "Mif"))
+      cols <- rev(c("Runtime", "RunType", "RunStatus", "Warnings", "Iter", "Conv", "modelstat", "Mif"))
     }
   } else {
     cols <- rev(cols)

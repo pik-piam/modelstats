@@ -43,6 +43,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     gdx_non_optimal <- file.path(ii, "non_optimal.gdx")
     fullgms         <- file.path(ii, "full.gms")
     fulllog         <- file.path(ii, "full.log")
+    slurmlog        <- file.path(ii, "slurm.log")
     logtxt          <- file.path(ii, "log.txt")
     logmagtxt       <- file.path(ii, "log-mag.txt")
     abortgdx        <- file.path(ii, "abort.gdx")
@@ -222,6 +223,17 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       out[i, "RunStatus"] <- "Wait REMIND lock"
     } else {
       out[i, "RunStatus"] <- "full.log missing"
+    }
+    
+    # Warnings
+    # Checks for "Warning messages:" followed by a list of warnings in the following format:
+    # 1: warning followed by up to 1 additional line of explanation.
+    out[i, "Warnings"] <- "NA"
+    if (file.exists(slurmlog)) {
+      warnings <- system(paste0("grep -zoP \"Warning messages:\\n([0-9]+:(.*\\n)?.*\\n)*([0-9]+)\" ", slurmlog, " | tail -1"), intern = TRUE)
+      if (length(warnings) > 0) {
+        out[i, "Warnings"] <- warnings
+      }
     }
 
     # Conv
