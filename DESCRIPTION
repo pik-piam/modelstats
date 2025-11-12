@@ -1,8 +1,8 @@
 Package: modelstats
 Type: Package
 Title: Run Analysis Tools
-Version: 0.27.11
-Date: 2025-10-17
+Version: 0.28.0
+Date: 2025-11-12
 Authors@R: c(
     person("Anastasis", "Giannousakis", email = "giannou@pik-potsdam.de", role = c("aut","cre")),
     person("Oliver", "Richters", role = "aut")
@@ -33,5 +33,5 @@ URL: https://github.com/pik-piam/modelstats
 BugReports: https://github.com/pik-piam/modelstats/issues
 Encoding: UTF-8
 License: LGPL-3
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3
 VignetteBuilder: knitr
