@@ -226,8 +226,9 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     }
     
     # Warnings
-    # Checks for "Warning messages:" followed by a list of warnings in the following format:
-    # 1: warning followed by up to 1 additional line of explanation.
+    # Checks slurm.log for "Warning messages:" followed by a list of warnings in the following format:
+    # 1: warning message, followed by up to 1 additional line of explanation.
+    # Reports NA if slurm.log wasn't found, 0 if no warnings were detected, number of warnings otherwise.
     out[i, "Warnings"] <- "NA"
     if (file.exists(slurmlog)) {
       warnings <- system(paste0("grep -zoP \"Warning messages:\\n([0-9]+:(.*\\n)?.*\\n)*([0-9]+)\" ", slurmlog, " | tail -1"), intern = TRUE)
