@@ -233,6 +233,8 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       warnings <- system(paste0("grep -zoP \"Warning messages:\\n([0-9]+:(.*\\n)?.*\\n)*([0-9]+)\" ", slurmlog, " | tail -1"), intern = TRUE)
       if (length(warnings) > 0) {
         out[i, "Warnings"] <- warnings
+      } else {
+        out[i, "Warnings"] <- "0"
       }
     }
 
