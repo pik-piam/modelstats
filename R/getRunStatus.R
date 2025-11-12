@@ -231,14 +231,14 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     # For REMIND, checks log.txt for "There were x warnings" line.
     # Reports NA if slurm.log wasn't found, 0 if no warnings were detected, number of warnings otherwise.
     out[i, "Warnings"] <- "NA"
-    if (file.exists(slurmlog)) {
+    if (file.exists(slurmlog) && isTRUE(runstatistics$stats[["config"]][["model_name"]] == "MAgPIE")) {
       warnings <- suppressWarnings(system(paste0("grep -zoP \"Warning messages:\\n([0-9]+:(.*\\n)?.*\\n)*([0-9]+)\" ", slurmlog, " | tail -1"), intern = TRUE))
       if (length(warnings) > 0) {
         out[i, "Warnings"] <- warnings
       } else {
         out[i, "Warnings"] <- "0"
       }
-    } else if (file.exists(logtxt)) {
+    } else if (file.exists(logtxt) && !isTRUE(runstatistics$stats[["config"]][["model_name"]] == "MAgPIE")) {
       warnings <- suppressWarnings(system(paste0("grep -zoP \"There were ([0-9]+) warnings\" ", logtxt), intern = TRUE))
       if (length(warnings) > 0) {
         warnings <- gsub("^[^0-9]*([0-9]+)[^0-9]*$","\\1", warnings)
