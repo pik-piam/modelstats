@@ -244,7 +244,8 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         warnings <- gsub("^[^0-9]*([0-9]+)[^0-9]*$","\\1", warnings)
         out[i, "Warnings"] <- warnings
       } else {
-        out[i, "Warnings"] <- "0"
+        warnings <- suppressWarnings(system(paste0("grep -zoP \"Warning messages:\\n([0-9]+:(.*\\n)?.*\\n)*\" ", logtxt), intern = TRUE))
+        out[i, "Warnings"] <- length(grep("^[0-9]+:", warnings))
       }
     }
 
