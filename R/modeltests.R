@@ -249,7 +249,7 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
   colSep <- "  "
   coltitles <- c(
     "Run                                           ", "Runtime    ", "", "RunType    ", "RunStatus         ",
-    "Iter            ", "Conv                 ", "modelstat          ", "Mif   ", "AppResults"
+    "Warnings ", "Iter            ", "Conv                 ", "modelstat          ", "Mif   ", "AppResults"
   )
   write(paste(coltitles, collapse = colSep), readme, append = TRUE)
   lenCols <- c(nchar(coltitles)[-length(coltitles)], 3)
