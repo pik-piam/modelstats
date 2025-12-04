@@ -32,7 +32,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
   for (i in mydir) {
     ii <- i
-    i <- sub(paste0(dirname(i), "/"), "", i)
+    i <- basename(ii)
 
     out[i, "jobInSLURM"] <- if (onCluster) foundInSlurm(ii, user) else "NA"
 
@@ -143,6 +143,9 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
         cm_iteration_max <- sub(";[ ]*", "", sub("^.*.= ", "", cm_iteration_max))
       }
     }
+    
+    
+    # RunStatus
     out[i, "Iter"] <- "NA"
     out[i, "RunStatus"] <- "NA"
     if (file.exists(fulllog)) {
@@ -177,6 +180,19 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
             gdxdelay <- 1
             if (length(latest_gdx) > 0 && file.exists(latest_gdx)) gdxdelay <- difftime(Sys.time(), file.info(latest_gdx)$mtime, units = "hours")
             if (conoptdelay > 0.1 && gdxdelay > 0.25) out[i, "RunStatus"] <- paste0("conoptspy >", niceround(conoptdelay, 1), "h")
+          }
+          # For coupled REMIND-MAgPIE runs: if MAgPIE is currently running print iteration number and MAgPIE year
+          # is MAgPIE currently running?
+          if (file.exists(logtxt)) {
+            lastLine <- suppressWarnings(system(paste("awk 'NF{s=$0}END{print s}'", logtxt), intern = TRUE))
+            if (lastLine  == "Starting MAgPIE...") {
+              # get current MAgPIE year
+              statusMagpie <- getRunStatus(file.path(cfg$path_magpie, cfg$cfg_mag$results_folder))[["Iter"]]
+            # in which iteration?
+            couplingIter <- gsub(".*-mag-([0-9]{1,2})$","\\1", cfg$cfg_mag$results_folder)
+            # write into out[i, "RunStatus"]: MAgPIE is running in iteration i with current status magpieRS
+            out[i, "RunStatus"] <- paste0("mag-", couplingIter, " ", statusMagpie)
+            }
           }
         }
       } else {
