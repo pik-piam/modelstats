@@ -16,6 +16,7 @@ colRunType <- function(mydir = ".") {
 
   out <- "NA"
   if (file.exists(paste0(mydir, "/", cfgf))) {
+  print(paste0(mydir, "/", cfgf))
     ifelse(grepl("yml", cfgf), cfg <- loadConfig(file.path(mydir, "config.yml")), load(paste0(mydir, "/", cfgf)))
     if (cfg[["model_name"]] == "MAgPIE") {
         out <- cfg$gms$optimization
@@ -27,7 +28,8 @@ colRunType <- function(mydir = ".") {
       } else {
         if (isTRUE(cfg$gms$cm_nash_mode == "debug" | cfg$gms$cm_nash_mode == 1)) out <- paste0(out, " debug")
         if (isTRUE(cfg$gms$CES_parameters == "calibrate")) out <- paste0("Calib_", out)
-        if (isTRUE(cfg$gms$cm_MAgPIE_coupling == "on" | cfg$gms$cm_MAgPIE_Nash == 1)) out <- paste0(out, " + mag")
+        browser()
+        if (isTRUE(cfg$gms$cm_MAgPIE_coupling == "on") | isTRUE(cfg$gms$cm_MAgPIE_Nash == 1)) out <- paste0(out, " + mag")
       }
       if (isTRUE(cfg$gms$c_empty_model == "on")) {
         out <- "empty model"
