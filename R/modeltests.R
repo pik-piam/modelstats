@@ -64,7 +64,8 @@ modeltests <- function(mydir = ".",
 .readRuntime <- function(x) {
   stats <- NULL # because of no visible binding note
   load(paste0(x, "/runstatistics.rda"))
-  return(stats$runtime)
+  #return(stats$runtime)
+  return(stats$timeGAMSEnd - stats$timeGAMSStart)
 }
 
 deleteEmptyRealizationFolders <- function() {
