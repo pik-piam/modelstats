@@ -104,7 +104,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       out[i, "runInAppResults"] <- "no"
       if (any(grepl("id", names(runstatistics$stats)))) {
         if (any(grepl("config", names(runstatistics$stats))) && runstatistics$stats[["config"]][["model_name"]] == "MAgPIE") {
-          ovdir <- "/p/projects/rd3mod/models/results/magpie/"
+          ovdir <- paste0(Sys.getenv("MAGPIE_RESULTS_ARCHIVE_PATH"), "/")
         } else {
           ovdir <- "/p/projects/rd3mod/models/results/remind/"
         }
