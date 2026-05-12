@@ -92,7 +92,7 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
       } else if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted|Abort", status[["RunStatus"]])) {
         cat(red(out))
       } else if (grepl("converged|Clb_converged", status[["RunStatus"]])) {
-        cat(underline(green(out)))
+        cat(green(out))
       } else if ((grepl("222", status[["modelstat"]]) && ! grepl(".", status[["modelstat"]], fixed = TRUE))
                  || status[["modelstat"]] == "2: Locally Optimal") {
         cat(green(out))
