@@ -14,7 +14,7 @@ A string containing the status or sanity table.
 }
 \description{
 This function is made to be called by the rs tool. It takes the command line arguments
-supplied by the user when calling rs, evaluates them, and according to them prepares the 
+supplied by the user when calling rs, evaluates them, and according to them prepares the
 arguments finally passed to loopRuns or getSanityChecks.
 }
 \author{

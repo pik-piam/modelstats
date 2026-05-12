@@ -27,8 +27,8 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
   orange <- make_style("orange")
   if (colors) {
     cat("# Color code: ", yellow("pending"), "/", yellow("startup"), ", ", cyan("running"), ", ",
-        underline(green("converged")), ", ", blue("converged (had INFES)"), ", ", orange("no mif"), ", ",
-        green("finished"), ", ", magenta("conopt stalled?"), ", ", red("error"), ".\n\n", sep = "")
+        green("converged"), "/", green("finished"), ", ", orange("no mif"), ", ",
+        magenta("conopt stalled?"), ", ", red("error"), ".\n\n", sep = "")
   }
   a <- file.info(mydir)
   a <- a[a[, "isdir"] == TRUE, ]
@@ -92,7 +92,7 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
       } else if (grepl("not_converged|Execution erro|Compilation er|missing|interrupted|Abort", status[["RunStatus"]])) {
         cat(red(out))
       } else if (grepl("converged|Clb_converged", status[["RunStatus"]])) {
-        cat(underline(green(out)))
+        cat(green(out))
       } else if ((grepl("222", status[["modelstat"]]) && ! grepl(".", status[["modelstat"]], fixed = TRUE))
                  || status[["modelstat"]] == "2: Locally Optimal") {
         cat(green(out))
@@ -115,11 +115,11 @@ loopRuns <- function(mydir, user = NULL, colors = TRUE, sortbytime = TRUE) {
       } else if (! status[["jobInSLURM"]] == "no" && !status[["jobInSLURM"]] == "NA") {
         cat(cyan(out))
       } else if (status[["Conv"]] == "converged (had INFES)" && ! status[["Mif"]] == "no") {
-        cat(blue(out))
+        cat(green(out))
       } else if (grepl("not_converged|Execution erro|Compilation er|interrupted|Intermed Infes", status[["RunStatus"]])) {
         cat(red(out))
       } else if (status[["Conv"]] %in% c("converged", "Clb_converged") && ! status[["Mif"]] == "no") {
-        cat(underline(green(out)))
+        cat(green(out))
       } else if (grepl("2: Locally Optimal", status[["modelstat"]]) && ! grepl("nash", status[["RunType"]])) {
         cat(green(out))
       } else if (status[["Mif"]] == "no" && status[["Conv"]] %in% c("converged", "Clb_converged", "converged (had INFES)")) {
