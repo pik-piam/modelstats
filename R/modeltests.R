@@ -465,14 +465,18 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
         message <- c(message, "These scenarios did not start at all:", runsNotStarted)
       }
     }
-    if (!is.null(errorList) && model == "MAgPIE") {
-      message <- c(message, paste0("Some ",
-        model,
-        " tests produce warnings. Please check ",
-        "https://gitlab.pik-potsdam.de/",
-        ifelse(model == "MAgPIE", "landuse", model),
-        "/testing_suite"
-      ))
+    if (model == "MAgPIE") {
+      if (!is.null(errorList)) {
+        message <- c(message, paste0("Some ",
+          model,
+          " tests produce warnings. Please check ",
+          "https://gitlab.pik-potsdam.de/",
+          ifelse(model == "MAgPIE", "landuse", model),
+          "/testing_suite"
+        ))
+      } else {
+        message <- c(message, "MAgPIE tests completed successfully. Find the results at https://gitlab.pik-potsdam.de/landuse/testing_suite.")
+      }
     }
 
     if (!is.null(message)) {
@@ -480,7 +484,7 @@ evaluateRuns <- function(model, # nolint: cyclocomp_linter.
       .mattermostBotMessage(message = message, token = mattermostToken)
     }
   }
-  
+
   # only save this if everyting went well
   saveRDS(commitTested, file = paste0(mydir, "/lastcommit.rds"))
 

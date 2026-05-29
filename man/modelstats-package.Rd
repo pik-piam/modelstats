@@ -21,6 +21,7 @@ Useful links:
 
 Authors:
 \itemize{
+  \item Anastasis Giannousakis \email{giannou@pik-potsdam.de}
   \item Oliver Richters
 }
 
