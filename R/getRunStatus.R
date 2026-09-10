@@ -272,7 +272,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     out[i, "Conv"] <- "NA"
     if (exists("cfg") && isTRUE(grepl("nash", out[i, "RunType"])) && length(latest_gdx) > 0) {
       iter_no  <- try(as.numeric(readGDX(gdx = latest_gdx, "o_iterationNumber", format = "simplest")), silent = TRUE)
-      s80_bool <- try(as.numeric(readGDX(gdx = latest_gdx, "s80_bool", format = "simplest")), silent = TRUE)
+      s80_bool <- try(as.numeric(readGDX(gdx = latest_gdx, "s80_bool", type = "Parameter", format = "simplest")), silent = TRUE)
       if (! inherits(s80_bool, "try-error") && ! inherits(iter_no, "try-error")) {
         if (s80_bool == 1) {
           out[i, "Conv"] <- if (file.exists(gdx_non_optimal)) "converged (had INFES)" else "converged"
