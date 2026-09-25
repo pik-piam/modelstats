@@ -5,6 +5,7 @@
 #' @param mydir Path to the folder(s) where the run(s) is(are) performed
 #' @param sort how to sort (nf=newest first)
 #' @param user the user whose runs will be shown
+#' @param detailed (boolean, default: TRUE). If FALSE, avoids costly information gathering and returns less info
 #'
 #' @author Anastasis Giannousakis
 #' @examples
@@ -18,7 +19,7 @@
 #' @importFrom gms loadConfig
 #' @importFrom piamutils niceround
 #' @export
-getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
+getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL, detailed = TRUE) {
 
   if (is.null(user)) user <- Sys.info()[["user"]]
   mydir <- normalizePath(mydir)
@@ -189,10 +190,10 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
             if (lastLine  == "Starting MAgPIE...") {
               # get current MAgPIE year
               statusMagpie <- getRunStatus(file.path(cfg$path_magpie, cfg$cfg_mag$results_folder))[["Iter"]]
-            # in which iteration?
-            couplingIter <- gsub(".*-mag-([0-9]{1,2})$","\\1", cfg$cfg_mag$results_folder)
-            # write into out[i, "RunStatus"]: MAgPIE is running in iteration i with current status magpieRS
-            out[i, "RunStatus"] <- paste0("mag-", couplingIter, " ", statusMagpie)
+              # in which iteration?
+              couplingIter <- gsub(".*-mag-([0-9]{1,2})$", "\\1", cfg$cfg_mag$results_folder)
+              # write into out[i, "RunStatus"]: MAgPIE is running in iteration i with current status magpieRS
+              out[i, "RunStatus"] <- paste0("mag-", couplingIter, " ", statusMagpie)
             }
           }
         }
@@ -242,6 +243,11 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       out[i, "RunStatus"] <- "full.log missing"
     }
 
+    # avoid costly checks
+    if (!detailed) {
+      next
+    }
+
     # Warnings
     # For MAgPIE, checks slurm.log for "Warning messages:" followed by a list of warnings in the following format:
     # 1: warning message, followed by up to 1 additional line of explanation.
@@ -260,7 +266,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
     } else if (file.exists(logtxt) && !isTRUE(runstatistics$stats[["config"]][["model_name"]] == "MAgPIE")) {
       warnings <- suppressWarnings(system(paste0("grep -zoP \"There were ([0-9]+) warnings\" ", logtxt), intern = TRUE))
       if (length(warnings) > 0) {
-        warnings <- gsub("^[^0-9]*([0-9]+)[^0-9]*$","\\1", warnings)
+        warnings <- gsub("^[^0-9]*([0-9]+)[^0-9]*$", "\\1", warnings)
         out[i, "Warnings"] <- warnings
       } else {
         warnings <- suppressWarnings(system(paste0("grep -zoP \"Warning messages:\\n([0-9]+:(.*\\n)?.*\\n)*\" ", logtxt), intern = TRUE))
@@ -293,8 +299,8 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
       calibiter <- tail(suppressWarnings(system(paste0("grep 'CES calibration iteration' '", logtxt, "' |  grep -Eo  '[0-9]{1,2}'"), intern = TRUE)), n = 1)
       if (isTRUE(as.numeric(calibiter) > 0)) out[i, "Iter"] <- paste0(out[i, "Iter"], " ", "Clb: ", calibiter)
       if (isTRUE(out[i, "Conv"] %in% c("converged", "converged (had INFES)")) &&
-          (length(system(paste0("find ", ii, " -name 'fulldata_*.gdx'"), intern = TRUE)) > 10 ||
-           length(system(paste0("find ", ii, " -name 'input_*.gdx'"), intern = TRUE)) > 10)) {
+            (length(system(paste0("find ", ii, " -name 'fulldata_*.gdx'"), intern = TRUE)) > 10 ||
+               length(system(paste0("find ", ii, " -name 'input_*.gdx'"), intern = TRUE)) > 10)) {
         out[i, "Conv"] <- "Clb_converged"
       }
     }
@@ -309,7 +315,7 @@ getRunStatus <- function(mydir = dir(), sort = "nf", user = NULL) {
 
     # additional info on plausibility checks in REMIND runs
     if (length(cfgf) != 0 && file.exists(file.path(ii, cfgf)) &&
-        !isTRUE(runstatistics$stats[["config"]][["model_name"]] == "MAgPIE")) {
+          !isTRUE(runstatistics$stats[["config"]][["model_name"]] == "MAgPIE")) {
       miffile <- paste0(ii, "/REMIND_generic_", cfg[["title"]], ".mif")
       sumErrFile <- paste0(ii, "/REMIND_generic_", cfg[["title"]], "_summation_errors.csv")
       if (!file.exists(miffile)) {
