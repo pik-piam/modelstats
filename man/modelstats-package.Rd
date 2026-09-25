@@ -23,6 +23,7 @@ Authors:
 \itemize{
   \item Anastasis Giannousakis \email{giannou@pik-potsdam.de}
   \item Oliver Richters
+  \item Simon Krogmann
 }
 
 }

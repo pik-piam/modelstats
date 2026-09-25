@@ -1,6 +1,6 @@
 # Run Analysis Tools
 
-R package **modelstats**, version **0.30.3**
+R package **modelstats**, version **0.31.0**
 
    [![R build status](https://github.com/pik-piam/modelstats/workflows/check/badge.svg)](https://github.com/pik-piam/modelstats/actions) [![codecov](https://codecov.io/gh/pik-piam/modelstats/branch/master/graph/badge.svg)](https://app.codecov.io/gh/pik-piam/modelstats) [![r-universe](https://pik-piam.r-universe.dev/badges/modelstats)](https://pik-piam.r-universe.dev/builds)
 
@@ -47,17 +47,17 @@ In case of questions / problems please contact Anastasis Giannousakis <giannou@p
 
 To cite package **modelstats** in publications use:
 
-Giannousakis A, Richters O (2026). "modelstats: Run Analysis Tools." Version: 0.30.3, <https://github.com/pik-piam/modelstats>.
+Giannousakis A, Richters O, Krogmann S (2026). "modelstats: Run Analysis Tools." Version: 0.31.0, <https://github.com/pik-piam/modelstats>.
 
 A BibTeX entry for LaTeX users is
 
  ```latex
 @Misc{,
   title = {modelstats: Run Analysis Tools},
-  author = {Anastasis Giannousakis and Oliver Richters},
-  date = {2026-09-10},
+  author = {Anastasis Giannousakis and Oliver Richters and Simon Krogmann},
+  date = {2026-09-25},
   year = {2026},
   url = {https://github.com/pik-piam/modelstats},
-  note = {Version: 0.30.3},
+  note = {Version: 0.31.0},
 }
 ```

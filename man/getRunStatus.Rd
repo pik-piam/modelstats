@@ -4,7 +4,7 @@
 \alias{getRunStatus}
 \title{getRunStatus}
 \usage{
-getRunStatus(mydir = dir(), sort = "nf", user = NULL)
+getRunStatus(mydir = dir(), sort = "nf", user = NULL, detailed = TRUE)
 }
 \arguments{
 \item{mydir}{Path to the folder(s) where the run(s) is(are) performed}
@@ -12,6 +12,8 @@ getRunStatus(mydir = dir(), sort = "nf", user = NULL)
 \item{sort}{how to sort (nf=newest first)}
 
 \item{user}{the user whose runs will be shown}
+
+\item{detailed}{(boolean, default: TRUE). If FALSE, avoids costly information gathering and returns less info}
 }
 \description{
 Returns the current status of a run or a vector of runs
