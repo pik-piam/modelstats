@@ -7,38 +7,72 @@
 modeltests(
   mydir = ".",
   gitdir = NULL,
-  model = NULL,
+  model = "REMIND",
   user = NULL,
   email = TRUE,
   compScen = TRUE,
-  mattermostToken = NULL
+  mattermostToken = NULL,
+  action = c("auto", "start", "evaluate"),
+  pollInterval = 600
 )
 }
 \arguments{
-\item{mydir}{Path to the folder where the model is found}
+\item{mydir}{path to the REMIND folder in which the tests are run}
 
-\item{gitdir}{path to the git clone that sends the report via email}
+\item{gitdir}{path to the clone of the `testing_suite` repository that receives
+the report as `README.md` (only used with `email = TRUE`)}
 
-\item{model}{Model name}
+\item{model}{kept for compatibility, must be `"REMIND"`}
 
-\item{user}{the user that starts the job and commits the changes}
+\item{user}{the cluster user who starts the runs (default: the current user)}
 
-\item{email}{whether an email notification will be send or not}
+\item{email}{whether to commit the report to `gitdir` (which triggers the email
+notification of the `testing_suite` repository)}
 
-\item{compScen}{whether compScen has to run or not}
+\item{compScen}{whether to start `compareScenarios2` for every finished run}
 
-\item{mattermostToken}{token used for mattermost notifications}
+\item{mattermostToken}{URL of the Mattermost webhook receiving the report,
+`NULL` for no message}
+
+\item{action}{`"auto"` (default), `"start"` or `"evaluate"`, see details}
+
+\item{pollInterval}{seconds between two checks whether the runs are finished}
+}
+\value{
+invisibly the record of the cycle (a list)
 }
 \description{
-Runs a group of tests for a specific model. A "config/scenario_config.csv" file
-(relative) to the main folder has to exist in the model, describing the
-scenarios to be tested. Also, a gitlab repository is needed to push
-the generated README.md for documentation and automated reporting
-of test results.
+Runs the automated model tests (AMT) of REMIND. A test cycle has two phases
+that are started by separate calls, typically from two cron jobs:
+* `start`: update the REMIND checkout in `mydir` to `origin/develop`, start the
+  `testOneRegi` run (which downloads the input data), the scenarios of the
+  `AMT` group in `config/scenario_config.csv` and the coupled test
+  (`make test-full-slurm`);
+* `evaluate`: wait until the runs are finished, inspect them with [modelRun()],
+  compare each with the previous run of the same scenario (runtime, and a
+  `compareScenarios2` PDF in the run folder), move runs older than 90 days to
+  `output/archive`, write the report and post it to Mattermost (and, with
+  `email = TRUE`, commit it to the `testing_suite` repository in `gitdir`).
+}
+\details{
+With `action = "auto"` the phase is chosen from the record of the current cycle
+(`amt-state.json` in the parent folder of `mydir`): a new cycle is started after
+an evaluated one, a started cycle is evaluated. A cycle whose start or
+evaluation failed with an error is recorded as `failed` and the tests continue
+with the next phase; a cycle recorded as `starting` or `evaluating` (a process
+that was killed) is not touched, the call fails with an explanation and the
+phase has to be given explicitly once.
+
+Every cycle writes one log file, `logs/amt-<date>.log` in the parent folder of
+`mydir`, covering both phases including the output of all commands. A lock
+(`amt.lock` in the same folder) keeps two calls from working on the same folder
+at the same time; a lock left behind by a process that died on the same host is
+removed automatically, one from another host has to be removed by hand.
+A second start on the same day continues the cycle of that day.
 }
 \seealso{
-\code{\link[lucode2]{package2readme}}
+[modelRun()]
 }
 \author{
-Anastasis Giannousakis, David Klein
+Anastasis Giannousakis, David Klein, Tobias Diez
 }

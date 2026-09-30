@@ -1,7 +1,7 @@
 ---
 title: "Testing Suite"
-author: "Anastasis Giannousakis"
-date: "5/21/2021"
+author: "Anastasis Giannousakis, Tobias Diez"
+date: "`r Sys.Date()`"
 output: html_document
 vignette: >
   %\VignetteIndexEntry{Testing Suite}
@@ -10,27 +10,58 @@ vignette: >
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
 ```
-
-
 
 ## Introduction
 
-This is an introduction to the Testing Suite for big models developed at PIK RD3. For big models no standard continuous integration (CI) techniques can be deployed, while unit tests are not easy to apply and do not provide tests for the complete model workflow. We therefore developed a custom Testing Suite.
+This is an introduction to the Testing Suite for big models developed at PIK RD3. For big models no standard continuous integration (CI) techniques can be deployed, while unit tests are not easy to apply and do not provide tests for the complete model workflow. We therefore developed a custom Testing Suite: the automated model tests (AMT) of REMIND.
 
 The Testing Suite tests **several scenarios**, including various **output routines** and interfaces with **input data preparation**. Further, it checks the model results for **consistency**.
 
-It is fully automated (runs every weekend), documents its findings in a gitlab project, and sends a weekly email with each new report to the team developing the model.
+It is fully automated (runs every weekend), documents its findings in a gitlab project, and posts a report with each new test to the Mattermost channel of the team developing the model.
 
-## How it works:
+## How it works
 
-A scheduled and recurring job runs on the cluster every weekend, starting model runs according to a predefined set of scenarios. Once the runs are finished the job creates an overview of the results using [rs2](http://htmlpreview.github.io/?https://github.com/pik-piam/modelstats/blob/master/vignettes/rs2.html), and (optionally) additionally runs [compareScenarios](https://github.com/pik-piam/remind2/blob/master/R/compareScenarios.R) comparing each run with the previous run with the same scenario name (the comparison PDF files are found in each scenario folder, they also contain comparisons with historical data). It also uploads all runs to the [shinyResults::appResults](https://github.com/pik-piam/shinyresults/blob/master/R/appResults.R) app for easy and interactive viewing. Also here a comparison with historical data is found. Finally, using a gitlab integration hook an overview of the results is automatically reported to the developer team via email.
+A test *cycle* has two phases, started by separate calls of `modelstats::modeltests()`, typically from two cron jobs on the cluster:
 
-## How to use/contribute:
+* **start** (Friday night): the REMIND checkout is reset to `origin/develop`, the `testOneRegi` run is started (it downloads the input data first), then the scenarios marked with `AMT` in `config/scenario_config.csv` and the coupled test `make test-full-slurm`.
+* **evaluate** (Sunday morning): the call waits until all runs of the cluster user are finished, inspects every run with `modelRun()`, compares each with the previous run of the same scenario (runtime, and a `compareScenarios2` PDF written into the run folder), moves runs older than 90 days to `output/archive`, writes the report and posts it to Mattermost. With `email = TRUE` the report is also committed as `README.md` to the `testing_suite` repository in `gitdir`, whose gitlab hook sends it by email.
+
+```{r}
+modelstats::modeltests(
+  mydir = "/p/projects/remind/modeltests/remind/",
+  gitdir = "/p/projects/remind/modeltests/testing_suite",
+  user = "pascalfu",
+  email = FALSE,
+  mattermostToken = "https://mattermost.pik-potsdam.de/hooks/<token>"
+)
+```
+
+With the default `action = "auto"` the phase is chosen from the **cycle record** `amt-state.json` in the parent folder of `mydir` (`/p/projects/remind/modeltests/amt-state.json`): a new cycle is started after an evaluated one, a started cycle is evaluated. The record holds the cycle id (the start date), the phase, the commit tested, the regular expression matching the run folders of the cycle (`runcode`, also written to `runcode.rds` for `rs -A`), the scenarios that should have been started and the log file. The phase can also be given explicitly with `action = "start"` or `action = "evaluate"`.
+
+Every cycle writes **one log file**, `logs/amt-<date>.log` next to the cycle record, covering both phases: every command with its output, every message and warning, and the report. The cron job therefore needs no output redirection of its own (keeping one for R start-up errors does no harm).
+
+```{bash}
+# crontab entries: start on Friday night, evaluate on Sunday morning
+4 22 * * FRI /p/projects/remind/modeltests/modeltests.sh >> /p/projects/remind/modeltests/logs/cron.log 2>&1
+11 4 * * SUN /p/projects/remind/modeltests/modeltests.sh >> /p/projects/remind/modeltests/logs/cron.log 2>&1
+```
+
+### When something goes wrong
+
+* A second start on the same day continues the cycle of that day (same log, same run selection).
+* An error in a phase is recorded in the cycle record (`"phase": "failed"` with the error message), reported to Mattermost and written to the log. The tests continue with the next phase on the next call: a failed start is followed by an evaluation of whatever was started, a failed evaluation by a new cycle.
+* A phase that was killed (node reboot, `kill -9`) leaves the record at `"starting"` or `"evaluating"`. `action = "auto"` refuses to guess in that case, fails with an explanation and, if a token is given, posts it to Mattermost. Check the log, then call `modeltests(action = "evaluate")` or `modeltests(action = "start")` once.
+* A lock (`amt.lock` next to the cycle record) keeps two calls from working on the same folder at the same time. A lock left behind by a process that died on the same host is removed automatically; one from another host has to be removed by hand (the error message names host, process and time).
+* The old state file `.testsstatus` is not used any more. When no cycle record exists yet, it is read once: `next:start` means the last cycle was evaluated, `next:evaluate` means the runs matching `runcode.rds` still have to be evaluated. Delete it after the first cycle with the new version.
+
+## How to use/contribute
 
 If the report contains runs that failed, or output that looks wrong (or has not been generated at all) someone has to take action. If there are cases for which you feel responsible or in the position to fix, please do so. This early warning system ensures stable workflows for all members of the team.
 
-If you want your own scenarios to be included in future tests: For REMIND, add your scenarios to the `scenario_config.csv`, add `AMT` in the `start` column and simply commit it to the model's develop branch (similar for MAgPIE). They will be automatically executed the next time the tests are run.
+If you want your own scenarios to be included in future tests, add your scenarios to the `scenario_config.csv`, add `AMT` in the `start` column and simply commit it to the model's develop branch. They will be automatically executed the next time the tests are run.
+
+The status of the latest test runs is shown by `rs -A`, their sanity checks by `rs -As`.
 
 For wishes, changes etc, please contact RSE or open a new issue here: https://github.com/pik-piam/modelstats/issues

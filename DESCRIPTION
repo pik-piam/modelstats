@@ -1,8 +1,8 @@
 Package: modelstats
 Type: Package
 Title: Run Analysis Tools
-Version: 0.31.0
-Date: 2026-09-25
+Version: 0.32.0
+Date: 2026-09-30
 Authors@R: c(
     person("Anastasis", "Giannousakis", email = "giannou@pik-potsdam.de", role = c("aut","cre")),
     person("Oliver", "Richters", role = "aut"),
@@ -10,29 +10,28 @@ Authors@R: c(
   )
 Description: A collection of tools to analyze model runs.
 Imports: 
-    dplyr,
     quitte,
     crayon,
     gdx2,
     gtools,
+    jsonlite,
     lubridate,
-    lucode2,
-    magpie4 (>= 2.33.4),
     piamutils,
     utils,
     gms,
     withr,
-    rlang,
     optparse,
     cli,
     stringi
 Suggests:
     covr,
     knitr,
-    rmarkdown
+    rmarkdown,
+    testthat
 URL: https://github.com/pik-piam/modelstats
 BugReports: https://github.com/pik-piam/modelstats/issues
 Encoding: UTF-8
 License: LGPL-3
 VignetteBuilder: knitr
 Config/roxygen2/version: 8.1.0
+Config/testthat/edition: 3

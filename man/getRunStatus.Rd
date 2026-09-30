@@ -15,8 +15,16 @@ getRunStatus(mydir = dir(), sort = "nf", user = NULL, detailed = TRUE)
 
 \item{detailed}{(boolean, default: TRUE). If FALSE, avoids costly information gathering and returns less info}
 }
+\value{
+a data.frame with the runs as rows (named by the folder name) and the
+  columns `jobInSLURM`, `RunType`, `modelstat`, `runInAppResults` (cluster only),
+  `Mif`, `Iter`, `RunStatus` and, with `detailed = TRUE`, `Warnings`, `Conv`,
+  `Runtime` and the sanity check counts of REMIND runs with a mif
+}
 \description{
-Returns the current status of a run or a vector of runs
+Returns the current status of a run or a vector of runs as a table with one
+row per run. This is the tabular view of [modelRun()]; see there for the
+meaning of the columns.
 }
 \examples{
 \dontrun{
@@ -24,6 +32,9 @@ Returns the current status of a run or a vector of runs
 a <- getRunStatus(dir())
 }
 
+}
+\seealso{
+[modelRun()]
 }
 \author{
 Anastasis Giannousakis

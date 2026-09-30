@@ -11,8 +11,17 @@ foundInSlurm(mydir = ".", user = NULL)
 
 \item{user}{the user whose runs will be sought for}
 }
+\value{
+`"no"` if no job is found; for one job of `user` its QOS, for one job
+  of someone else that user name, both suffixed with `" pending"` or
+  `" startup"` (running for less than six minutes); for several jobs the
+  common user name or `"<n> users"`
+}
 \description{
-Is the run found in SLURM?
+Is the run found in SLURM? Looks for a job whose working directory and name
+match the run folder (for coupled `-rem-N`/`-mag-N` iterations: the coupled
+run's main folder and, for MAgPIE iterations, the REMIND job of the same
+iteration).
 }
 \author{
 Anastasis Giannousakis, Oliver Richters

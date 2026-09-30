@@ -9,8 +9,13 @@ colRunType(mydir = ".")
 \arguments{
 \item{mydir}{Path to the folder where the run is performed}
 }
+\value{
+a string, `"NA"` if the type cannot be determined
+}
 \description{
-What is the type of this run?
+What is the type of this run? For REMIND the optimization mode
+(`nash`, `negishi`, `testOneRegi <region>`) decorated with the calibration,
+debug, quick and coupling settings; for MAgPIE the optimization setting.
 }
 \author{
 Anastasis Giannousakis
