@@ -86,12 +86,14 @@ test_that("waitForRuns waits for jobs in the model folder and below it, also wit
                                     "echo $((n + 1)) > \"$(dirname \"$0\")/count\"; ",
                                     "[ \"$n\" -ge 2 ] || echo '/p/my tests/remind/output/run one'; ",
                                     "[ \"$n\" -ge 1 ] || echo '/p/my tests/remind'; echo '/p/other/remind/output/run'"))
-  messages <- character(0)
+  seen <- new.env()
+  seen$messages <- character(0)
   withCallingHandlers(waitForRuns("/p/my tests/remind", "me", pollInterval = 0),
                       message = function(m) {
-                        messages <<- c(messages, conditionMessage(m))
+                        seen$messages <- c(seen$messages, conditionMessage(m))
                         invokeRestart("muffleMessage")
                       })
+  messages <- seen$messages
   expect_true(any(grepl("2 job\\(s\\) still running", messages)))
   expect_true(any(grepl("1 job\\(s\\) still running", messages)))
   expect_true(any(grepl("all AMT jobs finished", messages)))

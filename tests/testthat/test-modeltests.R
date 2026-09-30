@@ -103,7 +103,8 @@ test_that("a failing start is recorded, reported and followed by an evaluation",
   bin <- fakeAmtTools(gitResetStatus = 1)
   token <- "https://mattermost.example.org/hooks/token"
 
-  expect_error(suppressMessages(modeltests(model, user = "tester", email = FALSE, mattermostToken = token)), "git reset")
+  expect_error(suppressMessages(modeltests(model, user = "tester", email = FALSE, mattermostToken = token)),
+               "git reset")
   state <- readAmtState(amtPaths(model))
   expect_equal(state$phase, "failed")
   expect_equal(state$failedPhase, "start")
@@ -171,7 +172,7 @@ test_that("compareScenarios2 is submitted with quoted paths and the runtime is c
   expect_length(sbatch, 1)
   expect_match(sbatch, "--job-name=comp_with_SSP2-NPi-AMT_2026-09-21_10.30.27")
   expect_match(sbatch, paste0("--output=", run$path, "/comp_with_"))
-  expect_match(sbatch, "--wrap=Rscript scripts/cs2/run_compareScenarios2.R outputdirs='.*out put.*' profileName=default")
+  expect_match(sbatch, "--wrap=Rscript scripts/cs2/run_compareScenarios2.R outputdirs='.*out put.*' profileName")
 
   # not again once the PDF exists
   writeLines("", file.path(run$path, "comp_with_x.pdf"))

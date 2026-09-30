@@ -61,8 +61,8 @@ runCommand <- function(command, args = character(0), cwd = NULL, capture = FALSE
     if (capture || is.null(amtEnv$logFile)) {
       suppressWarnings(system2(command, args, stdout = TRUE, stderr = TRUE))
     } else {
-      status <- system2("sh", c("-c", shQuote(paste(c(command, args, ">>", shQuote(amtEnv$logFile), "2>&1"),
-                                                     collapse = " "))))
+      script <- paste(c(command, args, ">>", shQuote(amtEnv$logFile), "2>&1"), collapse = " ")
+      status <- system2("sh", c("-c", shQuote(script)))
       structure(character(0), status = if (status == 0) NULL else status)
     }
   }
