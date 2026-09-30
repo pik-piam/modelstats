@@ -12,6 +12,7 @@ repos:
     -   id: fix-byte-order-marker
     -   id: check-added-large-files
         args: ['--maxkb=100']
+        exclude: '^uv\.lock$'
     -   id: mixed-line-ending
 
 -   repo: https://github.com/lorenzwalthert/precommit
@@ -24,5 +25,13 @@ repos:
     -   id: no-debug-statement
     -   id: readme-rmd-rendered
     -   id: use-tidy-description
+
+# Python port (src/, tests/): lint and format with ruff, pinned to the version in uv.lock
+-   repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.9
+    hooks:
+    -   id: ruff-check
+        args: [--fix]
+    -   id: ruff-format
 ci:
     autoupdate_schedule: weekly

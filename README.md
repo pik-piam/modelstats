@@ -1,5 +1,19 @@
 # Run Analysis Tools
 
+## Python port (in progress)
+
+This branch ports the package to Python (3.14, `uv`, `src/modelstats/`, console scripts
+`rs` and `modeltests`) while keeping the R package intact. The plan, the behavioural
+contract and the golden-master harness are described in
+[`migration/03-migration-plan.md`](migration/03-migration-plan.md); the library decisions in
+[`migration/02-python-libraries.md`](migration/02-python-libraries.md). To work on the port:
+
+```sh
+uv sync --locked           # environment with the dev tools
+uv run pytest -q           # unit tier (the golden and packaging tiers are opt-in: -m golden, -m packaging)
+uv run ruff check src tests && uv run mypy --strict src
+```
+
 R package **modelstats**, version **0.31.0**
 
    [![R build status](https://github.com/pik-piam/modelstats/workflows/check/badge.svg)](https://github.com/pik-piam/modelstats/actions) [![codecov](https://codecov.io/gh/pik-piam/modelstats/branch/master/graph/badge.svg)](https://app.codecov.io/gh/pik-piam/modelstats) [![r-universe](https://pik-piam.r-universe.dev/badges/modelstats)](https://pik-piam.r-universe.dev/builds)

@@ -1,0 +1,109 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "modelstats"
+version = "0.31.0"
+description = "Run Analysis Tools: a collection of tools to analyze model runs (Python port of the R package modelstats)."
+readme = "README.md"
+requires-python = ">=3.14"
+license = "LGPL-3.0-only"
+authors = [
+    { name = "Anastasis Giannousakis", email = "giannou@pik-potsdam.de" },
+    { name = "Oliver Richters" },
+    { name = "Simon Krogmann" },
+]
+maintainers = [
+    { name = "Anastasis Giannousakis", email = "giannou@pik-potsdam.de" },
+]
+keywords = ["REMIND", "MAgPIE", "GAMS", "SLURM", "model runs"]
+dependencies = [
+    "gamsapi[transfer]>=54.4,<55", # gams.transfer Container; pulls pandas + scipy
+    "gamspy_base>=54.4,<55",       # GAMS system directory for gams.transfer, no GAMS install needed
+    "rdata>=1.1,<2",               # .Rdata/.rda/.rds
+    "pyyaml>=6,<7",                # config.yml (gms tags)
+    "natsort>=8.4,<9",             # mixedsort / stri_order stand-ins, fixed flags (D-14)
+    "typer>=0.27,<1",              # rs and modeltests CLIs
+]
+
+[project.urls]
+Homepage = "https://github.com/pik-piam/modelstats"
+Repository = "https://github.com/pik-piam/modelstats"
+"Issue Tracker" = "https://github.com/pik-piam/modelstats/issues"
+
+[project.scripts]
+rs = "modelstats.cli:main"
+modeltests = "modelstats.amt.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff",
+    "mypy",
+    "pre-commit",
+    "pytest-cov",
+    "types-PyYAML",
+    "pandas-stubs",
+]
+
+# ---------------------------------------------------------------------------
+# Build: src layout. The wheel and the sdist contain only the Python package;
+# the R package files, man pages, vignettes and the migration material (which
+# links a 1.3 GB fixture tree) are never traversed.
+# ---------------------------------------------------------------------------
+[tool.hatch.build.targets.wheel]
+packages = ["src/modelstats"]
+
+[tool.hatch.build.targets.sdist]
+only-include = ["src/modelstats", "tests/unit", "tests/conftest.py", "README.md", "pyproject.toml"]
+
+# ---------------------------------------------------------------------------
+# ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+src = ["src", "tests"]
+extend-exclude = ["migration", "tests/testthat"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["modelstats"]
+
+# ---------------------------------------------------------------------------
+# mypy (run as `mypy --strict src`)
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.14"
+strict = true
+files = ["src"]
+warn_unreachable = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = ["gams.*", "gamspy_base", "gamspy_base.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# pytest: three tiers.
+#   unit      tests/unit      always runs, never depends on migration/fixtures
+#   golden    tests/golden    -m golden    needs the sandbox and migration/fixtures
+#   packaging tests/packaging -m packaging builds and installs the wheel
+# The golden and packaging tiers are deselected by default; a `-m` on the
+# command line replaces the one in addopts.
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "--strict-markers -m \"not golden and not packaging\""
+markers = [
+    "golden: compares the Python port with the R goldens inside the sandbox (needs migration/fixtures); run with -m golden",
+    "packaging: builds the wheel and installs it in a fresh venv; run with -m packaging",
+]
+
+[tool.coverage.run]
+source = ["modelstats"]
+branch = true
