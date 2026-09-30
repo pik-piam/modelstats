@@ -55,16 +55,16 @@ waitForRuns <- function(model, user, pollInterval) {
   failures <- 0
   lastCount <- -1
   repeat {
-    jobs <- runCommand("squeue", c("-u", shQuote(user), "-h", "-o", shQuote("%i %q %T %C %M %j %V %L %e %Z")),
-                       capture = TRUE, quiet = TRUE)
+    # one working directory per line (%Z alone: a directory may contain spaces)
+    jobs <- runCommand("squeue", c("-u", shQuote(user), "-h", "-o", shQuote("%Z")), capture = TRUE, quiet = TRUE)
     if (jobs$status != 0) {
       failures <- failures + 1
       amtLog("WARNING: squeue failed with exit status ", jobs$status, " (", failures, " times in a row)")
       if (failures > 3) stop("squeue failed more than 3 times in a row")
     } else {
       failures <- 0
-      workDirs <- sub("^.* ", "", jobs$output)
-      running <- jobs$output[workDirs == model | startsWith(workDirs, paste0(model, "/"))]
+      workDirs <- jobs$output
+      running <- workDirs[workDirs == model | startsWith(workDirs, paste0(model, "/"))]
       if (length(running) == 0) break
       if (length(running) != lastCount) amtLog(length(running), " job(s) still running")
       lastCount <- length(running)

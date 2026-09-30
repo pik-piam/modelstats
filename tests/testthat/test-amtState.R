@@ -91,6 +91,7 @@ test_that("the lock keeps a second process out and is removed for a dead one", {
   skip_if_not(dir.exists("/proc"))
   expect_message(acquireAmtLock(paths), "left behind by the dead process")
   expect_equal(readLines(file.path(paths$lock, "owner"))[2], as.character(Sys.getpid()))
+  expect_length(list.files(paths$root, pattern = "^amt\\.lock\\.stale"), 0)
   releaseAmtLock(paths$lock)
 
   dir.create(paths$lock)

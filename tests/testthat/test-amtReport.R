@@ -80,3 +80,20 @@ test_that("archiveOldRuns moves runs older than 90 days by the date in their nam
   expect_true(dir.exists(other))
   expect_length(suppressMessages(archiveOldRuns(paths)), 0)
 })
+
+test_that("waitForRuns waits for jobs in the model folder and below it, also with spaces in the path", {
+  bin <- fakeBinDir(squeue = paste0("n=$(cat \"$(dirname \"$0\")/count\" 2>/dev/null || echo 0); ",
+                                    "echo $((n + 1)) > \"$(dirname \"$0\")/count\"; ",
+                                    "[ \"$n\" -ge 2 ] || echo '/p/my tests/remind/output/run one'; ",
+                                    "[ \"$n\" -ge 1 ] || echo '/p/my tests/remind'; echo '/p/other/remind/output/run'"))
+  messages <- character(0)
+  withCallingHandlers(waitForRuns("/p/my tests/remind", "me", pollInterval = 0),
+                      message = function(m) {
+                        messages <<- c(messages, conditionMessage(m))
+                        invokeRestart("muffleMessage")
+                      })
+  expect_true(any(grepl("2 job\\(s\\) still running", messages)))
+  expect_true(any(grepl("1 job\\(s\\) still running", messages)))
+  expect_true(any(grepl("all AMT jobs finished", messages)))
+  expect_equal(sum(grepl("^squeue -u me -h -o %Z$", fakeCalls(bin))), 3)
+})

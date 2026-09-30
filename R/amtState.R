@@ -127,9 +127,11 @@ legacyAmtState <- function(paths, action = "auto") {
 
 # Take the AMT lock (a directory, created atomically), so that two modeltests()
 # processes never work on the same test folder. A lock left behind by a process that
-# died on this host is removed. Returns the lock path; release it with releaseAmtLock().
+# died on this host is moved aside (an atomic rename, so that only one of several
+# waiting processes removes it) and taken over. Returns the lock path; release it
+# with releaseAmtLock().
 acquireAmtLock <- function(paths) {
-  for (attempt in 1:2) {
+  for (attempt in 1:3) {
     if (dir.create(paths$lock, showWarnings = FALSE)) {
       writeLines(c(Sys.info()[["nodename"]], Sys.getpid(), timeStamp()), file.path(paths$lock, "owner"))
       return(paths$lock)
@@ -141,8 +143,11 @@ acquireAmtLock <- function(paths) {
       stop("another modeltests() is running on this test folder (lock ", paths$lock, " held by host ", owner[1],
            ", pid ", owner[2], " since ", owner[3], "). Remove the lock if that process does not exist any more.")
     }
-    message("removing the lock left behind by the dead process ", owner[2], " on ", owner[1])
-    unlink(paths$lock, recursive = TRUE)
+    staleLock <- paste0(paths$lock, ".stale-", Sys.getpid())
+    if (file.rename(paths$lock, staleLock)) {
+      message("removing the lock left behind by the dead process ", owner[2], " on ", owner[1])
+      unlink(staleLock, recursive = TRUE)
+    }
   }
   stop("cannot acquire the lock ", paths$lock)
 }
