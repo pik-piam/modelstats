@@ -16,7 +16,8 @@ loopRuns(mydir, user = NULL, colors = TRUE, sortbytime = TRUE)
 \item{sortbytime}{boolean whether the output is sorted by timestamp}
 }
 \description{
-Returns the output for getRunStatus nicely
+Prints the run status table of [getRunStatus()] for a set of run folders,
+one line per run, coloured by the state of the run.
 }
 \examples{
 \dontrun{

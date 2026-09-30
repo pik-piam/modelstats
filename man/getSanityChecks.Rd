@@ -21,7 +21,8 @@ Currently the following columns are printed:
 \item FixingErr Fixing Errors found when running \code{piamInterfaces::fixOnRef}
 \item MissingVar Missing Variables found when running \code{piamInterfaces::checkMissingVars} for ScenarioMIP
 \item ProjSumErr Summation Errors found when running \code{piamInterfaces::checkSummations} for ScenarioMIP
-\item ProjSumErrReg Regional Summation Errors found when running \code{piamInterfaces::checkSummationsRegional} for ScenarioMIP
+\item ProjSumErrReg Regional Summation Errors found when running \code{piamInterfaces::checkSummationsRegional}
+for ScenarioMIP
 }
 }
 \author{

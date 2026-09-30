@@ -40,4 +40,7 @@ and then filter by pattern, e.g. `^C_` for all coupled runs, or `03-25` for all 
 
 6. You want to collect information about your runs and store/process it in R:
 `modelstats::getRunStatus()`
-returns a data.frame with the job information.
+returns a data.frame with the job information. For a single run,
+`modelstats::modelRun("path/to/run")` returns the same information as an object
+with named fields (`run$status`, `run$convergence`, `run$summationErrors`, ...)
+that other packages and scripts can use.

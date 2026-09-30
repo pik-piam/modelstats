@@ -16,3 +16,5 @@
 ^.*CITATION.cff$
 ^\.claude$
 ^_pkgdown\.yml$
+^known-bugs\.md$
+^CODE_STYLE\.md$

@@ -13,19 +13,26 @@ printOutput(
 )
 }
 \arguments{
-\item{string}{list with information to print}
+\item{string}{one-row data.frame as returned by [getRunStatus()]}
 
-\item{len1stcol}{length of first column}
+\item{len1stcol}{length of first column (the folder name)}
 
-\item{lenCols}{vector with length information for all columns}
+\item{lenCols}{vector with length information for all columns, the first
+entry being the folder column (it overrides `len1stcol`). Without it the
+columns get the widths 13, 14, ... counted from the last column and are
+printed without separator.}
 
 \item{colSep}{string separating the columns}
 
 \item{cols}{optional vector of elements to retrieve from the passed list.
 Default NULL corresponds to a predefined set of elements.}
 }
+\value{
+the formatted line including the trailing newline
+}
 \description{
-Returns the output for getRunStatus nicely
+Formats one row of [getRunStatus()] as a fixed-width text line: the folder
+name followed by the selected columns, each padded or truncated to its width.
 }
 \author{
 Anastasis Giannousakis, Falk Benke

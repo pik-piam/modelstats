@@ -13,254 +13,239 @@
 #' @export
 
 commandLineInterface <- function(argv) {
+  arguments <- parse_args(rsOptionParser(), args = argv, positional_arguments = c(0, 1))
 
-  # =============================================
-  #   Define internal functions
-  # =============================================
+  cli_alert_info("Update 1: The underline has been removed for converged runs (green).")
+  cli_alert_info("Update 2: Runs that showed INFES but finally converged are now displayed in the same way (now green, previously blue).") # nolint
+  cli_alert_info("Did you know? {sample(rsHints, 1)}")
 
-  # return TRUE if dir is a REMIND or MAgPIE run folder
-  is.runfolder <- function(dir) {
-    return(sum(file.exists(paste0(dir, "/", c("full.gms", "log.txt", "config.Rdata", "prepare_and_run.R", "prepareAndRun.R")))) >= 4 ||
-           sum(file.exists(paste0(dir, "/", c("full.gms", "submit.R", "config.yml", "magpie_y1995.gdx")))) == 4
-    )
+  opt <- arguments$options
+  paths <- arguments$args
+  if (opt$user == "you") opt$user <- Sys.info()[["user"]]
+  if (length(paths) < 1) paths <- "."
+  paths <- strsplit(paths, ",")[[1]]
+  opt$filter <- paste0(strsplit(opt$filter, ",")[[1]], collapse = "|")
+
+  # AMT runs: hardcode AMT path and use regular expression from 'runcode.rds' for filtering the latest AMTs
+  if (opt$amt) {
+    opt$user <- NULL
+    paths <- amtOutputDir
+    if (opt$filter == ".*") {
+      # if user provided no pattern search for latest AMTs
+      opt$filter <- readRDS(amtRuncodeFile)
+    } else {
+      # if user provided a pattern include runs from archive folder
+      paths <- c(paths, amtArchiveDir)
+    }
+    cli_alert_info("Results from {.file {paths}}\n")
   }
 
-  # return TRUE if dir is the REMIND or MAgPIE main folder
-  is.mainfolder <- function(dir) {
-    return(sum(file.exists(paste0(dir, "/", c("output", "output.R", "start.R", "main.gms")))) == 4)
+  if (opt$current) {
+    runfolders <- slurmRunFolders(opt$user, opt$daysback)
+    if (length(runfolders) == 0) {
+      if (opt$daysback < 1) {
+        cli_alert_warning("No currently running runs found. To include recent runs please expand the time horizon by adding -d DAYS.") # nolint
+      } else {
+        cli_alert_warning("No runs found in the past {opt$daysback} days. Try to expand the time horizon.")
+      }
+      quit(save = "no", status = 0)
+    }
+  } else {
+    runfolders <- unlist(lapply(paths, runFoldersBelow))
   }
 
-  # ================================================
-  #  Define command line arguments, help, and hints
-  # ================================================
+  if (opt$magpie && !is.null(runfolders)) {
+    runfolders <- coupledRunFolders(runfolders, lastOnly = opt$last)
+    if (is.null(runfolders)) {
+      cli_alert_warning("No coupled runs found")
+      quit(save = "no", status = 0)
+    }
+  }
 
-  option_list <- list(
-    make_option(c("-A", "--amt"     ), type = "logical", action = "store_true", default = FALSE, help = "print most recent REMIND automated model test runs. With -f: of all AMTs, show only those that match the regular expression REGEX -f REGEX"),
-    make_option(c("-b", "--nocolor" ), type = "logical", action = "store_true", default = FALSE, help = "black&white: print table without colors"),
-    make_option(c("-C", "--current" ), type = "logical", action = "store_true", default = FALSE, help = "print currently running runs no matter where they are, i.e. you don't need to be in or right above a run to see it. Add user with -u USER and include recent runs with -d N"),
-    make_option(c("-d", "--daysback"), type = "integer",                        default = 0    , help = "only with -C: show recent runs of the last N days", metavar = "N"),
-    make_option(c("-f", "--filter"  ), type = "character",                      default = ".*" , help = "print runs that match the regular expression REGEX. Specify multiple REGEX separated by comma.", metavar = "REGEX"),
-    make_option(c("-l", "--last"    ), type = "logical", action = "store_true", default = FALSE, help = "only with -m: print the last coupling iterations only"),
-    make_option(c("-m", "--magpie"  ), type = "logical", action = "store_true", default = FALSE, help = "print all coupling iterations. Add -l to print the last iterations only"),
-    make_option(c("-p", "--prompt"  ), type = "logical", action = "store_true", default = FALSE, help = "let the user choose individual runs from a list before printing the status table" ),
-    make_option(c("-s", "--sanity"  ), type = "logical", action = "store_true", default = FALSE, help = "show overview of sanity check" ),
-    make_option(c("-t", "--time"    ), type = "logical", action = "store_true", default = FALSE, help = "sort runs chronologically" ),
-    make_option(c("-u", "--user"    ), type = "character",                      default = "you", help = "only with -C: show runs of user USER", metavar = "USER")
+  # filter runs. If not changed by the user the default pattern '.*' filters all
+  runfolders <- grep(opt$filter, runfolders, value = TRUE)
+  # sort strings containing embedded numbers so that the numbers are numerically sorted
+  # rather than sorted by character value
+  runfolders <- runfolders[stri_order(basename(normalizePath(runfolders)), numeric = TRUE)]
+
+  if (identical(runfolders, character(0))) {
+    # this can only happen if the filtering removed all runs
+    # if runfolders is empty already before filtering the script would have stopped earlier (look for 'quit')
+    cli_alert_warning("No runs found")
+    return(invisible(NULL))
+  }
+  if (length(runfolders) > 40 && opt$filter == ".*" && !opt$prompt) {
+    cli_alert_info("To reduce the number of runs, filter the runs with -f REGEX or select manually from the list with -p.") # nolint
+  }
+  if (opt$prompt) {
+    runfolders <- gms::chooseFromList(runfolders, type = "folders")
+  }
+  cli_alert_info("Runs found: {length(runfolders)}")
+
+  if (opt$sanity) {
+    modelstats::getSanityChecks(runfolders)
+  } else {
+    modelstats::loopRuns(runfolders, user = opt$user, colors = !opt$nocolor, sortbytime = opt$time)
+  }
+}
+
+# ================================================
+#  Command line arguments, help, and hints
+# ================================================
+
+rsOptionParser <- function() {
+  optionList <- list(
+    make_option(c("-A", "--amt"), type = "logical", action = "store_true", default = FALSE,
+                help = "print most recent REMIND automated model test runs. With -f: of all AMTs, show only those that match the regular expression REGEX -f REGEX"), # nolint
+    make_option(c("-b", "--nocolor"), type = "logical", action = "store_true", default = FALSE,
+                help = "black&white: print table without colors"),
+    make_option(c("-C", "--current"), type = "logical", action = "store_true", default = FALSE,
+                help = "print currently running runs no matter where they are, i.e. you don't need to be in or right above a run to see it. Add user with -u USER and include recent runs with -d N"), # nolint
+    make_option(c("-d", "--daysback"), type = "integer", default = 0,
+                help = "only with -C: show recent runs of the last N days", metavar = "N"),
+    make_option(c("-f", "--filter"), type = "character", default = ".*", metavar = "REGEX",
+                help = "print runs that match the regular expression REGEX. Specify multiple REGEX separated by comma."), # nolint
+    make_option(c("-l", "--last"), type = "logical", action = "store_true", default = FALSE,
+                help = "only with -m: print the last coupling iterations only"),
+    make_option(c("-m", "--magpie"), type = "logical", action = "store_true", default = FALSE,
+                help = "print all coupling iterations. Add -l to print the last iterations only"),
+    make_option(c("-p", "--prompt"), type = "logical", action = "store_true", default = FALSE,
+                help = "let the user choose individual runs from a list before printing the status table"),
+    make_option(c("-s", "--sanity"), type = "logical", action = "store_true", default = FALSE,
+                help = "show overview of sanity check"),
+    make_option(c("-t", "--time"), type = "logical", action = "store_true", default = FALSE,
+                help = "sort runs chronologically"),
+    make_option(c("-u", "--user"), type = "character", default = "you",
+                help = "only with -C: show runs of user USER", metavar = "USER")
   )
 
-  usage <- c(
-    "\n rs [PATH] [OPTION]\n")
+  usage <- "\n rs [PATH] [OPTION]\n"
 
   description <- c(
-    "  [PATH] is optional and can be any comma separated combination of individual run folders, the main folder, or the output folder.",
+    "  [PATH] is optional and can be any comma separated combination of individual run folders, the main folder, or the output folder.", # nolint
     "  [OPTION] see below.\n\nDescription:\n",
     " Print run status or sanity of model runs.",
     "  Flags in capital letters list runs from special locations and ignore any path provided.",
-    "  Short flags may be bundled together, sharing a single leading -, but only the final short flag is able to have a corresponding argument.",
+    "  Short flags may be bundled together, sharing a single leading -, but only the final short flag is able to have a corresponding argument.", # nolint
     "  The following flags only take effect if used together with other flag:",
     "    -u, -d only with -C\n",
     "   -l     only with -m",
     "  The following flags can be combined with all other flags:",
     "    -b, -f, -p, -t\n\nExamples:",
     "  1. rs /p/projects/remind/runs/REMIND-MAgPIE-2025-04-24/remind/ -mltpbf PkBudg",
-    "     From the given path list coupled runs (m) and only last iteration (l), order by time (t), prompt me to select the runs (p), print in black&white (b), filter (f) by 'PkBudg'.",
+    "     From the given path list coupled runs (m) and only last iteration (l), order by time (t), prompt me to select the runs (p), print in black&white (b), filter (f) by 'PkBudg'.", # nolint
     "  2. rs -As\n",
     "    Show sanity checks (s) for lastest AMTs (A).",
     "  3. rs -C -u alf -d 5",
     "     Show run status of current runs (-C) from the user alf (-u) of the last 5 days (-d 5).")
 
-  epilogue <- c(
-    "Bugs and feedback: https://github.com/pik-piam/modelstats/issues")
+  OptionParser(usage = usage, option_list = optionList, description = description,
+               epilogue = "Bugs and feedback: https://github.com/pik-piam/modelstats/issues")
+}
 
-  hints <- c(
-    "Show (l)ast iterations of (m)agpie-coupled runs with: rs -ml",
-    "Show all (m)agpie-coupled runs with: rs -m",
-    "Show your runs (C)urrently running with: rs -C",
-    "Show your (C)urrent runs from the last 5 (d)ays with: rs -C -d 5",
-    "Sort runs by (t)ime of last change with: rs -t",
-    "List runs found and (p)rompt me to select for which the status should be printed with: rs -p",
-    "Show results from specific folders with: rs folder1,folder2",
-    "(f)ilter runs by regular expression: rs -f PkBudg500,EU21",
-    "Remove the coloring and print the table in (b)lack and white with -b.",
-    "Show (C)urrent runs for one or more (u)sers with: rs -C -u user1,user2",
-    "Show a (h)elp text with: rs -h",
-    "To understand why your pending runs don't start, run: sq -s",
-    "To get info about the current run output folder, simply run: rs",
-    "List most recent (A)utomated model tests with: rs -A",
-    "To get info about a specific AMT scenario, run: rs -A -f SSP2EU-Base",
-    "Get a more detailed assessment of a specific run: remindstatus folder")
+rsHints <- c("Show (l)ast iterations of (m)agpie-coupled runs with: rs -ml",
+             "Show all (m)agpie-coupled runs with: rs -m",
+             "Show your runs (C)urrently running with: rs -C",
+             "Show your (C)urrent runs from the last 5 (d)ays with: rs -C -d 5",
+             "Sort runs by (t)ime of last change with: rs -t",
+             "List runs found and (p)rompt me to select for which the status should be printed with: rs -p",
+             "Show results from specific folders with: rs folder1,folder2",
+             "(f)ilter runs by regular expression: rs -f PkBudg500,EU21",
+             "Remove the coloring and print the table in (b)lack and white with -b.",
+             "Show (C)urrent runs for one or more (u)sers with: rs -C -u user1,user2",
+             "Show a (h)elp text with: rs -h",
+             "To understand why your pending runs don't start, run: sq -s",
+             "To get info about the current run output folder, simply run: rs",
+             "List most recent (A)utomated model tests with: rs -A",
+             "To get info about a specific AMT scenario, run: rs -A -f SSP2EU-Base",
+             "Get a more detailed assessment of a specific run: remindstatus folder")
 
-  # create the parser object
-  opt_parser <- OptionParser(usage = usage, option_list = option_list, description = description, epilogue = epilogue) # , formatter = TitledHelpFormatter
+# ================================================
+#  Finding run folders
+# ================================================
 
-  # parse the arguments, allow for one optional positional argument that takes the paths
-  arguments <- parse_args(opt_parser, args = argv, positional_arguments = c(0,1))
+# TRUE if dir is a REMIND or MAgPIE run folder
+isRunFolder <- function(dir) {
+  remindFiles <- c("full.gms", "log.txt", "config.Rdata", "prepare_and_run.R", "prepareAndRun.R")
+  magpieFiles <- c("full.gms", "submit.R", "config.yml", "magpie_y1995.gdx")
+  sum(file.exists(paste0(dir, "/", remindFiles))) >= 4 || sum(file.exists(paste0(dir, "/", magpieFiles))) == 4
+}
 
-  # print hint
-  cli_alert_info("Update 1: The underline has been removed for converged runs (green).")
-  cli_alert_info("Update 2: Runs that showed INFES but finally converged are now displayed in the same way (now green, previously blue).")
-  cli_alert_info("Did you know? {sample(hints, 1)}")
+# TRUE if dir is the REMIND or MAgPIE main folder
+isMainFolder <- function(dir) {
+  sum(file.exists(paste0(dir, "/", c("output", "output.R", "start.R", "main.gms")))) == 4
+}
 
-  # retrieve options (flags) and positional arguments (paths)
-  opt  <- arguments$options
-  paths <- arguments$args
-
-  # set default for user
-  if (opt$user == "you") opt$user <- Sys.info()[["user"]]
-
-  # set default for paths
-  if (length(paths) < 1) paths <- "."
-
-  # split comma separated parameters into vectors
-  paths <- strsplit(paths, ',')[[1]]
-  opt$filter <- paste0(strsplit(opt$filter, ",")[[1]], collapse = "|")
-
-  # =============================================
-  #            Main decision tree:
-  #        Evaluate command line arguments
-  #           and decide what to do
-  # =============================================
-
-  # AMT runs: hardcode AMT path and use regular expression from 'runode.rds' for filtering the latest AMTs
-  if (opt$amt) {
-    opt$user <- NULL
-    paths <- "/p/projects/remind/modeltests/remind/output/"
-    if (opt$filter == ".*") {
-      # if user provided no pattern search for latest AMTs
-      opt$filter <- readRDS("/p/projects/remind/modeltests/remind/runcode.rds")
-    } else {
-      # if user provided a pattern include runs from archive folder
-      paths <- c(paths, "/p/projects/remind/modeltests/remind/output/archive")
-    }
-    cli_alert_info("Results from {.file {paths}}\n")
-
-  }
-
-  if (opt$current) {
-    # OPTION A: get current runs (code mostly recycled from promptAndRun)
-    myruns   <- system(paste0("squeue -u ", opt$user, " -h -o '%Z'"), intern = TRUE)
-    runnames <- system(paste0("squeue -u ", opt$user, " -h -o '%j'"), intern = TRUE)
-
-    if (opt$daysback > 0) {
-      sacctcode <- paste0("sacct -u ", opt$user, " -s cd,f,cancelled,timeout,oom -S ", as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(opt$daysback), " -E now -P -n")
-      myruns   <- c(myruns,   system(paste(sacctcode, "--format WorkDir"), intern = TRUE))
-      runnames <- c(runnames, system(paste(sacctcode, "--format JobName"), intern = TRUE))
-    }
-
-    if (any(grepl("mag-run", runnames))) {
-      deleteruns <- which(runnames %in% c("default", "batch"))
-    } else {
-      deleteruns <- which(runnames %in% c("batch"))
-    }
-    if (length(deleteruns) > 0) {
-      myruns <- myruns[-deleteruns]
-      runnames <- runnames[-deleteruns]
-    }
-
-    # add REMIND-MAgPIE coupled runs where run directory is not the output directory
-    # these lines also drop all other slurm jobs such as remind preprocessing etc.
-    if (length(myruns) > 0) {
-      coupled <- rem <- NULL
-      for (i in 1:length(runnames)) {
-        if (! any(grepl(runnames[[i]], myruns[[i]]), grepl("mag-run", runnames[[i]]))) {
-          coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]])) # for coupled runs in parallel mode
-          rem <- c(rem, i)
-        }
-      }
-      if (!is.null(rem)) {
-        myruns <- myruns[-rem] # remove coupled parent-job and all other slurm jobs
-        myruns <- c(myruns, coupled) # add coupled paths
-      }
-      myruns <- myruns[file.exists(myruns)] # keep only existing paths
-      myruns <- sort(unique(myruns[!is.na(myruns)]))
-    }
-
-    # exit with the proper message
-    if (length(myruns) == 0) {
-      if (opt$daysback < 1) {
-        cli_alert_warning("No currently running runs found. To include recent runs please expand the time horizon by adding -d DAYS.")
-      } else {
-        cli_alert_warning("No runs found in the past {opt$daysback} days. Try to expand the time horizon.")
-      }
-      quit(save = 'no', status = 0)
-    }
-
-    runfolders <- myruns
-
+# The run folders a path stands for: the path itself if it is a run folder, the
+# folders in its "output" folder if it is a model folder, else its subfolders.
+runFoldersBelow <- function(dir) {
+  if (isRunFolder(dir)) {
+    dir
+  } else if (isMainFolder(dir)) {
+    list.dirs(file.path(dir, "output"), recursive = FALSE)
   } else {
-    # OPTION B: create list with run folders from path supplied by user or AMTs
-    runfolders <- NULL
+    list.dirs(dir, recursive = FALSE)
+  }
+}
 
-    for (dir in paths) {
-      if(is.runfolder(dir)) {
-        runfolders <- c(runfolders, dir)
-      } else if (is.mainfolder(dir)) {
-        runfolders <- c(runfolders, list.dirs(file.path(dir, "output"), recursive = FALSE))
-      } else {
-        runfolders <- c(runfolders, list.dirs(dir, recursive = FALSE))
+# The run folders of the SLURM jobs of a user: the current jobs plus, with
+# daysback > 0, the jobs that finished in the last days (via sacct).
+slurmRunFolders <- function(user, daysback) {
+  myruns <- system(paste0("squeue -u ", user, " -h -o '%Z'"), intern = TRUE)
+  runnames <- system(paste0("squeue -u ", user, " -h -o '%j'"), intern = TRUE)
+
+  if (daysback > 0) {
+    sacctcode <- paste0("sacct -u ", user, " -s cd,f,cancelled,timeout,oom -S ",
+                        as.Date(format(Sys.Date(), "%Y-%m-%d")) - as.numeric(daysback), " -E now -P -n")
+    myruns <- c(myruns, system(paste(sacctcode, "--format WorkDir"), intern = TRUE))
+    runnames <- c(runnames, system(paste(sacctcode, "--format JobName"), intern = TRUE))
+  }
+
+  # drop batch jobs (and "default" jobs of coupled runs, which are not run folders)
+  deleteruns <- if (any(grepl("mag-run", runnames))) c("default", "batch") else "batch"
+  deleteruns <- which(runnames %in% deleteruns)
+  if (length(deleteruns) > 0) {
+    myruns <- myruns[-deleteruns]
+    runnames <- runnames[-deleteruns]
+  }
+
+  # add REMIND-MAgPIE coupled runs where run directory is not the output directory
+  # these lines also drop all other slurm jobs such as remind preprocessing etc.
+  if (length(myruns) > 0) {
+    coupled <- rem <- NULL
+    # 1:length() on purpose: an empty job-name list fails here like it always did (known-bugs.md)
+    for (i in 1:length(runnames)) { # nolint: seq_linter.
+      if (!any(grepl(runnames[[i]], myruns[[i]]), grepl("mag-run", runnames[[i]]))) {
+        coupled <- c(coupled, paste0(myruns[[i]], "/output/", runnames[[i]])) # for coupled runs in parallel mode
+        rem <- c(rem, i)
       }
     }
-
+    if (!is.null(rem)) {
+      myruns <- myruns[-rem] # remove coupled parent-job and all other slurm jobs
+      myruns <- c(myruns, coupled) # add coupled paths
+    }
+    myruns <- myruns[file.exists(myruns)] # keep only existing paths
+    myruns <- sort(unique(myruns[!is.na(myruns)]))
   }
+  myruns
+}
 
-  # filter coupling iterations
-  if (opt$magpie & !is.null(runfolders)) {
-    # add magpie run folders if 'magpie/output' exists inside current folder
-    if (dir.exists(file.path("magpie", "output"))) runfolders <- c(runfolders, file.path("magpie", "output"))
+# Keep only the coupling iterations (C_*, *-rem-N, *-mag-N) of the run folders,
+# optionally only the last iteration of each coupled run.
+coupledRunFolders <- function(runfolders, lastOnly) {
+  # add magpie run folders if 'magpie/output' exists inside current folder
+  if (dir.exists(file.path("magpie", "output"))) runfolders <- c(runfolders, file.path("magpie", "output"))
 
-    # find iterations using only the basename (to ignore rem|mag if they exist in the path before the basename)
-    IndexOfcoupledRuns <- grepl("(^C_)|(-(rem|mag)-[0-9]+$)", basename(runfolders))
-    runfolders <- runfolders[IndexOfcoupledRuns]
+  # find iterations using only the basename (to ignore rem|mag if they exist in the path before the basename)
+  runfolders <- runfolders[grepl("(^C_)|(-(rem|mag)-[0-9]+$)", basename(runfolders))]
 
-    # keep last iteration only
-    if (opt$last) {
-      lastdirs <- NULL
-      for (r in unique(gsub("-(rem|mag)-[0-9]+$", "", runfolders))) {
-        lastdirs <- c(lastdirs, runfolders[max(which(gsub("-(rem|mag)-[0-9]+$", "", runfolders) == r))])
-      }
-      runfolders <- lastdirs
+  if (lastOnly) {
+    coupledRun <- gsub("-(rem|mag)-[0-9]+$", "", runfolders)
+    lastdirs <- NULL
+    for (r in unique(coupledRun)) {
+      lastdirs <- c(lastdirs, runfolders[max(which(coupledRun == r))])
     }
-
-    if (is.null(runfolders)) {
-      cli_alert_warning("No coupled runs found")
-      quit(save = 'no', status = 0)
-    }
+    runfolders <- lastdirs
   }
-
-  # =============================================
-  #   print table (runstatus or sanity)
-  # =============================================
-
-  # filter runs. If not changed by the user the default pattern '.*' filters all
-  runfolders <- grep(opt$filter, runfolders, value = TRUE)
-
-  # sort strings containing embedded numbers so that the numbers are numerically sorted rather than sorted by character value
-  runfolders <- runfolders[stringi::stri_order(basename(normalizePath(runfolders)), numeric = TRUE)]
-
-  # proceed if there are runs left after filtering
-  if(!identical(runfolders, character(0))) {
-
-    # print hint how to reduce number of runs
-    if (length(runfolders) > 40 && opt$filter == ".*" && !opt$prompt) {
-      cli_alert_info("To reduce the number of runs, filter the runs with -f REGEX or select manually from the list with -p.")
-    }
-
-    # list all runs found and prompt the user to select
-    if (opt$prompt) {
-      runfolders <- gms::chooseFromList(runfolders, type = "folders")
-    }
-
-    cli_alert_info("Runs found: {length(runfolders)}")
-
-    # decide whether to display sanity cheks or runstatus
-    if (opt$sanity) {
-      modelstats::getSanityChecks(runfolders)
-    } else {
-      modelstats::loopRuns(runfolders, user = opt$user, colors = !opt$nocolor, sortbytime = opt$time)
-    }
-  } else {
-    # this can only happen if the filtering removed all runs
-    # if runfolders is empty already before filtering the script would have stopped earlier (look for 'quit')
-    cli_alert_warning("No runs found")
-  }
+  runfolders
 }
