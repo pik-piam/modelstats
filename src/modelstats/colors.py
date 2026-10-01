@@ -7,7 +7,8 @@ an inner colour hands back to the outer colour, underline inside a colour stays 
 256-index codes for the two named colours (``orangered``, ``orange``) whenever the terminal reports
 at least 256 colours and the basic codes otherwise, and emits nothing at all when it is disabled. The
 goldens were recorded with ``options(crayon.enabled = TRUE, crayon.colors = 256)`` ("crayon on") or
-``crayon.enabled = FALSE`` ("crayon off"); the port never probes a terminal here, the CLI decides
+``crayon.enabled = FALSE, cli.num_colors = 1L`` ("crayon off", no escape at all); the port never probes a
+terminal here, the CLI decides
 (``Crayon.from_terminal`` reproduces crayon's ``num_ansi_colors`` from the values the CLI passes,
 :func:`num_ansi_colours`; only :func:`terminfo_colours` touches the terminfo database).
 

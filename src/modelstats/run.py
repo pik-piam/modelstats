@@ -322,9 +322,10 @@ def _lazy[T](method: Callable[[Run], T]) -> cached_property[T]:
     """A cached property whose reading errors are the package's :class:`RunReadError`.
 
     The facts layer raises the same class (``modelstats.facts`` re-exports it from ``modelstats.errors``);
-    the re-raise here keeps the facts error as ``__cause__`` and goes in the quality pass together with
-    the ``_FactsReadError`` alias. An error is not cached: the next access reads again, as R would on the
-    next call.
+    the re-raise here keeps the facts error as ``__cause__``, forwards its R call and attaches the R
+    warnings the facts have deferred so far (``RunFacts.deferred_warnings``), and goes in the quality pass
+    together with the ``_FactsReadError`` alias. An error is not cached: the next access reads again, as R
+    would on the next call.
     """
 
     @wraps(method)
@@ -332,7 +333,7 @@ def _lazy[T](method: Callable[[Run], T]) -> cached_property[T]:
         try:
             return method(self)
         except _FactsReadError as error:
-            raise RunReadError(str(error)) from error
+            raise RunReadError(str(error), call=error.call, warnings=self._facts.deferred_warnings) from error
 
     return cached_property(read)
 
@@ -440,7 +441,7 @@ class Run:
         try:
             return lookup.jobs
         except SlurmError as error:
-            raise RunReadError(str(error)) from error
+            raise RunReadError(str(error), call=error.call) from error
 
     @_lazy
     def _parity_status(self) -> str:
@@ -481,7 +482,7 @@ class Run:
         try:
             return lookup.job
         except SlurmError as error:
-            raise RunReadError(str(error)) from error
+            raise RunReadError(str(error), call=error.call) from error
 
     # -- the model's verdicts (R/getRunStatus.R:82-102, 278-304) --------------------------------------
 
@@ -605,7 +606,7 @@ class Run:
         try:
             return self._status_record(detailed)
         except _FactsReadError as error:
-            raise RunReadError(str(error)) from error
+            raise RunReadError(str(error), call=error.call, warnings=self._facts.deferred_warnings) from error
 
     def _status_record(self, detailed: bool) -> RunStatus:
         """``run_status.run_status_record`` over this run's facts (one copy of its read order)."""

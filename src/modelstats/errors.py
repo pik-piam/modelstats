@@ -15,11 +15,30 @@ helper classes onto :class:`ModelstatsError` is a cross-unit change for the qual
 
 from __future__ import annotations
 
-__all__ = ["ModelstatsError", "RunReadError"]
+from collections.abc import Sequence
+from dataclasses import dataclass
+
+__all__ = ["DeferredWarning", "ModelstatsError", "RunReadError"]
 
 
 class ModelstatsError(Exception):
     """Base class of every error the package raises on purpose."""
+
+
+@dataclass(frozen=True, slots=True)
+class DeferredWarning:
+    """One R warning raised while a run was read and, under ``options(warn = 0)``, still unprinted.
+
+    ``call`` is the warning's call as ``deparse()`` prints it (``None`` for a call-less warning) and
+    ``message`` its condition message. ``getRunStatus()`` raises exactly one kind: ``readGDX()``'s warning
+    for a symbol absent from the selected GDX (``R/getRunStatus.R:280-281, 288``, ``react`` defaults to
+    ``"warning"``). R prints the deferred warnings where the surrounding error is printed: ``try()``'s
+    ``In addition: Warning message:`` block (``R/loopRuns.R:57``,
+    :func:`modelstats.loop_runs.try_error_message`) and the top-level handler of ``Rscript`` (the CLI).
+    """
+
+    call: str | None
+    message: str
 
 
 class RunReadError(ModelstatsError):
@@ -30,4 +49,24 @@ class RunReadError(ModelstatsError):
     ``str(error)`` is R's condition message where R has one (``argument is of length zero``, ``invalid
     'description' argument``, ``missing value where TRUE/FALSE needed``, ...) and the library's message
     where R aborts the process instead of raising (a damaged GDX, BUG-037, decision D-20).
+
+    ``call`` is R's ``conditionCall`` as ``deparse(call, nlines = 1L)`` prints it, the text ``try()`` puts
+    after ``Error in`` (``gzfile(file)``, ``if (s80_bool == 1) {``, ...); ``None`` where R has no call
+    (``try()`` then prints ``Error : ``) or where the port cannot know which R statement failed (a library
+    failure that aborts R's process). ``warnings`` are the :class:`DeferredWarning` records R had collected
+    during the call, oldest first; they are attached by the layer that owns the run's facts
+    (``run_status.run_status_record``, ``Run``).
     """
+
+    def __init__(
+        self, message: str, *, call: str | None = None, warnings: Sequence[DeferredWarning] = ()
+    ) -> None:
+        """``message`` is R's condition message, ``call`` its deparsed call, ``warnings`` the deferred."""
+        super().__init__(message)
+        self.call = call
+        self.warnings: tuple[DeferredWarning, ...] = tuple(warnings)
+
+    @property
+    def message(self) -> str:
+        """R's condition message (``str(error)``)."""
+        return str(self)

@@ -49,8 +49,9 @@ normalisation.
 Every property is lazy and cached. GDX files are opened only when a property needs them (`modelstat`,
 `convergence`, the `Abort ... *Infes` status); `squeue` runs once per `Run`, and only on the cluster.
 Errors while reading raise `modelstats.RunReadError` (a `ModelstatsError`) from the property, with R's
-message where R has one, and never abort the process; `status` and `run_type` degrade to `UNKNOWN` /
-`None` on missing inputs instead of raising (a damaged file still raises).
+message where R has one, R's deparsed call in `error.call` (`None` where R has none) and the R warnings
+deferred during the read in `error.warnings`, and never abort the process; `status` and `run_type`
+degrade to `UNKNOWN` / `None` on missing inputs instead of raising (a damaged file still raises).
 
 ## `RunState`: from the R `RunStatus` text and the queue
 

@@ -39,6 +39,9 @@ __all__ = [
     "CONDITION_LENGTH_ABOVE_ONE",
     "CONFIG_FILE_PATTERN",
     "NO_RUN_TYPE",
+    "EXISTS_CALL",
+    "MODEL_NAME_CALL",
+    "ONE_REGION_CALL",
     "ConfigLoader",
     "RunConfigLike",
     "RunTypeError",
@@ -64,7 +67,26 @@ _ONE_REGION_PREFIX: Final = "testOneRegi"
 
 
 class RunTypeError(RuntimeError):
-    """An R error of ``colRunType()``; ``str(error)`` is the R condition message (the golden ``error``)."""
+    """An R error of ``colRunType()``; ``str(error)`` is the R condition message (the golden ``error``).
+
+    ``call`` is the failing R statement as ``deparse(conditionCall(e), nlines = 1L)`` prints it (the
+    ``if`` of ``R/colRunType.R:18``, ``:20`` or ``:24``), what ``try()`` puts after ``Error in``.
+    """
+
+    def __init__(self, message: str, *, call: str | None = None) -> None:
+        """``message`` is R's condition message, ``call`` the deparsed call it is reported under."""
+        super().__init__(message)
+        self.call = call
+
+
+EXISTS_CALL: Final = 'if (file.exists(paste0(mydir, "/", cfgf))) {'
+"""``R/colRunType.R:18`` as R deparses it: the call of the ``the condition has length > 1`` error."""
+
+MODEL_NAME_CALL: Final = 'if (cfg[["model_name"]] == "MAgPIE") {'
+"""``R/colRunType.R:20``: the call of the ``argument is of length zero`` error for a ``NULL`` ``cfg``."""
+
+ONE_REGION_CALL: Final = 'if (grepl("^testOneRegi", out)) {'
+"""``R/colRunType.R:24``: the call of the ``argument is of length zero`` error for a ``NULL`` optimization."""
 
 
 class RunConfigLike(Protocol):
@@ -144,11 +166,11 @@ def col_run_type(mydir: PathLike, env: Effects, load: ConfigLoader = load_config
     directory = os.fspath(mydir)
     matches = env.listdir_like_r(directory, pattern=CONFIG_FILE_PATTERN)  # R:14
     if len(matches) > 1:
-        raise RunTypeError(CONDITION_LENGTH_ABOVE_ONE)  # R:18: `if` over a length-2 logical (BUG-003)
+        raise RunTypeError(CONDITION_LENGTH_ABOVE_ONE, call=EXISTS_CALL)  # R:18: length-2 logical (BUG-003)
     if not matches:
         # R:18 tests file.exists("<mydir>/"), true exactly for a directory; R:20 then fails on cfg = NULL.
         if env.is_dir(directory):
-            raise RunTypeError(ARGUMENT_OF_LENGTH_ZERO)  # BUG-004
+            raise RunTypeError(ARGUMENT_OF_LENGTH_ZERO, call=MODEL_NAME_CALL)  # BUG-004
         return NO_RUN_TYPE  # R:17; the full.lst branch (R:36-42) is unreachable (BUG-017)
     return compose_run_type(load(config_path_for(directory, matches[0])))
 
@@ -177,7 +199,7 @@ def compose_run_type(cfg: RunConfigLike) -> str | None:
     """
     model_name = r_as_character(cfg.model_name)
     if model_name is None:
-        raise RunTypeError(ARGUMENT_OF_LENGTH_ZERO)  # R:20: NULL == "MAgPIE" is logical(0)
+        raise RunTypeError(ARGUMENT_OF_LENGTH_ZERO, call=MODEL_NAME_CALL)  # R:20: NULL == "MAgPIE"
     if model_name == _MAGPIE:
         return _magpie_run_type(cfg)
     return _remind_run_type(cfg)
@@ -192,7 +214,7 @@ def _remind_run_type(cfg: RunConfigLike) -> str:
     """``R/colRunType.R:23-34``: debug, calibration and coupling markers, one-region modes, empty model."""
     optimization = r_as_character(cfg.optimization)
     if optimization is None:
-        raise RunTypeError(ARGUMENT_OF_LENGTH_ZERO)  # R:24: grepl("^testOneRegi", NULL) is logical(0)
+        raise RunTypeError(ARGUMENT_OF_LENGTH_ZERO, call=ONE_REGION_CALL)  # R:24: grepl() on NULL
     if optimization.startswith(_ONE_REGION_PREFIX):  # R:24-26
         out = _r_paste(_one_region_mode(cfg), cfg.c_testOneRegi_region)
     else:  # R:28-30

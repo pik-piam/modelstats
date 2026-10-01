@@ -56,6 +56,7 @@ __all__ = [
     "INVALID_REGEX",
     "NO_JOB",
     "PENDING_SUFFIX",
+    "USER_GREPL_CALL",
     "SQUEUE_FORMAT",
     "STARTUP_SUFFIX",
     "SUBSCRIPT_OUT_OF_BOUNDS",
@@ -128,7 +129,20 @@ _TRE_REASONS: Final[dict[str, str]] = {
 
 
 class SlurmError(RuntimeError):
-    """An R error of ``foundInSlurm()`` or ``rs -C``; ``str(error)`` is the R condition message."""
+    """An R error of ``foundInSlurm()`` or ``rs -C``; ``str(error)`` is the R condition message.
+
+    ``call`` is the failing R call as ``deparse(conditionCall(e), nlines = 1L)`` prints it, what ``try()``
+    puts after ``Error in``; set where the port knows it (the user regex of ``R/foundInSlurm.R:31``).
+    """
+
+    def __init__(self, message: str, *, call: str | None = None) -> None:
+        """``message`` is R's condition message, ``call`` the deparsed call it is reported under."""
+        super().__init__(message)
+        self.call = call
+
+
+USER_GREPL_CALL: Final = 'grepl(paste0("^", user, " "), squeuefiltered)'
+"""``R/foundInSlurm.R:31`` as R deparses it: the call of the invalid-regex error for a bad ``user``."""
 
 
 # ---------------------------------------------------------------------------------------------
@@ -151,8 +165,10 @@ def r_strsplit_space(text: str) -> tuple[str, ...]:
     return tuple(pieces)
 
 
-def r_grepl(pattern: str, text: str) -> bool:
+def r_grepl(pattern: str, text: str, call: str | None = None) -> bool:
     """``grepl(pattern, text)`` with R's default engine (TRE, extended syntax) where ``re`` agrees with it.
+
+    ``call`` is the R call the error of an invalid ``pattern`` is reported under (:class:`SlurmError`).
 
     The characters of run and job names (letters, digits, ``.``, ``-``, ``_``) mean the same in both engines.
     Differences, all inside BUG-008 (D-05 pending): TRE takes a repetition operator at the start of the
@@ -166,7 +182,7 @@ def r_grepl(pattern: str, text: str) -> bool:
         compiled = re.compile(tre_pattern)
     except re.error as error:
         reason = _TRE_REASONS.get(error.msg, error.msg)
-        raise SlurmError(INVALID_REGEX.format(pattern=pattern, reason=reason)) from error
+        raise SlurmError(INVALID_REGEX.format(pattern=pattern, reason=reason), call=call) from error
     return compiled.search(text) is not None
 
 
@@ -461,7 +477,7 @@ def _single_hit(line: SqueueLine, user: str) -> str:
     """
     elapsed = line.elapsed
     qos = line.qos
-    yourrun = r_grepl(f"^{user} ", line.text)
+    yourrun = r_grepl(f"^{user} ", line.text, call=USER_GREPL_CALL)
     pending = PENDING_SUFFIX if _PENDING_LINE.search(line.text) else ""
     startup = STARTUP_SUFFIX if not pending and _STARTUP_ELAPSED.fullmatch(elapsed) else ""
     head = qos if yourrun else line.user

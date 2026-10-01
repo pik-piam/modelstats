@@ -13,11 +13,12 @@ Public API (``06`` section 5.1)::
     run = Run("/p/projects/remind/modeltests/remind/output/SSP2-NPi-AMT_2026-09-28_10.30.27")
     run.status, run.convergence, run.iterations, run.warnings, run.summation_errors
 
-``get_run_status`` and ``found_in_slurm`` are the parity functions behind ``rs`` (``R/getRunStatus.R``,
-``R/foundInSlurm.R``); ``loop_runs`` joins them in phase 3.
+``get_run_status``, ``found_in_slurm``, ``loop_runs`` and ``get_sanity_checks`` are the parity functions
+behind ``rs`` (``R/getRunStatus.R``, ``R/foundInSlurm.R``, ``R/loopRuns.R``, ``R/getSanityChecks.R``).
 """
 
 from modelstats.errors import ModelstatsError, RunReadError
+from modelstats.loop_runs import LoopRunsError, loop_runs
 from modelstats.run import (
     Convergence,
     Iterations,
@@ -29,6 +30,7 @@ from modelstats.run import (
     iter_runs,
 )
 from modelstats.run_status import RunStatus, SanityCounts, get_run_status
+from modelstats.sanity import SanityError, get_sanity_checks
 from modelstats.slurm import SlurmJob, found_in_slurm
 
 __version__ = "0.31.0"
@@ -36,6 +38,7 @@ __version__ = "0.31.0"
 __all__ = [
     "Convergence",
     "Iterations",
+    "LoopRunsError",
     "MifState",
     "ModelStat",
     "ModelstatsError",
@@ -45,9 +48,12 @@ __all__ = [
     "RunState",
     "RunStatus",
     "SanityCounts",
+    "SanityError",
     "SlurmJob",
     "__version__",
     "found_in_slurm",
     "get_run_status",
+    "get_sanity_checks",
     "iter_runs",
+    "loop_runs",
 ]

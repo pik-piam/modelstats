@@ -47,8 +47,10 @@ CASES = MIGRATION / "cases"
 RECORDED_SLURM = FIXTURES / "_meta" / "slurm" / "latest"
 
 # Sandbox defaults (migration/harness/lib.sh and sandbox.sh): the fake user, the stopped clock, the
-# zone and the variables the R oracle saw. Every golden was generated under these unless its row says
-# otherwise.
+# zone and the variables the R oracle saw, R_CLI_NUM_COLORS=256 included (crayon and cli report 256
+# colours without a tty; it precedes options(crayon.enabled), migration/02-python-libraries.md 4.5, and
+# the crayon-off rows override it with options(cli.num_colors = 1L), make_goldens.R set_crayon()).
+# Every golden was generated under these unless its row says otherwise.
 SANDBOX_USER = "pascalfu"
 SANDBOX_FROZEN = "2026-09-30 12:00:00"
 SANDBOX_TZ = ZoneInfo("Europe/Berlin")
@@ -59,6 +61,7 @@ SANDBOX_ENVIRON: Mapping[str, str] = {
     "MAGPIE_RESULTS_ARCHIVE_PATH": "/p/projects/rd3mod/models/results/magpie",
     "COLUMNS": "200",
     "TERM": "xterm-256color",
+    "R_CLI_NUM_COLORS": "256",
 }
 _FROZEN_FORMAT = "%Y-%m-%d %H:%M:%S"
 _CTIME_PRESET = re.compile(r"^ctime\+(\d+)d$")

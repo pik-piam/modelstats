@@ -43,7 +43,7 @@ import pandas as pd
 from modelstats import textscan
 from modelstats.config import ConfigError, RunConfig, load_config
 from modelstats.env import Effects, FileInfo, OverlayPaths, PathLike
-from modelstats.errors import RunReadError
+from modelstats.errors import DeferredWarning, RunReadError
 from modelstats.gdx import (
     ITERATION_SYMBOL,
     MODELSTAT_SYMBOLS,
@@ -58,7 +58,7 @@ from modelstats.gdx import (
     select_latest_gdx,
 )
 from modelstats.rdata_io import RDataError, read_rds
-from modelstats.run_type import CONFIG_FILE_PATTERN, RunTypeError, col_run_type
+from modelstats.run_type import CONFIG_FILE_PATTERN, EXISTS_CALL, RunTypeError, col_run_type
 from modelstats.runfolders import r_basename
 from modelstats.runstats import RunStatistics, read_run_statistics
 from modelstats.slurm import SlurmError, SlurmLookup, lookup_slurm
@@ -70,6 +70,19 @@ __all__ = [
     "INVALID_DESCRIPTION",
     "MISSING_VALUE",
     "NO_LINES_IN_INPUT",
+    "ABSENT_SYMBOL_WARNING",
+    "ABSENT_TYPED_SYMBOL_WARNING",
+    "CONVERGENCE_READ_CALL",
+    "EXPAND_PATTERN_CALL",
+    "GZFILE_CALL",
+    "ITERATION_READ_CALL",
+    "LAST_LINE_CALL",
+    "LOAD_CONFIG_CALL",
+    "LOAD_STATISTICS_CALL",
+    "LOAD_YAML_CALL",
+    "READ_CSV_CALL",
+    "READ_RDS_CALL",
+    "REPY_READ_CALL",
     "ABORT_THRESHOLD_SYMBOL",
     "ABORT_TRACK_SYMBOL",
     "CONVERGENCE_SYMBOL",
@@ -91,6 +104,37 @@ INVALID_DESCRIPTION: Final = "invalid 'description' argument"
 """R's message for ``load()`` on a vector of paths: ``R/getRunStatus.R:72`` with two matches (BUG-003)."""
 
 CONDITION_LENGTH_ABOVE_ONE: Final = "the condition has length > 1"
+
+# The R calls the errors above are reported under, as ``deparse(conditionCall(e), nlines = 1L)`` prints them
+# (what ``try()`` puts after ``Error in``, ``R/loopRuns.R:57``); each is cited at its raise site.
+GZFILE_CALL: Final = "gzfile(file)"
+"""``load()`` on a vector of paths fails in ``gzfile(file)`` (``R/getRunStatus.R:72``, BUG-003)."""
+LOAD_CONFIG_CALL: Final = 'load(paste0(ii, "/", cfgf))'
+"""The ``.Rdata`` branch of ``R/getRunStatus.R:72``."""
+LOAD_YAML_CALL: Final = 'loadConfig(paste0(ii, "/", cfgf))'
+"""The ``.yml`` branch of ``R/getRunStatus.R:72``."""
+LOAD_STATISTICS_CALL: Final = "load(fle, envir = runstatistics)"
+"""``R/getRunStatus.R:78``."""
+LAST_LINE_CALL: Final = 'if (lastLine == "Starting MAgPIE...") {'
+"""``R/getRunStatus.R:190`` (the double blank of the source is not kept by ``deparse``)."""
+READ_CSV_CALL: Final = "read.table(file = file, header = header, sep = sep, quote = quote, "
+"""``read.csv2()`` fails inside ``read.table()``; the first ``deparse`` line of that call ends in a blank."""
+READ_RDS_CALL: Final = "readRDS(projectSumFile)"
+"""``R/getRunStatus.R:353``."""
+
+# The readGDX() calls whose absent symbol R only warns about (react defaults to "warning"), deparsed, and
+# the warning texts of gdx2 0.6.2 (verified 2026-10-01): the plain-name reads of ``:280`` and ``:288`` warn
+# from readGDX itself, the typed read of ``:281`` from ``.expandPattern``.
+ITERATION_READ_CALL: Final = 'readGDX(gdx = latest_gdx, "o_iterationNumber", format = "simplest")'
+CONVERGENCE_READ_CALL: Final = (
+    'readGDX(gdx = latest_gdx, "s80_bool", type = "Parameter", format = "simplest")'
+)
+REPY_READ_CALL: Final = 'readGDX(gdx = latest_gdx, "p80_repy")'
+EXPAND_PATTERN_CALL: Final = ".expandPattern(c(...), gdx, format, type, react)"
+ABSENT_SYMBOL_WARNING: Final = (
+    "Error : User specified to read symbol {name}, but it does not exist in the source file"
+)
+ABSENT_TYPED_SYMBOL_WARNING: Final = "No element of {name} found in GDX! NULL returned"
 """R's message for ``if (c(TRUE, TRUE))``: ``R/colRunType.R:18`` after two ``yml`` matches (BUG-003)."""
 
 NO_LINES_IN_INPUT: Final = "no lines available in input"
@@ -354,6 +398,12 @@ class RunFacts:
         self._configs: dict[Path, RunConfig] = {}
         self._csv_counts: dict[str, int] = {}
         self._contents: dict[str, bytes | None] = {}
+        self.deferred_warnings: list[DeferredWarning] = []
+        """The R warnings this run's reads raised so far, oldest first (``readGDX`` on an absent symbol).
+
+        R defers them (``options(warn = 0)``) and prints them with the next error (``try()``'s ``In
+        addition:`` block) or at the top level; the callers that raise :class:`RunReadError` attach a copy.
+        """
 
     def __repr__(self) -> str:
         """``RunFacts('/path/to/run')``."""
@@ -381,17 +431,22 @@ class RunFacts:
             return None
         if len(matches) > 1:
             if all(name.endswith("yml") for name in matches):
-                raise RunReadError(CONDITION_LENGTH_ABOVE_ONE)
-            raise RunReadError(INVALID_DESCRIPTION)
+                raise RunReadError(CONDITION_LENGTH_ABOVE_ONE, call=EXISTS_CALL)
+            raise RunReadError(INVALID_DESCRIPTION, call=GZFILE_CALL)
         return self._load_config(Path(self.files.path(matches[0])))
 
     def _load_config(self, path: Path) -> RunConfig:
-        """``load()`` / ``loadConfig()`` of one path, once per path; a failure aborts as R's would."""
+        """``load()`` / ``loadConfig()`` of one path, once per path; a failure aborts as R's would.
+
+        The error is reported under the ``R/getRunStatus.R:72`` call of the file's kind (the message is the
+        library's, not R's: an unreadable file has no R golden).
+        """
         if path not in self._configs:
             try:
                 self._configs[path] = load_config(self.files.physical(str(path)))
             except ConfigError as error:
-                raise RunReadError(str(error)) from error
+                call = LOAD_YAML_CALL if path.name.endswith("yml") else LOAD_CONFIG_CALL
+                raise RunReadError(str(error), call=call) from error
         return self._configs[path]
 
     @cached_property
@@ -407,7 +462,7 @@ class RunFacts:
         try:
             return col_run_type(self.files.directory, self.effects, self._load_config)
         except RunTypeError as error:
-            raise RunReadError(str(error)) from error
+            raise RunReadError(str(error), call=error.call) from error
 
     # -- runstatistics.rda (R/getRunStatus.R:76-79) --------------------------------------------------
 
@@ -419,7 +474,7 @@ class RunFacts:
         try:
             return read_run_statistics(self.files.physical(self.files.statistics))
         except RDataError as error:
-            raise RunReadError(str(error)) from error
+            raise RunReadError(str(error), call=LOAD_STATISTICS_CALL) from error
 
     @property
     def is_magpie(self) -> bool:
@@ -464,7 +519,10 @@ class RunFacts:
         return next(c.mtime for c in self.gdx_candidates if c.file is selected)
 
     def _gdx_read[T](self, read: Callable[[], T]) -> T:
-        """Run one GDX read; a library failure aborts like R's process abort (BUG-037, D-20)."""
+        """Run one GDX read; a library failure aborts like R's process abort (BUG-037, D-20).
+
+        The error carries no R call: R dies in the GDX library and prints no condition at all.
+        """
         try:
             return read()
         except GdxReadError as error:
@@ -488,32 +546,45 @@ class RunFacts:
         """``as.numeric(readGDX(latest_gdx, "o_iterationNumber", format = "simplest"))`` (``:280``).
 
         ``None`` is R's ``numeric(0)`` for an absent symbol (``react`` defaults to a warning, not an
-        error); a GAMS special value arrives as ``nan``.
+        error; the warning is deferred, :attr:`deferred_warnings`); a GAMS special value arrives as ``nan``.
         """
         selected = self.selected_gdx
         if selected is None:
             return None
-        return self._gdx_read(lambda: read_scalar(selected, ITERATION_SYMBOL))
+        value = self._gdx_read(lambda: read_scalar(selected, ITERATION_SYMBOL))
+        if value is None:
+            self._warn(ITERATION_READ_CALL, ABSENT_SYMBOL_WARNING.format(name=ITERATION_SYMBOL))
+        return value
 
     @cached_property
     def convergence_flag(self) -> float | None:
         """``as.numeric(readGDX(latest_gdx, "s80_bool", type = "Parameter", format = "simplest"))``.
 
         ``R/getRunStatus.R:281``: exact-case, parameters only (``gdx.read_typed_scalar``); ``None`` is
-        ``numeric(0)``.
+        ``numeric(0)``, with gdx2's ``.expandPattern`` warning deferred (:attr:`deferred_warnings`).
         """
         selected = self.selected_gdx
         if selected is None:
             return None
-        return self._gdx_read(lambda: read_typed_scalar(selected, CONVERGENCE_SYMBOL))
+        value = self._gdx_read(lambda: read_typed_scalar(selected, CONVERGENCE_SYMBOL))
+        if value is None:
+            self._warn(EXPAND_PATTERN_CALL, ABSENT_TYPED_SYMBOL_WARNING.format(name=CONVERGENCE_SYMBOL))
+        return value
 
     @cached_property
     def solve_report(self) -> pd.DataFrame | None:
-        """``readGDX(latest_gdx, "p80_repy")`` (``:288``) as a dense frame; ``None`` when absent."""
+        """``readGDX(latest_gdx, "p80_repy")`` (``:288``) as a dense frame; ``None`` when absent (warned)."""
         selected = self.selected_gdx
         if selected is None:
             return None
-        return self._gdx_read(lambda: read_param(selected, REPY_SYMBOL))
+        frame = self._gdx_read(lambda: read_param(selected, REPY_SYMBOL))
+        if frame is None:
+            self._warn(REPY_READ_CALL, ABSENT_SYMBOL_WARNING.format(name=REPY_SYMBOL))
+        return frame
+
+    def _warn(self, call: str, message: str) -> None:
+        """Record one R warning the way ``options(warn = 0)`` defers it (:attr:`deferred_warnings`)."""
+        self.deferred_warnings.append(DeferredWarning(call, message))
 
     @cached_property
     def abort_gdx(self) -> GdxFile | None:
@@ -611,7 +682,7 @@ class RunFacts:
             return None
         contents = self._snapshot(log_txt)
         if contents is None:
-            raise RunReadError(ARGUMENT_OF_LENGTH_ZERO)
+            raise RunReadError(ARGUMENT_OF_LENGTH_ZERO, call=LAST_LINE_CALL)
         return textscan.last_nonempty_line(io.BytesIO(contents))
 
     @cached_property
@@ -745,7 +816,7 @@ class RunFacts:
             try:
                 self._csv_counts[path] = count(self.files.physical(path))
             except EmptyCsvError as error:
-                raise RunReadError(NO_LINES_IN_INPUT) from error
+                raise RunReadError(NO_LINES_IN_INPUT, call=READ_CSV_CALL) from error
         return self._csv_counts[path]
 
     @cached_property
@@ -756,7 +827,7 @@ class RunFacts:
         try:
             value = read_rds(self.files.physical(self.files.project_summations_rds))
         except RDataError as error:
-            raise RunReadError(str(error)) from error
+            raise RunReadError(str(error), call=READ_RDS_CALL) from error
         return value if isinstance(value, Mapping) else {}
 
     @cached_property
@@ -819,4 +890,4 @@ class RunFacts:
         try:
             return lookup_slurm(self.files.directory, self.effects, self.user)
         except SlurmError as error:
-            raise RunReadError(str(error)) from error
+            raise RunReadError(str(error), call=error.call) from error

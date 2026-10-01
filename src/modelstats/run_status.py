@@ -64,7 +64,13 @@ from modelstats.tables import Cell
 from modelstats.tables import to_dataframe as _frame_of
 
 __all__ = [
+    "APP_RESULTS_CALL",
+    "FLAG_TEST_CALL",
     "INCORRECT_DIMENSIONS",
+    "MODELSTAT_FALLBACK_CALL",
+    "NOT_CONVERGED_TEST_CALL",
+    "REPLACEMENT_CALL",
+    "REPY_SUBSET_CALL",
     "NA",
     "NEWEST_FIRST",
     "NO_JOB",
@@ -106,6 +112,24 @@ REPLACEMENT_LENGTH_ZERO: Final = "replacement has length zero"
 
 INCORRECT_DIMENSIONS: Final = "incorrect number of dimensions"
 """R's message for ``NULL[, , "modelstat"]``: ``R/getRunStatus.R:290`` without ``p80_repy``."""
+
+# The R calls the errors of this module are reported under, as ``deparse(conditionCall(e), nlines = 1L)``
+# prints them (what ``try()`` puts after ``Error in``, ``R/loopRuns.R:57``); each is cited at its raise site.
+REPLACEMENT_CALL: Final = "x[[jj]][iseq] <- vjj"
+"""``[<-.data.frame`` fails in this assignment for a ``NULL`` value (verified in R 4.6.1)."""
+MODELSTAT_FALLBACK_CALL: Final = 'if (runstatistics$stats[["config"]][["model_name"]] == "MAgPIE") {'
+"""``R/getRunStatus.R:91`` (the ``errors-bug005`` goldens, ``goldens/rs/synthetic-bug005.err:5``)."""
+APP_RESULTS_CALL: Final = (
+    'if (any(grepl("config", names(runstatistics$stats))) && '
+    'runstatistics$stats[["config"]][["model_name"]] == '
+)
+"""``R/getRunStatus.R:108``: ``deparse`` cuts the first line after the ``==`` (checked in R 4.6.1)."""
+FLAG_TEST_CALL: Final = "if (s80_bool == 1) {"
+"""``R/getRunStatus.R:283``: ``numeric(0) == 1`` and ``NA == 1`` both fail here."""
+NOT_CONVERGED_TEST_CALL: Final = "if (s80_bool == 0 && as.numeric(cm_iteration_max) == iter_no) {"
+"""``R/getRunStatus.R:285`` (BUG-038, ``migration/goldens/rs/synthetic-remind.err:6``)."""
+REPY_SUBSET_CALL: Final = 'p80_repy[, , "modelstat"]'
+"""``R/getRunStatus.R:290``."""
 
 _NASH: Final = "nash"
 _CALIB: Final = "Calib"
@@ -321,9 +345,20 @@ def run_status_record(directory: str, user: str, detailed: bool, env: Effects) -
 
     The facts are forced in the order R reads the files, so that when two reads would abort the call,
     the error R reports first is the one raised: ``squeue`` (``:38``), the GDX selection (``:54-64``),
-    the configuration (``:69-74``), ``runstatistics.rda`` (``:76-79``), then the columns.
+    the configuration (``:69-74``), ``runstatistics.rda`` (``:76-79``), then the columns. The error carries
+    the R warnings deferred during the iteration (``RunFacts.deferred_warnings``), which ``try()`` prints
+    after it (``R/loopRuns.R:57``, :func:`modelstats.loop_runs.try_error_message`).
     """
     facts = RunFacts(RunFiles(directory, env), env, user)
+    try:
+        return _record_of(facts, directory, detailed, env)
+    except RunReadError as error:
+        error.warnings = tuple(facts.deferred_warnings)
+        raise
+
+
+def _record_of(facts: RunFacts, directory: str, detailed: bool, env: Effects) -> RunStatus:
+    """The columns of :func:`run_status_record` over ``facts``, in R's read order."""
     job = column_job_in_slurm(facts)
     facts.selected_gdx  # noqa: B018 - forced here: R reads the GDX selection (:54-64) before the configuration
     run_type = column_run_type(facts)
@@ -378,7 +413,7 @@ def column_job_in_slurm(facts: RunFacts) -> str:
     try:
         return lookup.text
     except SlurmError as error:
-        raise RunReadError(str(error)) from error
+        raise RunReadError(str(error), call=error.call) from error
 
 
 def column_run_type(facts: RunFacts) -> str:
@@ -391,7 +426,7 @@ def column_run_type(facts: RunFacts) -> str:
         return NA
     run_type = facts.run_type
     if run_type is None:
-        raise RunReadError(REPLACEMENT_LENGTH_ZERO)
+        raise RunReadError(REPLACEMENT_LENGTH_ZERO, call=REPLACEMENT_CALL)
     return run_type
 
 
@@ -423,7 +458,7 @@ def _modelstat_from_statistics(facts: RunFacts) -> str | None:
     stats = facts.statistics
     if stats is None or not stats.has_name("config"):
         return NA
-    if _is_magpie_strict(stats):
+    if _is_magpie_strict(stats, MODELSTAT_FALLBACK_CALL):
         if stats.has_name("modelstat"):
             return "".join(r_as_character(value) or NA for value in stats.modelstat)
         return NA
@@ -432,17 +467,17 @@ def _modelstat_from_statistics(facts: RunFacts) -> str | None:
     return NA
 
 
-def _is_magpie_strict(stats: RunStatistics) -> bool:
+def _is_magpie_strict(stats: RunStatistics, call: str) -> bool:
     """``if (stats[["config"]][["model_name"]] == "MAgPIE")`` (``R/getRunStatus.R:91, 108``), no ``isTRUE``.
 
     ``NULL`` (no such element) is ``argument is of length zero``; ``NA`` is ``missing value where
-    TRUE/FALSE needed``.
+    TRUE/FALSE needed``; ``call`` is the ``if`` statement of the caller's R line, which the error reports.
     """
     config = stats.config
     if config is None or config.get("model_name") is None:
-        raise RunReadError(ARGUMENT_OF_LENGTH_ZERO)
+        raise RunReadError(ARGUMENT_OF_LENGTH_ZERO, call=call)
     if stats.model_name is None:
-        raise RunReadError(MISSING_VALUE)
+        raise RunReadError(MISSING_VALUE, call=call)
     return stats.model_name == MAGPIE
 
 
@@ -457,7 +492,7 @@ def column_run_in_app_results(facts: RunFacts) -> str:
     stats = facts.statistics
     if stats is None or not stats.has_name("id"):
         return "no"
-    if stats.has_name("config") and _is_magpie_strict(stats):
+    if stats.has_name("config") and _is_magpie_strict(stats, APP_RESULTS_CALL):
         archive = f"{facts.effects.magpie_results_archive}/"
     else:
         archive = facts.effects.cluster_paths.remind_results_archive
@@ -747,20 +782,20 @@ def column_conv(facts: RunFacts, run_type: str, maximum: str | None) -> str:
     iteration = facts.iteration_number
     flag = facts.convergence_flag
     if flag is None:
-        raise RunReadError(ARGUMENT_OF_LENGTH_ZERO)
+        raise RunReadError(ARGUMENT_OF_LENGTH_ZERO, call=FLAG_TEST_CALL)
     if math.isnan(flag):
-        raise RunReadError(MISSING_VALUE)
+        raise RunReadError(MISSING_VALUE, call=FLAG_TEST_CALL)
     if flag == 1:
         return _CONVERGED_INFES if facts.files.exists(facts.files.non_optimal_gdx) else _CONVERGED
     if flag == 0:
         limit = _as_numeric(maximum)
         if limit is None or iteration is None or math.isnan(limit) or math.isnan(iteration):
-            raise RunReadError(MISSING_VALUE)
+            raise RunReadError(MISSING_VALUE, call=NOT_CONVERGED_TEST_CALL)
         if limit == iteration:
             return _NOT_CONVERGED
     report = facts.solve_report
     if report is None:
-        raise RunReadError(INCORRECT_DIMENSIONS)
+        raise RunReadError(INCORRECT_DIMENSIONS, call=REPY_SUBSET_CALL)
     try:
         return repy_modelstat_text(report)
     except GdxReadError as error:
@@ -851,7 +886,7 @@ def _project_count(block: Any, name: str) -> int | None:
     """
     value = block.get(name) if isinstance(block, Mapping) else None
     if value is None:
-        raise RunReadError(REPLACEMENT_LENGTH_ZERO)
+        raise RunReadError(REPLACEMENT_LENGTH_ZERO, call=REPLACEMENT_CALL)
     try:
         element = scalar(value)
     except RDataError as error:
