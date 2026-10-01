@@ -47,8 +47,9 @@ def test_help_runs(app: object, flag: str) -> None:
     assert "-h, --help" in result.output
 
 
-@pytest.mark.parametrize("app", [rs_app, modeltests_app], ids=["rs", "modeltests"])
+@pytest.mark.parametrize("app", [modeltests_app], ids=["modeltests"])
 def test_placeholder_exits_2(app: object) -> None:
+    """``modeltests`` is still the bring-up placeholder; phase 5 replaces it and removes this test."""
     result = CliRunner().invoke(app, [])  # type: ignore[arg-type]
     assert result.exit_code == 2
     assert "not implemented yet (phase 4/5)" in result.output

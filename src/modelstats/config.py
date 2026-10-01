@@ -81,7 +81,7 @@ def find_config_file(mydir: str | os.PathLike[str], effects: Effects | None = No
         return matches[0]
     if all(name.endswith("yml") for name in matches):
         raise RParityError("the condition has length > 1")
-    raise RParityError("invalid 'description' argument")
+    raise RParityError("invalid 'description' argument", call="gzfile(file)")  # R: load() -> gzfile(file)
 
 
 # ---------------------------------------------------------------------------

@@ -188,6 +188,38 @@ def drop_hint_line(data: bytes) -> bytes:
     return b"".join(lines)
 
 
+#: The ``rs`` options of plan 03 section 3.4 plus the help alias: every pair must appear in ``rs -h`` (D-11).
+HELP_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("-A", "--amt"),
+    ("-b", "--nocolor"),
+    ("-C", "--current"),
+    ("-d", "--daysback"),
+    ("-f", "--filter"),
+    ("-l", "--last"),
+    ("-m", "--magpie"),
+    ("-p", "--prompt"),
+    ("-s", "--sanity"),
+    ("-t", "--time"),
+    ("-u", "--user"),
+    ("-h", "--help"),
+)
+HELP_ARGV = ({"-h"}, {"--help"})
+
+
+def is_help_case(argv_file: Path) -> bool:
+    """Whether the case's argv is exactly ``-h`` or ``--help`` (the only cases whose stdout is a help page)."""
+    lines = argv_file.read_text(encoding="utf-8").splitlines()
+    return set(lines) in HELP_ARGV and len(lines) == 1
+
+
+def assert_help_lists_options(data: bytes, *, label: str = "help") -> None:
+    """D-11: the help page is not compared with optparse's layout, but it must name every option of 3.4."""
+    text = data.decode("utf-8", "replace")
+    missing = [f"{short}, {long}" for short, long in HELP_OPTIONS if short not in text or long not in text]
+    if missing:
+        raise AssertionError(f"{label}: the help output does not list {missing}:\n{text}")
+
+
 def compare_rs(case_id: str, r_dir: Path, py_dir: Path, expected_py_dir: Path | None = None) -> None:
     """One ``rs`` case: argv lines, stdout bytes, the ``.status`` file and stderr (hint line dropped on each side).
 
@@ -196,7 +228,14 @@ def compare_rs(case_id: str, r_dir: Path, py_dir: Path, expected_py_dir: Path | 
 
     When ``expected_py_dir/<id>.<ext>`` exists for ``out``, ``err`` or ``status`` that file replaces the R golden for
     that stream only (an approved deviation of plan 3.5); the other streams of the case still compare with R.
+    A help case (argv exactly ``-h`` or ``--help``) must in addition list every option of plan 03 section 3.4
+    (D-11: the layout is typer's, pinned by the expected-py ``.out`` file, the option list is asserted).
     """
+    if is_help_case(r_dir / f"{case_id}.argv"):
+        py_out = py_dir / f"{case_id}.out"
+        if not py_out.is_file():
+            raise AssertionError(f"{case_id}: the Python generator wrote no {py_out}")
+        assert_help_lists_options(py_out.read_bytes(), label=f"{case_id}.out")
     for ext in ("argv", "out", "status", "err"):
         r_file = r_dir / f"{case_id}.{ext}"
         py_file = py_dir / f"{case_id}.{ext}"

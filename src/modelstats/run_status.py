@@ -407,19 +407,47 @@ def _find_count(directory: str, pattern: str) -> int:
     return count
 
 
-def _model_name_is_magpie(stats: RunStatistics) -> bool:
-    """``if (stats[["config"]][["model_name"]] == "MAgPIE")`` (lines 91 and 108): R's errors for NULL and NA."""
+# The deparsed R calls that try() / Rscript print as ``Error in <call> : <message>`` (PORT-033). R shows only the
+# first deparse line of a long call, hence the line-108 text ending in ``== `` (Rscript 4.6.1, 2026-10-01); the
+# line-91 text is pinned by the rs goldens ``synthetic-bug005*.err``, the Conv texts by ``synthetic-remind*.err``.
+_MAGPIE_CHECK_LINE_91 = 'if (runstatistics$stats[["config"]][["model_name"]] == "MAgPIE") {'
+_MAGPIE_CHECK_LINE_108 = (
+    'if (any(grepl("config", names(runstatistics$stats))) && runstatistics$stats[["config"]][["model_name"]] == '
+)
+_S80_BOOL_CHECK = "if (s80_bool == 1) {"
+_ITERATION_MAX_CHECK = "if (s80_bool == 0 && as.numeric(cm_iteration_max) == iter_no) {"
+_ITERATION_MAX_AND = "s80_bool == 0 && as.numeric(cm_iteration_max) == iter_no"
+
+
+def _model_name_is_magpie(stats: RunStatistics, call: str) -> bool:
+    """``if (stats[["config"]][["model_name"]] == "MAgPIE")`` (lines 91 and 108): R's errors for NULL and NA.
+
+    ``call`` is the caller's deparsed ``if`` (``_MAGPIE_CHECK_LINE_91`` / ``_MAGPIE_CHECK_LINE_108``), carried by the
+    :class:`RParityError` so that R's ``try()`` text can be reproduced.
+    """
     config = stats.config
     if config is None or "model_name" not in config:
-        raise RParityError("argument is of length zero")
+        raise RParityError("argument is of length zero", call=call)
     values = vector(config["model_name"])
     if not values:
-        raise RParityError("argument is of length zero")
+        raise RParityError("argument is of length zero", call=call)
     if len(values) > 1:
-        raise RParityError("the condition has length > 1")
+        raise RParityError("the condition has length > 1", call=call)
     if values[0] is None:
-        raise RParityError("missing value where TRUE/FALSE needed")
+        raise RParityError("missing value where TRUE/FALSE needed", call=call)
     return _as_character(values[0]) == "MAgPIE"
+
+
+def _warn_absent_gdx_symbol(call: str, name: str) -> None:
+    """The warning ``gdx2::readGDX`` (``react = "warning"``) raises for an absent symbol, deferred like R's.
+
+    gdx2 wraps a ``try()`` message, so the text ends with a newline that R's warning printer keeps (the blank
+    line after the ``In addition:`` block of the rs goldens ``synthetic-remind*.err``).
+    """
+    warnings.warn(
+        RWarning(call, f"Error : User specified to read symbol {name}, but it does not exist in the source file\n"),
+        stacklevel=3,
+    )
 
 
 def _is_true_magpie(stats: RunStatistics | None) -> bool:
@@ -625,7 +653,7 @@ class _RunScan:
             if o_modelstat is not None:
                 out[i, "modelstat"] = "".join(_gdx_text(v) for v in o_modelstat).replace("0", ".")
         if out[i, "modelstat"] == "NA" and stats is not None and stats.has("config"):
-            if _model_name_is_magpie(stats):
+            if _model_name_is_magpie(stats, _MAGPIE_CHECK_LINE_91):
                 if stats.has("modelstat"):
                     out[i, "modelstat"] = "".join(_as_character(v) for v in vector(stats.raw.get("modelstat")))
             elif stats.has("modelstat"):
@@ -646,7 +674,7 @@ class _RunScan:
         out[i, "runInAppResults"] = "no"
         if stats is None or not stats.has("id"):
             return
-        if stats.has("config") and _model_name_is_magpie(stats):
+        if stats.has("config") and _model_name_is_magpie(stats, _MAGPIE_CHECK_LINE_108):
             ovdir = eff.getenv("MAGPIE_RESULTS_ARCHIVE_PATH") + "/"
         else:
             ovdir = REMIND_RESULTS_ARCHIVE
@@ -855,12 +883,21 @@ class _RunScan:
         if not _grepl("nash", out[i, "RunType"]) or self.latest_gdx is None:
             return
         gdx = self._gdx(self.latest_gdx)
-        iter_no = read_scalar(gdx, "o_iterationNumber")  # NULL -> numeric(0) when absent
+        # lines 280-281: readGDX (no react = "silent" here) warns about an absent symbol inside the silent
+        # try() and returns NULL; as.numeric(NULL) is numeric(0), not a try-error (PORT-033)
+        iter_no = read_scalar(gdx, "o_iterationNumber")
+        if iter_no is None:
+            _warn_absent_gdx_symbol(
+                'readGDX(gdx = latest_gdx, "o_iterationNumber", format = "simplest")', "o_iterationNumber"
+            )
         s80_bool = read_scalar(gdx, "s80_bool")
         if s80_bool is None:
-            raise RParityError("argument is of length zero")  # if (numeric(0) == 1)
+            _warn_absent_gdx_symbol(
+                'readGDX(gdx = latest_gdx, "s80_bool", type = "Parameter", format = "simplest")', "s80_bool"
+            )
+            raise RParityError("argument is of length zero", call=_S80_BOOL_CHECK)  # if (numeric(0) == 1)
         if math.isnan(s80_bool):
-            raise RParityError("missing value where TRUE/FALSE needed")
+            raise RParityError("missing value where TRUE/FALSE needed", call=_S80_BOOL_CHECK)
         if s80_bool == 1:
             out[i, "Conv"] = "converged (had INFES)" if eff.exists(self.gdx_non_optimal) else "converged"
         elif s80_bool == 0 and self._iteration_max_reached(iter_no):
@@ -876,10 +913,10 @@ class _RunScan:
         TRUE/FALSE needed`` (BUG-038 / D-23); a longer ``cm_iteration_max`` fails in the coercion.
         """
         values = [_as_numeric(v) for v in self.cm_iteration_max]
-        if len(values) > 1:
-            raise RParityError(f"'length = {len(values)}' in coercion to 'logical(1)'")
+        if len(values) > 1:  # R blames the && expression, not the if (Rscript 4.6.1 probe, 2026-10-01)
+            raise RParityError(f"'length = {len(values)}' in coercion to 'logical(1)'", call=_ITERATION_MAX_AND)
         if not values or iter_no is None or math.isnan(values[0]) or math.isnan(iter_no):
-            raise RParityError("missing value where TRUE/FALSE needed")
+            raise RParityError("missing value where TRUE/FALSE needed", call=_ITERATION_MAX_CHECK)
         return values[0] == iter_no
 
     # -- lines 298-306 ----------------------------------------------------------------
