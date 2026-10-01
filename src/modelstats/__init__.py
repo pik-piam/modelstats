@@ -6,6 +6,9 @@ functions ``get_run_status``, ``loop_runs``, ``found_in_slurm``,
 once their modules are ported; see ``migration/03-migration-plan.md``.
 """
 
+from modelstats.formatting import print_output
+from modelstats.run_type import col_run_type
+
 __version__ = "0.31.0"
 
-__all__ = ["__version__"]
+__all__ = ["__version__", "col_run_type", "print_output"]
