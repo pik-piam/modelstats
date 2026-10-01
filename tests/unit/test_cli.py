@@ -886,6 +886,16 @@ def test_found_in_slurm_contract(tmp_path: Path, capsys: pytest.CaptureFixture[s
     assert (status, captured.out, captured.err) == (0, "no\n", "")
 
 
+def test_found_in_slurm_missing_directory_is_no_like_r(capsys: pytest.CaptureFixture[str]) -> None:
+    """Phase-5 diff-review finding 9: R/foundInSlurm.R:13 is ``suppressWarnings(mydir <- normalizePath(mydir))``,
+    which keeps a missing path as given, and the directory is never validated, so R answers ``no`` for it
+    (REMIND's readcoupled.R relies on that value); the endpoint must not add a validation."""
+    eff = FakeEffects(run_table={SQUEUE_ALL_ARGV: ("", 0)})
+    status = run_cli(Options(found_in_slurm="/does/not/exist"), effects=eff)
+    captured = capsys.readouterr()
+    assert (status, captured.out, captured.err) == (0, "no\n", "")
+
+
 def test_found_in_slurm_error_path(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     eff = FakeEffects(run_table={SQUEUE_ALL_ARGV: ("", 127)})  # squeue cannot be run: "error in running command"
     status = run_cli(Options(found_in_slurm=str(tmp_path)), effects=eff)

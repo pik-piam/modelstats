@@ -83,8 +83,9 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+from email.message import Message
 from pathlib import Path
-from typing import NamedTuple, NoReturn
+from typing import IO, NamedTuple, NoReturn
 
 from modelstats.errors import RParityError
 
@@ -113,6 +114,23 @@ HTTP_TIMEOUT = 60.0
 
 #: The commit hash :class:`DryRunEffects` answers ``git log -1`` with.
 DRY_RUN_COMMIT = "0000000000000000000000000000000000000000"
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """``curl`` without ``--location`` (``R/modeltests.R`` lines 58-61): a 3xx answer is the response, not a hop.
+
+    urllib would otherwise follow a 301/302/303 with a second, body-less GET (and a 307/308 with the POST
+    repeated), a request R's AMT never makes; returning ``None`` makes the 3xx an ``HTTPError`` that
+    :meth:`ProductionEffects.post_json` reports like any other status.
+    """
+
+    def redirect_request(
+        self, req: urllib.request.Request, fp: IO[bytes], code: int, msg: str, headers: Message, newurl: str
+    ) -> urllib.request.Request | None:
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirectHandler)
 
 _SHELL_OPERATORS = frozenset({"&&", "||", ";", "|", "&"})
 
@@ -344,8 +362,13 @@ class Effects(abc.ABC):
         """``unlink(path, recursive)``: a file or symlink is removed, a directory only with ``recursive``.
 
         Silent like R: a missing path is a success, a directory without ``recursive`` is
-        left alone (R returns status 1 there, nobody reads it). R's wildcard expansion
-        (``expand = TRUE``) is not reproduced: ``path`` is taken literally.
+        left alone (R returns status 1 there, nobody reads it), and an entry that cannot be
+        removed (a file in a read-only directory, a read-only subdirectory of a recursive
+        delete) is left in place without a condition while every other entry is still
+        attempted (R's ``R_unlink``: partial deletion, status 1, no warning or error; the
+        AMT's only caller ``deleteEmptyRealizationFolders`` ignores the status, so the
+        status is swallowed here). R's wildcard expansion (``expand = TRUE``) is not
+        reproduced: ``path`` is taken literally.
         """
         self._unsupported("delete")
 
@@ -418,10 +441,12 @@ class Effects(abc.ABC):
         """``curl -X POST -H 'Content-Type: application/json' -d <payload> <url>``: ``(status, body)``.
 
         ``payload`` is the JSON text (``json.dumps`` output; ``str`` is sent as UTF-8). The
-        HTTP status and the decoded body come back for any response, a 4xx/5xx included; when
-        no response arrives (no network, refused, invalid URL, timeout) the status is ``0``
-        and the body names the error. Never raises for a network condition: R's ``curl``
-        call only warns through ``system(intern = TRUE)`` and the AMT continues.
+        HTTP status and the decoded body come back for any response, a 4xx/5xx and a 3xx
+        included (``curl`` without ``--location`` does not follow a redirect, so neither
+        does this: one request, the original response); when no response arrives (no
+        network, refused, invalid URL, timeout) the status is ``0`` and the body names the
+        error. Never raises for a network condition: R's ``curl`` call only warns through
+        ``system(intern = TRUE)`` and the AMT continues.
         """
         self._unsupported("post_json")
 
@@ -592,11 +617,14 @@ class ProductionEffects(Effects):
         os.replace(_expand(src), _expand(dst))
 
     def delete(self, path: PathLike, recursive: bool = False) -> None:
+        # R's unlink() never signals a failure (status 1, swallowed: see the Effects docstring); rmtree with
+        # ignore_errors keeps removing the removable entries like R_unlink does
         target = _expand(path)
         if os.path.islink(target) or os.path.isfile(target):
-            os.unlink(target)
+            with contextlib.suppress(OSError):
+                os.unlink(target)
         elif os.path.isdir(target) and recursive:
-            shutil.rmtree(target)
+            shutil.rmtree(target, ignore_errors=True)
 
     def mkdir(self, path: PathLike, parents: bool = False) -> None:
         target = _expand(path)
@@ -682,7 +710,7 @@ class ProductionEffects(Effects):
             request = urllib.request.Request(
                 url, data=data, headers={"Content-Type": "application/json"}, method="POST"
             )
-            with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT) as response:
+            with _OPENER.open(request, timeout=HTTP_TIMEOUT) as response:
                 return int(response.status), response.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as exc:
             try:

@@ -37,6 +37,7 @@ from modelstats.amt.state import (
     read_lastcommit,
     read_runcode,
     read_runs_to_start,
+    required_r_type,
     run_names,
     save_rds,
     with_amt_suffix,
@@ -253,6 +254,28 @@ def test_fresh_table_gets_the_fixture_column_types() -> None:
     fresh = table({"run-AMT_2026-09-28_10.30.27": dict(GRS_ROW), "archive": {**GRS_ROW, "Runtime": None}})
     assert column_r_types(fresh) == GRS_TYPES
     assert list(column_r_types(fresh)) == list(GRS_ROW)  # column order of first assignment
+
+
+def test_remembered_types_are_kept_unless_a_cell_needs_promotion() -> None:
+    """Phase-5 Codex finding 4: an integer ``summationErrors`` read from gRS.rds (the ``length()`` / ``nrow()``
+    assignments of R/getRunStatus.R:328,337,346) is written back as integer; R 4.6.1: ``rbind(int old,
+    data.frame())`` stays integer, ``rbind(int old, dbl new)`` is double, a literal 2.5 promotes."""
+    frame = pd.DataFrame(
+        {"summationErrors": pd.array([1], dtype="Int32"), "rangeErrors": np.array([0.0])}, index=["r1"]
+    )
+    grs = grs_from_frame(frame)
+    assert grs.r_types == {"summationErrors": "integer", "rangeErrors": "double"}
+    assert column_r_types(grs) == {"summationErrors": "integer", "rangeErrors": "double"}
+    out = grs_to_frame(grs)
+    assert str(out["summationErrors"].dtype) == "Int32" and out["rangeErrors"].dtype == np.float64
+    assert rbind_status(grs, StatusTable()).r_types == {"summationErrors": "integer", "rangeErrors": "double"}
+    fresh = table({"r2": {"summationErrors": 0, "rangeErrors": 0}})  # a fresh getRunStatus table: the defaults
+    assert rbind_status(grs, fresh).r_types == {"summationErrors": "double", "rangeErrors": "double"}
+    grs["r1", "summationErrors"] = 2.5
+    assert column_r_types(grs)["summationErrors"] == "double"
+    assert required_r_type([None]) == "logical" and required_r_type([True, None]) == "logical"
+    assert required_r_type([1, None]) == "integer" and required_r_type([2.0]) == "integer"
+    assert required_r_type([1, 1.5]) == "double" and required_r_type([1, "a"]) == "character"
 
 
 # --------------------------------------------------------------------------- rbind
@@ -536,6 +559,17 @@ def test_small_shapes_round_trip_through_r_identical(name: str, tmp_path: Path) 
 def test_empty_table_round_trips_as_data_frame(tmp_path: Path) -> None:
     write_grs(tmp_path / "empty.rds", StatusTable(), WritingEffects())
     assert r_eval(f'cat(identical(data.frame(), readRDS("{tmp_path / "empty.rds"}")))') == "TRUE"
+
+
+@needs_r
+def test_integer_grs_columns_round_trip_through_r_identical(tmp_path: Path) -> None:
+    """Phase-5 Codex finding 4: the numeric getRunStatus columns keep their stored type through a rewrite."""
+    orig = tmp_path / "orig.rds"
+    r_eval(f'saveRDS(data.frame(summationErrors = 1L, rangeErrors = 0, fixErrors = 2L, row.names = "r1"), "{orig}")')
+    eff = WritingEffects()
+    write_grs(tmp_path / "py.rds", read_grs(orig, eff), eff)
+    assert r_identical(orig, tmp_path / "py.rds")
+    assert r_eval(f'cat(vapply(readRDS("{tmp_path / "py.rds"}"), typeof, ""))') == "integer double integer"
 
 
 @needs_r

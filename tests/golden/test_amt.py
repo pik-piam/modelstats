@@ -5,8 +5,9 @@ One test per R golden case directory of ``migration/goldens/amt/`` (46). ``compa
 bytes differ between the two writers by design: the ``sha256`` fields are excluded and the value trees, read by the
 same R code on both sides, must be equal), the Mattermost message text of every POST (the port sends through
 ``Effects.post_json``; R's payload is a string concatenation, BUG-015 / D-15, so the text is compared), the
-traced commands as a multiset of ``(tool, argv, cwd)`` for git, sbatch, rsync, mv, make, Rscript, squeue and
-sacct, the clone diff (``effects.json``: equal path sets per category and equal sha256 for every non-RDS file), the
+traced commands as the ordered sequence of ``(tool, argv, cwd)`` for git, sbatch, rsync, mv, make, Rscript, squeue
+and sacct (R's order is not incidental: the publication sequence of ``R/modeltests.R`` lines 435-443), the clone
+diff (``effects.json``: equal path sets per category and equal sha256 for every non-RDS file), the
 ``unchanged.json`` flags and the MAgPIE ``data-changelog.csv``.
 
 Documented exceptions, each named in ``tests/golden/_compare.py`` and in ``migration/06-port-findings.md``

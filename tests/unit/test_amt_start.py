@@ -468,6 +468,30 @@ def test_sed_replace_of_a_missing_file_prints_seds_message_and_returns_2(
     assert not any(c.method == "write_text" for c in eff.calls)
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores the mode bits")
+def test_sed_replace_in_an_unwritable_directory_prints_seds_message_and_returns_4(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Phase-5 Codex finding 3: GNU sed 4.10 cannot create its temporary file in a read-only ``config/``
+    (``sed: couldn't open temporary file config/sedXXXXXX: Permission denied``, status 4, the file untouched)
+    and R's ``system()`` at lines 100 and 117 ignores the status; the port must not raise."""
+    config = tmp_path / "config"
+    config.mkdir()
+    target = config / "default.cfg"
+    target.write_bytes(b"cfg$force_download <- FALSE\n")
+    os.chmod(config, 0o555)
+    try:
+        eff = RecordingEffects()
+        with eff.chdir(tmp_path):
+            status = st.sed_replace("config/default.cfg", st.FORCE_DOWNLOAD_OFF, st.FORCE_DOWNLOAD_ON, eff)
+        assert status == 4
+        err = capsys.readouterr().err
+        assert err.startswith("sed: couldn't open temporary file config/sed") and err.endswith(": Permission denied\n")
+        assert target.read_bytes() == b"cfg$force_download <- FALSE\n"
+    finally:
+        os.chmod(config, 0o755)
+
+
 # --- deleteEmptyRealizationFolders
 
 

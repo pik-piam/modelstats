@@ -62,9 +62,11 @@ rs --found-in-slurm /p/projects/remind/runs/.../output/SSP2-NPi
 prints exactly the `foundInSlurm()` string plus a newline on stdout and nothing else (no
 information lines, no hint), exit status 0; the values are `no`, the QOS of your job (for
 example `priority`), the user name of someone else's job, or `N users`, with ` startup` or
-` pending` appended as in R. When the state cannot be determined (`squeue` not available,
-an unusable directory) nothing is printed on stdout, the message goes to stderr and the
-exit status is 1.
+` pending` appended as in R. The directory is not validated, exactly as in R: `foundInSlurm()`
+keeps a path that does not exist (its `normalizePath` warning is suppressed) and reports `no`
+for it. Only when the value cannot be computed (`squeue` cannot be run or fails, or
+`foundInSlurm` itself would error in R) nothing is printed on stdout, the message goes to
+stderr and the exit status is 1.
 
 ### Test tiers
 

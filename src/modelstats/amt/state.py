@@ -38,8 +38,11 @@ R facts reproduced here (R 4.6.1, 2026-10-01; the probes are pinned in ``tests/u
   for a run without the file and ``length()``/``nrow()`` (integer) otherwise, so one such run makes the
   column double; the ``projectSummations.rds`` values are integer. The Python table cannot tell an R
   integer from an integral double, so :func:`infer_r_type` uses those column defaults for a table
-  that was not read from a file (``_GRS_NUMERIC_TYPES``); the values are the same either way and
-  the R side never depends on the storage type (``rbind`` promotes).
+  that was not read from a file (``_GRS_NUMERIC_TYPES``); a column whose type IS known (read from
+  ``gRS.rds`` or produced by :func:`rbind_status`) keeps it and is promoted only when a cell needs
+  it (:func:`required_r_type`), as ``rbind(gRSold, data.frame())`` keeps an integer column integer
+  and ``rbind(int, dbl)`` promotes (R 4.6.1 probes, 2026-10-01); the values are the same either way
+  and the R side never depends on the storage type (``rbind`` promotes).
 - ``data.frame()`` (what ``getRunStatus(character(0))`` returns) has ``integer(0)`` row names; an empty
   :class:`GrsTable` is written that way so that ``identical()`` holds.
 
@@ -83,6 +86,7 @@ __all__ = [
     "read_lastcommit",
     "read_runcode",
     "read_runs_to_start",
+    "required_r_type",
     "run_names",
     "save_rds",
     "with_amt_suffix",
@@ -252,7 +256,10 @@ class GrsTable(StatusTable):
 
     ``r_types`` holds the type of every column read from ``gRS.rds`` or produced by
     :func:`rbind_status`; a column assigned later has no entry and is typed by :func:`infer_r_type`
-    at write time (a remembered type is still promoted when later cells need it, as R would).
+    at write time. A remembered type is kept as it is and promoted only when a cell needs it
+    (:func:`required_r_type`: a string, a non-integral float), never by the column defaults of
+    :func:`infer_r_type`, so an integer ``summationErrors`` read from the file is written back as
+    integer, as R's ``rbind`` leaves it.
     """
 
     def __init__(self, r_types: Mapping[str, RType] | None = None) -> None:
@@ -284,19 +291,38 @@ def infer_r_type(column: str, cells: Sequence[object]) -> RType:
     return _GRS_NUMERIC_TYPES.get(column, "double" if has_float else "integer")
 
 
+def required_r_type(cells: Sequence[object]) -> RType:
+    """The lowest R storage type that holds ``cells`` (no column defaults, unlike :func:`infer_r_type`).
+
+    No non-NA cell is logical; any string makes it character; a non-integral float double; any other
+    number (an int, an integral float) integer; bools alone logical. Used to promote a REMEMBERED column
+    type: R's ``rbind`` promotes a stored integer column only when a new value needs it.
+    """
+    present = [c for c in cells if c is not None]
+    if not present:
+        return "logical"
+    if any(isinstance(c, str) for c in present):
+        return "character"
+    if any(isinstance(c, float) and not c.is_integer() for c in present):
+        return "double"
+    if any(isinstance(c, int | float) and not isinstance(c, bool) for c in present):
+        return "integer"
+    return "logical"
+
+
 def _promote(a: RType, b: RType) -> RType:
     return a if _RANK[a] >= _RANK[b] else b
 
 
 def column_r_types(table: StatusTable) -> dict[str, RType]:
-    """The R storage type of every column: remembered by a :class:`GrsTable`, inferred otherwise."""
+    """The R storage type of every column: remembered by a :class:`GrsTable` (promoted only when a cell
+    needs it, :func:`required_r_type`), inferred with the getRunStatus defaults otherwise."""
     remembered: Mapping[str, RType] = table.r_types if isinstance(table, GrsTable) else {}
     out: dict[str, RType] = {}
     for column in table.columns:
         cells = table.column(column) or []
-        inferred = infer_r_type(column, cells)
         known = remembered.get(column)
-        out[column] = inferred if known is None else _promote(known, inferred)
+        out[column] = infer_r_type(column, cells) if known is None else _promote(known, required_r_type(cells))
     return out
 
 

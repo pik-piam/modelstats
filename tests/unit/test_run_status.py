@@ -452,6 +452,25 @@ def test_runtime_live_off_cluster_and_rounding(tmp_path: Path) -> None:
     assert status_of(run, later)["Runtime"] == 2  # round half to even
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads any file")
+def test_unreadable_full_log_is_scanned_like_a_failed_grep(tmp_path: Path) -> None:
+    """Phase-5 Codex finding 10: ``full.log`` exists but cannot be read. R's ``grep`` pipelines return
+    ``character(0)`` inside ``suppressWarnings(try(...))`` (lines 154, 157), so ``Iter`` stays ``NA/<max>``,
+    ``RunStatus`` falls back to ``Run interrupted`` off cluster and every other column is still filled;
+    the port used to raise ``PermissionError`` and ``loop_runs`` skipped the run."""
+    run = Run(tmp_path).remind_config().stats().gdx("full.gdx").full_log(loops="12", status="Normal completion")
+    os.chmod(run.dir / "full.log", 0)
+    if os.access(run.dir / "full.log", os.R_OK):
+        pytest.skip("the file is still readable (privileged process)")
+    try:
+        row = status_of(run, local())
+    finally:
+        os.chmod(run.dir / "full.log", 0o644)
+    assert row["Iter"] == "NA/100" and row["RunStatus"] == "Run interrupted"
+    assert row["RunType"] == REMIND_CONFIG_RUNTYPE and row["Runtime"] is not None and row["Conv"] is not None
+    assert status_of(run, local())["Iter"] == "12/100"  # readable again
+
+
 def test_iter_and_run_status_from_full_log(tmp_path: Path) -> None:
     run = Run(tmp_path).remind_config().full_log(loops="12", status="Terminated by user(s) at 10:00")
     row = status_of(run, local())

@@ -8,6 +8,7 @@ Expected values marked "R" come from R 4.6.1 ``system(cmd, intern = TRUE)`` unde
 
 from __future__ import annotations
 
+import os
 import random
 import re
 import shutil
@@ -25,6 +26,34 @@ def write(tmp_path: Path, data: bytes, name: str = "f.txt") -> Path:
     path = tmp_path / name
     path.write_bytes(data)
     return path
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads any file")
+def test_unreadable_file_gives_the_empty_output_of_the_failed_pipeline(tmp_path: Path) -> None:
+    """Phase-5 Codex finding 10: grep/tac/tail/awk report an unreadable file on stderr and print nothing, and R's
+    ``system(intern = TRUE)`` returns ``character(0)`` without an error (R 4.6.1; every site of
+    ``R/getRunStatus.R`` is inside ``suppressWarnings(try(...))``); the port must not raise."""
+    path = write(tmp_path, b"LOOPS = 3\n*** Status: Normal completion\nWarning message:\n")
+    os.chmod(path, 0)
+    if os.access(path, os.R_OK):
+        pytest.skip("the file is still readable (privileged process)")
+    try:
+        assert ts.all_matches(path, "LOOPS") == []
+        assert ts.last_match_forward(path, "LOOPS") is None
+        assert ts.count_lines_matching(path, ".") == 0
+        assert list(ts.tac_lines(path)) == []
+        assert ts.last_match(path, "Status") is None
+        assert ts.last_nonempty_line(path) == ""
+        assert ts.last_line(path) is None
+        assert ts.grep_z_only_matching(path, ts.MAGPIE_WARNINGS_PATTERN) == b""
+        assert ts.magpie_warnings(path) == "0"
+        assert ts.remind_warnings(path) == "0"
+    finally:
+        os.chmod(path, 0o644)
+    assert ts.last_match_forward(path, "LOOPS") == "LOOPS = 3"  # readable again: the real content
+    assert (
+        ts.all_matches(tmp_path / "missing.log", "x") == [] and ts.last_line(tmp_path) is None
+    )  # missing, a directory
 
 
 # ---------------------------------------------------------------------------

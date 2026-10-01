@@ -260,8 +260,8 @@ def compare_rs(case_id: str, r_dir: Path, py_dir: Path, expected_py_dir: Path | 
 # amt: the semantic comparison of plan 03 section 4.5
 # ---------------------------------------------------------------------------
 
-#: The traced tools whose (tool, argv, cwd) multiset must agree. ``curl`` is excluded: the port sends the
-#: notification through ``Effects.post_json`` and the payload is compared through ``mattermost.json`` instead.
+#: The traced tools whose ordered sequence of (tool, argv, cwd) calls must agree. ``curl`` is excluded: the port
+#: sends the notification through ``Effects.post_json`` and the payload is compared through ``mattermost.json`` instead.
 #: ``sed`` is excluded: the port edits ``config/default.cfg`` in place of ``sed -i`` (same bytes, asserted through
 #: ``effects.json``). The port's ``Rscript`` bridges are not traced on either side (the fake Rscript intercepts
 #: ``start.R`` only; R ran that code in-process), so they never appear here.
@@ -303,9 +303,12 @@ def mattermost_records(path: Path) -> list[tuple[str | None, str]]:
     return records
 
 
-def trace_multiset(path: Path) -> Counter[tuple[str, tuple[str, ...], str]]:
-    """The ``(tool, argv, cwd)`` multiset of the traced calls of :data:`AMT_TRACE_TOOLS` (``trace.jsonl``)."""
-    entries: Counter[tuple[str, tuple[str, ...], str]] = Counter()
+type TraceCall = tuple[str, tuple[str, ...], str]
+
+
+def trace_sequence(path: Path) -> list[TraceCall]:
+    """The ordered ``(tool, argv, cwd)`` calls of :data:`AMT_TRACE_TOOLS` in a ``trace.jsonl`` (``[]`` when absent)."""
+    entries: list[TraceCall] = []
     if not path.is_file():
         return entries
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -315,24 +318,46 @@ def trace_multiset(path: Path) -> Counter[tuple[str, tuple[str, ...], str]]:
         tool = str(record.get("tool"))
         if tool not in AMT_TRACE_TOOLS:
             continue
-        entries[(tool, tuple(str(a) for a in record["argv"]), str(record.get("cwd")))] += 1
+        entries.append((tool, tuple(str(a) for a in record["argv"]), str(record.get("cwd"))))
     return entries
 
 
-def _format_counter(counter: Counter[tuple[str, tuple[str, ...], str]]) -> str:
-    return "\n".join(f"    {n} x {tool} {list(argv)} (cwd {cwd})" for (tool, argv, cwd), n in sorted(counter.items()))
+def _format_call(call: TraceCall | None) -> str:
+    if call is None:
+        return "(nothing)"
+    tool, argv, cwd = call
+    return f"{tool} {list(argv)} (cwd {cwd})"
+
+
+def _format_counter(counter: Counter[TraceCall]) -> str:
+    return "\n".join(f"    {n} x {_format_call(call)}" for call, n in sorted(counter.items()))
 
 
 def compare_trace(r_file: Path, py_file: Path, *, label: str) -> None:
-    """Assert equal multisets of traced ``(tool, argv, cwd)`` for the tools of :data:`AMT_TRACE_TOOLS`."""
-    r_calls, py_calls = trace_multiset(r_file), trace_multiset(py_file)
+    """Assert the same ordered sequence of traced ``(tool, argv, cwd)`` calls for :data:`AMT_TRACE_TOOLS`.
+
+    R's order is not incidental (plan 03 section 4.5 allows order-insensitivity only where it is): the
+    publication sequence ``git reset``, ``pull``, ``add``, ``commit``, ``push`` of ``R/modeltests.R`` lines
+    435-443 and the ``squeue`` / ``rsync`` / ``sbatch`` sequences depend on it, and ``modeltests`` runs its
+    subprocesses sequentially on both sides. The failure text names the first divergence and, to tell an
+    order-only difference from a missing call, the multiset difference as well.
+    """
+    r_calls, py_calls = trace_sequence(r_file), trace_sequence(py_file)
     if r_calls == py_calls:
         return
-    only_r = r_calls - py_calls
-    only_py = py_calls - r_calls
+    first = next(
+        (k for k, (a, b) in enumerate(zip(r_calls, py_calls, strict=False)) if a != b), min(len(r_calls), len(py_calls))
+    )
+    r_at = r_calls[first] if first < len(r_calls) else None
+    py_at = py_calls[first] if first < len(py_calls) else None
+    only_r = Counter(r_calls) - Counter(py_calls)
+    only_py = Counter(py_calls) - Counter(r_calls)
     raise AssertionError(
-        f"{label}: the traced commands differ\n  only in R ({sum(only_r.values())}):\n{_format_counter(only_r)}\n"
+        f"{label}: the traced command sequences differ (R {len(r_calls)} calls, Python {len(py_calls)} calls);"
+        f" first divergence at index {first}:\n    R:      {_format_call(r_at)}\n    Python: {_format_call(py_at)}\n"
+        f"  only in R ({sum(only_r.values())}):\n{_format_counter(only_r)}\n"
         f"  only in Python ({sum(only_py.values())}):\n{_format_counter(only_py)}"
+        + ("\n  (same multiset: an order-only difference)" if not only_r and not only_py else "")
     )
 
 
@@ -436,8 +461,9 @@ def compare_amt(case_id: str, r_root: Path, py_root: Path, expected_py_root: Pat
     ``print(oldRuns)`` block live there); ``state/*.json`` by value (``sha256`` excluded, see
     :func:`compare_state_files`); ``mattermost.json`` (the url and message text of every POST, in order; the
     Python payload is ``json.dumps``, R's a string concatenation, BUG-015 / D-15, so the TEXT is compared);
-    ``trace.jsonl`` as the multiset of :data:`AMT_TRACE_TOOLS` calls (curl -> ``post_json``, sed -> file edit:
-    the two documented exclusions); ``effects.json`` (see :func:`compare_effects`); ``unchanged.json``;
+    ``trace.jsonl`` as the ordered sequence of :data:`AMT_TRACE_TOOLS` calls (R's order is not incidental: plan
+    4.5; the publication sequence ``R/modeltests.R`` lines 435-443; curl -> ``post_json``, sed -> file edit: the
+    two documented exclusions); ``effects.json`` (see :func:`compare_effects`); ``unchanged.json``;
     ``data-changelog.csv`` (presence and bytes). ``stderr.txt`` is not compared (plan 4.5: R messages; the two
     documented textual differences are the changelog bridge's ``readRDS(report)`` call and notify's failure line).
     No temporary path is normalised: every compared text names paths below the fixture root only.

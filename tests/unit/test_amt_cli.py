@@ -14,10 +14,14 @@ directory is ``cannot change working directory`` (call ``setwd(dir = new)``).
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
+import shlex
 import warnings
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from typer.testing import CliRunner
 
@@ -26,6 +30,7 @@ from modelstats.amt import cli
 from modelstats.amt.cli import AmtDryRunEffects, Options, app, is_bridge_argv, run_cli
 from modelstats.env import DryRunEffects, ProductionEffects
 from modelstats.errors import RParityError, RWarning
+from modelstats.rdata_io import read_rds
 
 
 @pytest.fixture
@@ -233,23 +238,101 @@ def test_is_bridge_argv() -> None:
     assert not is_bridge_argv(["git", "log", "-1"])
 
 
-def test_dry_run_effects_execute_bridges_and_log_everything_else(monkeypatch: pytest.MonkeyPatch) -> None:
-    executed: list[list[str]] = []
+def _never_run(self: object, *args: object, **kwargs: object) -> object:
+    raise AssertionError("a dry run executed a subprocess")
 
-    def fake_run(self: object, argv: object, *args: object, **kwargs: object) -> object:
-        executed.append(list(argv))  # type: ignore[call-overload]
-        import subprocess
 
-        return subprocess.CompletedProcess(list(argv), 0, '{"bridge": "x", "ok": true}\n', "")  # type: ignore[call-overload]
+def _json_line(stdout: str) -> dict[str, object]:
+    line = stdout.rstrip("\n").split("\n")[-1]
+    parsed = json.loads(line)
+    assert isinstance(parsed, dict)
+    return parsed
 
-    monkeypatch.setattr(ProductionEffects, "run", fake_run)
+
+def test_dry_run_effects_answer_the_bridges_without_executing_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase-5 Codex finding 1: the bridges would run REMIND's scripts/start/*.R and magpie4, so a dry run never
+    executes them; they are logged like every other command and answered with an empty result."""
+    monkeypatch.setattr(ProductionEffects, "run", _never_run)
     eff = AmtDryRunEffects()
-    bridge = ["Rscript", "/pkg/bridge_scripts/select_scenarios.R", "--out", "/tmp/x.rds"]
-    assert eff.run(bridge).returncode == 0
-    assert executed == [bridge]
+    out = tmp_path / "x.rds"
+    bridge = ["Rscript", "/pkg/bridge_scripts/select_scenarios.R", "--out", str(out), "--suffix", "-AMT"]
+    proc = eff.run(bridge)
+    assert (proc.returncode, proc.stderr) == (0, "")
+    assert _json_line(proc.stdout) == {
+        "bridge": "select_scenarios",
+        "ok": True,
+        "row_names": [],
+        "columns": [],
+        "nrow": 0,
+        "out": str(out),
+        "sources": [],
+        "r_version": "dry run: not executed",
+    }
+    frame = read_rds(out)
+    assert isinstance(frame, pd.DataFrame) and frame.shape == (0, 0)
+    changelog = tmp_path / "data-changelog.csv"
+    bridge2 = ["Rscript", "/pkg/bridge_scripts/add_to_data_changelog.R", "--report", "run/report.rds"]
+    bridge2 += ["--changelog", str(changelog), "--version-id", "default_2026-10-01"]
+    proc = eff.run(bridge2, cwd=tmp_path)
+    assert (proc.returncode, proc.stderr) == (0, "")
+    assert _json_line(proc.stdout) == {
+        "bridge": "add_to_data_changelog",
+        "ok": True,
+        "changelog": str(changelog),
+        "version_id": "default_2026-10-01",
+        "nrow": None,
+        "magpie4_version": None,
+        "r_version": "dry run: not executed",
+    }
+    assert not changelog.exists()
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["x.rds"]  # the --out RDS is the one file written
     assert eff.run_shell("git log -1").stdout.startswith("commit 0000000")
-    assert executed == [bridge]  # not executed
-    assert [e.action for e in eff.events] == ["run (executed: a read-only bridge)", "run"]
+    assert [e.action for e in eff.events] == ["run", "run", "run"]
+    assert eff.log[0] == f"would run {shlex.join(bridge)} (cwd {os.getcwd()}, answered status 0)"
+    assert eff.log[1] == f"would run {shlex.join(bridge2)} (cwd {tmp_path}, answered status 0)"
+
+
+def _tree_digest(root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(p for p in root.rglob("*")):
+        digest.update(str(path.relative_to(root)).encode())
+        digest.update(b"/" if path.is_dir() else path.read_bytes())
+    return digest.hexdigest()
+
+
+def test_dry_run_start_never_runs_the_checkouts_r_code(
+    tmp_path: Path, tree: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The reproduction of the phase-5 Codex finding 1: a REMIND dry run with a startup script that writes a marker.
+
+    Before the fix the select_scenarios bridge sourced ``scripts/start/*.R`` for real and the marker appeared
+    outside mydir while the CLI still claimed ``nothing was changed``. Now no R code runs at all, the marker does
+    not exist, the tree is byte-identical and the dry run ends with an empty scenario list.
+    """
+    marker = tmp_path / "MARKER-from-dry-run"
+    _status(tree, "next:start\n")
+    (tree / "config").mkdir()
+    (tree / "config" / "default.cfg").write_text("cfg$force_download <- FALSE\n")
+    (tree / "config" / "scenario_config.csv").write_text("title;start\nSSP2-NPi;1\n")
+    (tree / "scripts" / "start").mkdir(parents=True)
+    (tree / "scripts" / "start" / "zz_marker.R").write_text(f'writeLines("changed", "{marker}")\n')
+    (tree / "modules").mkdir()
+    (tree / "magpie").mkdir()
+    monkeypatch.setenv("autoRenvFixDeps", "")  # start_runs sets it for real; restored (deleted) afterwards
+    monkeypatch.setattr(ProductionEffects, "run", _never_run)
+    before = _tree_digest(tmp_path)
+    status = run_cli(Options(mydir=f"{tree}/", model="REMIND", dry_run=True, email=False, comp_scen=False))
+    assert status == 0
+    assert not marker.exists()
+    assert _tree_digest(tmp_path) == before
+    assert _read_status(tree) == "next:start\n"
+    err = capsys.readouterr().err
+    assert "dry run: would run Rscript " in err and "select_scenarios.R --out " in err
+    assert "(executed" not in err
+    assert f"dry run: would write {tree}/runsToStart.rds (RDS, " in err
+    assert err.endswith("mutation(s) logged, nothing was changed\n")
 
 
 def test_help_lists_every_option() -> None:

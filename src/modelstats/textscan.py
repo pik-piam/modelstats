@@ -20,6 +20,13 @@ one shell pipeline, including the quirks of the tools involved:
   parity). ``grep -P`` in a UTF-8 locale never lets ``.`` match an invalid byte, which the
   patterns reproduce on text decoded with ``surrogateescape``.
 
+A file the pipeline cannot open (unreadable, missing, a directory) makes the tool report the
+failure on stderr with nothing on stdout, and R's ``system(intern = TRUE)`` returns
+``character(0)`` with a status attribute, never an error (every call site of
+``R/getRunStatus.R`` is inside ``suppressWarnings(try(...))`` or uses the result as it is);
+every function here reproduces that empty result (``[]``, ``None``, ``0``, ``""``, ``b""``)
+instead of raising ``OSError`` (:func:`_open`).
+
 Patterns are Python regular expressions applied with ``re.search`` to one line at a time
 (without its newline). The R code uses basic ``grep`` syntax, so callers translate: ``*** Status:``
 becomes ``\\*\\*\\* Status: ``, everything else used by modelstats is literal or POSIX-compatible.
@@ -32,7 +39,6 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Iterator
-from pathlib import Path
 from typing import BinaryIO
 
 __all__ = [
@@ -87,6 +93,14 @@ def _expand(path: PathLike) -> str:
     return os.path.expanduser(os.fspath(path))
 
 
+def _open(path: PathLike) -> BinaryIO | None:
+    """The file opened for reading, or ``None`` when the pipeline's tool could not open it (empty output)."""
+    try:
+        return open(_expand(path), "rb")
+    except OSError:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # forward reading
 # ---------------------------------------------------------------------------
@@ -94,7 +108,10 @@ def _expand(path: PathLike) -> str:
 
 def iter_lines(path: PathLike) -> Iterator[str]:
     """The lines of a file as grep sees them: split on ``\\n`` only, final partial line included."""
-    with open(_expand(path), "rb") as fh:
+    fh = _open(path)
+    if fh is None:
+        return
+    with fh:
         for raw in fh:
             yield _decode(raw[:-1] if raw.endswith(b"\n") else raw)
 
@@ -178,7 +195,10 @@ def _reverse_lines(fh: BinaryIO, end: int, chunk_size: int) -> Iterator[bytes]:
 
 def tac_lines(path: PathLike, chunk_size: int = CHUNK_SIZE) -> Iterator[str]:
     """The lines ``tac FILE`` emits, in that order, with its glue quirk for a missing final newline."""
-    with open(_expand(path), "rb") as fh:
+    fh = _open(path)
+    if fh is None:
+        return
+    with fh:
         size = fh.seek(0, os.SEEK_END)
         partial, end = _partial_tail(fh, size, chunk_size)
         lines = _reverse_lines(fh, end, chunk_size)
@@ -197,7 +217,10 @@ def last_match(path: PathLike, regex: Pattern, chunk_size: int = CHUNK_SIZE) -> 
     """
     pattern = _compile(regex)
     block_pattern = re.compile(pattern.pattern, pattern.flags | re.MULTILINE)
-    with open(_expand(path), "rb") as fh:
+    fh = _open(path)
+    if fh is None:
+        return None
+    with fh:
         size = fh.seek(0, os.SEEK_END)
         partial, end = _partial_tail(fh, size, chunk_size)
         blocks = _reverse_blocks(fh, end, chunk_size)
@@ -230,7 +253,10 @@ def _prepend(block: bytes, blocks: Iterator[bytes]) -> Iterator[bytes]:
 
 def last_nonempty_line(path: PathLike, chunk_size: int = CHUNK_SIZE) -> str:
     """``awk 'NF{s=$0}END{print s}' FILE``: the last line with a non-blank character, else ``""``."""
-    with open(_expand(path), "rb") as fh:
+    fh = _open(path)
+    if fh is None:
+        return ""
+    with fh:
         size = fh.seek(0, os.SEEK_END)
         partial, end = _partial_tail(fh, size, chunk_size)
         if partial and partial.strip(b" \t"):
@@ -243,7 +269,10 @@ def last_nonempty_line(path: PathLike, chunk_size: int = CHUNK_SIZE) -> str:
 
 def last_line(path: PathLike, chunk_size: int = CHUNK_SIZE) -> str | None:
     """``tail -1 FILE``: ``None`` for an empty file, else the last line (``""`` for a trailing blank line)."""
-    with open(_expand(path), "rb") as fh:
+    fh = _open(path)
+    if fh is None:
+        return None
+    with fh:
         size = fh.seek(0, os.SEEK_END)
         if size == 0:
             return None
@@ -263,7 +292,11 @@ def grep_z_only_matching(path: PathLike, pattern: re.Pattern[str]) -> bytes:
 
     The whole file is read (the slurm.log / log.txt files this serves are a few hundred KB).
     """
-    data = Path(_expand(path)).read_bytes()
+    fh = _open(path)
+    if fh is None:
+        return b""
+    with fh:
+        data = fh.read()
     out = bytearray()
     for record in data.split(b"\0"):
         for match in pattern.finditer(_decode(record)):

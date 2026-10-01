@@ -213,7 +213,10 @@ def sed_replace(path: PathLike, old: str, new: str, effects: Effects | None = No
     ``old`` is matched literally. The file is rewritten atomically (sed's temporary file and rename, the
     mode kept) even when nothing changed, as sed does. A file sed could not read makes sed print
     ``sed: can't read <path>: <reason>`` on stderr and exit with status 2, which R's ``system()`` ignores;
-    the same happens here and the status is returned.
+    the same happens here and the status is returned. A file in a directory sed cannot write to (a read-only
+    ``config/``) makes GNU sed 4.10 print ``sed: couldn't open temporary file <dir>/sed<random>: <reason>`` and
+    exit with status 4, the file untouched; the same happens here (the random suffix cannot be reproduced:
+    the placeholder ``sedXXXXXX`` stands in), nothing is raised and startRuns goes on as R does.
     """
     eff = _effects(effects)
     try:
@@ -224,7 +227,14 @@ def sed_replace(path: PathLike, old: str, new: str, effects: Effects | None = No
         sys.stderr.flush()
         return 2
     edited = "\n".join(line.replace(old, new, 1) for line in text.split("\n"))
-    eff.write_text(path, edited, atomic=True)
+    try:
+        eff.write_text(path, edited, atomic=True)
+    except OSError as exc:
+        directory = os.path.dirname(os.fspath(path)) or "."
+        reason = exc.strerror or "Permission denied"
+        sys.stderr.write(f"sed: couldn't open temporary file {directory}/sedXXXXXX: {reason}\n")
+        sys.stderr.flush()
+        return 4
     return 0
 
 

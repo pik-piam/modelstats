@@ -565,6 +565,29 @@ def test_delete_like_unlink(tmp_path: Path) -> None:
     assert not (tmp_path / "dangling").is_symlink()
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores the mode bits")
+def test_delete_swallows_permission_errors_like_unlink(tmp_path: Path) -> None:
+    """Phase-5 Codex findings 2 and 11: R's ``unlink(recursive = TRUE)`` of a stale realization holding a
+    read-only subdirectory returns status 1 silently, removes every removable entry and keeps the rest
+    (R 4.6.1: ``exists`` TRUE FALSE TRUE for ``sub/f``, ``ok/g``, ``top``); ``startRuns()`` goes on."""
+    effects = ProductionEffects()
+    stale = tmp_path / "stale"
+    (stale / "sub").mkdir(parents=True)
+    (stale / "sub" / "f").write_text("")
+    (stale / "ok").mkdir()
+    (stale / "ok" / "g").write_text("")
+    (stale / "top").write_text("")
+    os.chmod(stale / "sub", 0o555)
+    try:
+        effects.delete(stale / "sub" / "f")  # a file in a read-only directory: R unlink() -> status 1, silent
+        assert (stale / "sub" / "f").exists()
+        effects.delete(stale, recursive=True)  # no exception; the removable siblings go, sub/f stays
+        assert (stale / "sub" / "f").exists()
+        assert not (stale / "ok").exists() and not (stale / "top").exists()
+    finally:
+        os.chmod(stale / "sub", 0o755)
+
+
 def test_mkdir_like_dir_create(tmp_path: Path) -> None:
     effects = ProductionEffects()
     effects.mkdir(tmp_path / "archive")
@@ -684,10 +707,22 @@ class _WebhookHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b"server error")
             return
+        if self.path == "/redirect":
+            self.send_response(302)
+            self.send_header("Location", "/other")
+            self.end_headers()
+            self.wfile.write(b"moved")
+            return
         self.send_response(200)
         self.send_header("Content-Type", "text/plain")
         self.end_headers()
         self.wfile.write(b"ok")
+
+    def do_GET(self) -> None:  # noqa: N802 - http.server API
+        type(self).received.append(("GET " + self.path, "", b""))
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"other-get")
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002 - http.server API
         return None
@@ -717,6 +752,13 @@ def test_post_json_posts_the_payload_as_json(webhook: str) -> None:
 
 def test_post_json_returns_the_status_of_a_failing_request(webhook: str) -> None:
     assert ProductionEffects().post_json(f"{webhook}/fail", '{"text": "x"}') == (500, "server error")
+
+
+def test_post_json_does_not_follow_redirects(webhook: str) -> None:
+    """Phase-5 Codex finding 6: R's curl has no --location (R/modeltests.R:58-61), so a 302 is the response;
+    urllib would otherwise issue a second, body-less GET the AMT never makes."""
+    assert ProductionEffects().post_json(f"{webhook}/redirect", '{"text": "x"}') == (302, "moved")
+    assert _WebhookHandler.received == [("/redirect", "application/json", b'{"text": "x"}')]
 
 
 def test_post_json_without_a_response_is_status_zero() -> None:
