@@ -1,0 +1,3 @@
+alice /p/projects/synthetic/remind/output/running running 2:15:00 RUNNING standby
+alice /p/projects/synthetic/remind/output/nolog nolog 2:15:00 RUNNING standby
+alice /p/projects/synthetic/magpie/output/mag-running mag-running 2:15:00 RUNNING standby

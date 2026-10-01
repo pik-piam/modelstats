@@ -1,0 +1,905 @@
+{
+ "alias.gdx": {
+  "modelstat_string": "",
+  "p80_repy": {
+   "dim": [
+    12,
+    1,
+    4
+   ],
+   "dimnames": {
+    "2": [],
+    "regi": [
+     "LAM",
+     "OAS",
+     "SSA",
+     "EUR",
+     "NEU",
+     "MEA",
+     "REF",
+     "CAZ",
+     "CHA",
+     "IND",
+     "JPN",
+     "USA"
+    ],
+    "solveinfo80": [
+     "solvestat",
+     "modelstat",
+     "resusd",
+     "objval"
+    ]
+   },
+   "dimnames_names": [
+    "regi",
+    "",
+    "solveinfo80"
+   ],
+   "modelstat_string": "000200004000",
+   "values": [
+    "0",
+    "0",
+    "0",
+    "1",
+    "0",
+    "0",
+    "0",
+    "0",
+    "1",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "2",
+    "0",
+    "0",
+    "0",
+    "0",
+    "4",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "10.5",
+    "0",
+    "0",
+    "0",
+    "0",
+    "10.5",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "100.25",
+    "0",
+    "0",
+    "0",
+    "0",
+    "100.25",
+    "0",
+    "0",
+    "0"
+   ]
+  }
+ },
+ "altnames.gdx": {
+  "modelstat_string": "",
+  "p80_repy": {
+   "dim": [
+    1,
+    1,
+    12
+   ],
+   "dimnames": {
+    "1": "GLO",
+    "2": [],
+    "regi.info": [
+     "A1.solvestat",
+     "B2.solvestat",
+     "C3.solvestat",
+     "A1.modelstat",
+     "B2.modelstat",
+     "C3.modelstat",
+     "A1.resusd",
+     "B2.resusd",
+     "C3.resusd",
+     "A1.objval",
+     "B2.objval",
+     "C3.objval"
+    ]
+   },
+   "dimnames_names": [
+    "",
+    "",
+    "regi.info"
+   ],
+   "modelstat_string": "204",
+   "values": [
+    "1",
+    "0",
+    "1",
+    "2",
+    "0",
+    "4",
+    "10.5",
+    "0",
+    "10.5",
+    "100.25",
+    "0",
+    "100.25"
+   ]
+  }
+ },
+ "empty_file.gdx": {
+  "r_process": {
+   "returncode": -6,
+   "stderr_tail": [
+    "free(): invalid pointer"
+   ]
+  }
+ },
+ "empty_records.gdx": {
+  "first_found": "0",
+  "modelstat_string": ".",
+  "o_iterationNumber": "0",
+  "p80_repy": {
+   "dim": [
+    12,
+    1,
+    4
+   ],
+   "dimnames": {
+    "2": [],
+    "all_regi": [
+     "LAM",
+     "OAS",
+     "SSA",
+     "EUR",
+     "NEU",
+     "MEA",
+     "REF",
+     "CAZ",
+     "CHA",
+     "IND",
+     "JPN",
+     "USA"
+    ],
+    "solveinfo80": [
+     "solvestat",
+     "modelstat",
+     "resusd",
+     "objval"
+    ]
+   },
+   "dimnames_names": [
+    "all_regi",
+    "",
+    "solveinfo80"
+   ],
+   "modelstat_string": "000000000000",
+   "values": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ]
+  },
+  "p80_trackConsecFail": {
+   "dim": [
+    12,
+    1,
+    1
+   ],
+   "dimnames": {
+    "2": [],
+    "3": [],
+    "all_regi": [
+     "LAM",
+     "OAS",
+     "SSA",
+     "EUR",
+     "NEU",
+     "MEA",
+     "REF",
+     "CAZ",
+     "CHA",
+     "IND",
+     "JPN",
+     "USA"
+    ]
+   },
+   "dimnames_names": [
+    "all_regi",
+    "",
+    ""
+   ],
+   "quitte": {
+    "region": [
+     "LAM",
+     "OAS",
+     "SSA",
+     "EUR",
+     "NEU",
+     "MEA",
+     "REF",
+     "CAZ",
+     "CHA",
+     "IND",
+     "JPN",
+     "USA"
+    ],
+    "value": [
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0"
+    ]
+   },
+   "values": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ]
+  },
+  "s80_bool": "0"
+ },
+ "first_found_second.gdx": {
+  "first_found": [
+   "2",
+   "2",
+   "0",
+   "2"
+  ],
+  "modelstat_string": "22.2",
+  "p80_modelstat": {
+   "dim": [
+    1,
+    4,
+    1
+   ],
+   "dimnames": {
+    "1": "GLO",
+    "3": [],
+    "t": [
+     "y1995",
+     "y2000",
+     "y2005",
+     "y2010"
+    ]
+   },
+   "dimnames_names": [
+    "",
+    "t",
+    ""
+   ],
+   "values": [
+    "2",
+    "2",
+    "0",
+    "2"
+   ]
+  }
+ },
+ "full.gdx": {
+  "cm_abortOnConsecFail": "2",
+  "first_found": "2",
+  "modelstat_string": "2",
+  "o_iterationNumber": "5",
+  "p80_repy": {
+   "dim": [
+    12,
+    1,
+    4
+   ],
+   "dimnames": {
+    "2": [],
+    "all_regi": [
+     "LAM",
+     "OAS",
+     "SSA",
+     "EUR",
+     "NEU",
+     "MEA",
+     "REF",
+     "CAZ",
+     "CHA",
+     "IND",
+     "JPN",
+     "USA"
+    ],
+    "solveinfo80": [
+     "solvestat",
+     "modelstat",
+     "resusd",
+     "objval"
+    ]
+   },
+   "dimnames_names": [
+    "all_regi",
+    "",
+    "solveinfo80"
+   ],
+   "modelstat_string": "222222222272",
+   "values": [
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "2",
+    "7",
+    "2",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25"
+   ]
+  },
+  "p80_trackConsecFail": {
+   "dim": [
+    12,
+    1,
+    1
+   ],
+   "dimnames": {
+    "2": [],
+    "3": [],
+    "all_regi": [
+     "LAM",
+     "OAS",
+     "SSA",
+     "EUR",
+     "NEU",
+     "MEA",
+     "REF",
+     "CAZ",
+     "CHA",
+     "IND",
+     "JPN",
+     "USA"
+    ]
+   },
+   "dimnames_names": [
+    "all_regi",
+    "",
+    ""
+   ],
+   "quitte": {
+    "region": [
+     "LAM",
+     "OAS",
+     "SSA",
+     "EUR",
+     "NEU",
+     "MEA",
+     "REF",
+     "CAZ",
+     "CHA",
+     "IND",
+     "JPN",
+     "USA"
+    ],
+    "value": [
+     "0",
+     "0",
+     "0",
+     "2",
+     "0",
+     "0",
+     "1",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0"
+    ]
+   },
+   "values": [
+    "0",
+    "0",
+    "0",
+    "2",
+    "0",
+    "0",
+    "1",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0"
+   ]
+  },
+  "s80_bool": "1"
+ },
+ "missing.gdx": {
+  "first_found": "5",
+  "modelstat_string": "5"
+ },
+ "noiter.gdx": {
+  "first_found": "5",
+  "modelstat_string": "5",
+  "s80_bool": "0"
+ },
+ "not_a_gdx.gdx": {
+  "r_process": {
+   "returncode": -6,
+   "stderr_tail": [
+    "free(): invalid pointer"
+   ]
+  }
+ },
+ "reordered.gdx": {
+  "first_found": "2",
+  "modelstat_string": "2",
+  "p80_repy": {
+   "dim": [
+    12,
+    1,
+    4
+   ],
+   "dimnames": {
+    "2": [],
+    "all_regi": [
+     "CAZ",
+     "CHA",
+     "EUR",
+     "IND",
+     "JPN",
+     "LAM",
+     "MEA",
+     "NEU",
+     "OAS",
+     "REF",
+     "SSA",
+     "USA"
+    ],
+    "solveinfo80": [
+     "modelstat",
+     "solvestat",
+     "objval",
+     "resusd"
+    ]
+   },
+   "dimnames_names": [
+    "all_regi",
+    "",
+    "solveinfo80"
+   ],
+   "modelstat_string": "123456789101112",
+   "values": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11",
+    "12",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "1",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "100.25",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5",
+    "10.5"
+   ]
+  }
+ },
+ "sparse_zeros.gdx": {
+  "first_found": "2",
+  "modelstat_string": "2",
+  "o_iterationNumber": "3",
+  "p80_repy": {
+   "dim": [
+    12,
+    1,
+    4
+   ],
+   "dimnames": {
+    "2": [],
+    "all_regi": [
+     "LAM",
+     "OAS",
+     "SSA",
+     "EUR",
+     "NEU",
+     "MEA",
+     "REF",
+     "CAZ",
+     "CHA",
+     "IND",
+     "JPN",
+     "USA"
+    ],
+    "solveinfo80": [
+     "solvestat",
+     "modelstat",
+     "resusd",
+     "objval"
+    ]
+   },
+   "dimnames_names": [
+    "all_regi",
+    "",
+    "solveinfo80"
+   ],
+   "modelstat_string": "000200004000",
+   "values": [
+    "0",
+    "0",
+    "0",
+    "1",
+    "0",
+    "0",
+    "0",
+    "0",
+    "1",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "2",
+    "0",
+    "0",
+    "0",
+    "0",
+    "4",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "10.5",
+    "0",
+    "0",
+    "0",
+    "0",
+    "10.5",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "100.25",
+    "0",
+    "0",
+    "0",
+    "0",
+    "100.25",
+    "0",
+    "0",
+    "0"
+   ]
+  },
+  "s80_bool": "0"
+ },
+ "special.gdx": {
+  "modelstat_string": "",
+  "p80_repy": {
+   "dim": [
+    5,
+    1,
+    4
+   ],
+   "dimnames": {
+    "2": [],
+    "all_regi": [
+     "LAM",
+     "OAS",
+     "SSA",
+     "EUR",
+     "NEU"
+    ],
+    "solveinfo80": [
+     "solvestat",
+     "modelstat",
+     "resusd",
+     "objval"
+    ]
+   },
+   "dimnames_names": [
+    "all_regi",
+    "",
+    "solveinfo80"
+   ],
+   "modelstat_string": "0Inf-InfNaNNA",
+   "values": [
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "Inf",
+    "-Inf",
+    "NaN",
+    "NA",
+    "0",
+    "0",
+    "0",
+    "0",
+    "0",
+    "1.5",
+    "0",
+    "0",
+    "0",
+    "0"
+   ]
+  },
+  "sv_eps": "0",
+  "sv_inf": "Inf",
+  "sv_na": "NA",
+  "sv_neginf": "-Inf",
+  "sv_undef": "NaN"
+ },
+ "tie_a.gdx": {
+  "first_found": "2",
+  "modelstat_string": "2",
+  "o_iterationNumber": "5",
+  "s80_bool": "1"
+ },
+ "tie_b.gdx": {
+  "first_found": "5",
+  "modelstat_string": "5",
+  "o_iterationNumber": "5",
+  "s80_bool": "0"
+ },
+ "truncated.gdx": {
+  "r_process": {
+   "returncode": -11,
+   "stderr_tail": [
+    " 8: readGDX(f, \"o_iterationNumber\", format = \"simplest\", react = \"silent\")",
+    " 9: num(readGDX(f, \"o_iterationNumber\", format = \"simplest\", react = \"silent\"))",
+    "An irrecoverable exception occurred. R is aborting now ..."
+   ]
+  }
+ },
+ "twod.gdx": {
+  "modelstat_string": "",
+  "p2": {
+   "dim": [
+    3,
+    1,
+    2
+   ],
+   "dimnames": {
+    "2": [],
+    "all_regi": [
+     "LAM",
+     "OAS",
+     "SSA"
+    ],
+    "iteration": [
+     "1",
+     "2"
+    ]
+   },
+   "dimnames_names": [
+    "all_regi",
+    "",
+    "iteration"
+   ],
+   "values": [
+    "11",
+    "21",
+    "0",
+    "12",
+    "0",
+    "32"
+   ]
+  }
+ },
+ "universe.gdx": {
+  "modelstat_string": "",
+  "p80_repy": {
+   "dim": [
+    2,
+    1,
+    2
+   ],
+   "dimnames": {
+    "uni_1": [
+     "EUR",
+     "CHA"
+    ],
+    "uni_2": [
+     "modelstat",
+     "objval"
+    ],
+    "year": []
+   },
+   "dimnames_names": [
+    "uni_1",
+    "year",
+    "uni_2"
+   ],
+   "modelstat_string": "2NA",
+   "values": [
+    "2",
+    "NA",
+    "NA",
+    "7"
+   ]
+  }
+ },
+ "years.gdx": {
+  "first_found": [
+   "3",
+   "2",
+   "7"
+  ],
+  "modelstat_string": "327",
+  "p80_modelstat": {
+   "dim": [
+    1,
+    3,
+    1
+   ],
+   "dimnames": {
+    "1": "GLO",
+    "3": [],
+    "t": [
+     "y2010",
+     "y1995",
+     "y2000"
+    ]
+   },
+   "dimnames_names": [
+    "",
+    "t",
+    ""
+   ],
+   "values": [
+    "3",
+    "2",
+    "7"
+   ]
+  }
+ },
+ "zero_scalars.gdx": {
+  "first_found": "0",
+  "modelstat_string": ".",
+  "o_iterationNumber": "0",
+  "s80_bool": "0"
+ }
+}

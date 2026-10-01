@@ -1,0 +1,2 @@
+pascalfu /p/projects/synthetic/remind/output/multistatus-extra multistatus 2:15:00 RUNNING standby
+pascalfu /p/projects/remind/modeltests/remind/output/testOneRegi-AMT testOneRegi 2:15:00 RUNNING standby

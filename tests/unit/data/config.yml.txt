@@ -1,0 +1,30 @@
+title: default
+model_name: MAgPIE
+model: main.gms
+input: !<namedVector>
+  regional: rev4.135_h12_magpie.tgz
+  cellular: rev4.135_cellularmagpie.tgz
+repositories:
+  https://example.org/public: ~
+  /p/projects/landuse/data/input/archive: ~
+force_download: yes
+recalibrate: no
+calib_accuracy: 0.05
+calib_maxiter: 20.0
+qos: standby
+gms:
+  optimization: nlp_apr17
+  c_timesteps: coup2110
+  s15_elastic_demand: 0
+  nothing: !<character> []
+  nv: !<namedVector>
+    a: 1.0
+    b: 2.0
+  mixed:
+  - 1
+  - a
+  big: 1000000.0
+  policy_countries:
+  - DEU
+  - FRA
+results_folder: 'output/:title::date:'

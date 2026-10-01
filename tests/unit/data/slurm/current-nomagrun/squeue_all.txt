@@ -1,0 +1,3 @@
+pascalfu /p/projects/remind/modeltests/remind/output/SSP2-NPi-AMT_2026-09-28_10.30.27 SSP2-NPi-AMT 1:02:03 RUNNING standby
+pascalfu /p/projects/landuse/tests/magpie/output/default_2026-09-19_04.05.47 default 0:30:00 RUNNING standby
+pascalfu /p/projects/remind/runs/REMIND-MAgPIE-2026-07-07 batch 5:00:00 RUNNING medium

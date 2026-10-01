@@ -1,0 +1,2 @@
+alice /p/projects/synthetic/remind/output/running running 0:00 PENDING priority
+alice /p/projects/synthetic/remind/output/nolog nolog 0:00 PENDING priority

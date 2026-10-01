@@ -1,0 +1,156 @@
+s001: 100
+s002: -3
+s003: 1.5
+s004: 1e5
+s005: 1.0e+5
+s006: .5
+s007: 0x1A
+s008: 017
+s009: 1_000
+s010: yes
+s011: Yes
+s012: YES
+s013: y
+s014: Y
+s015: n
+s016: N
+s017: no
+s018: NO
+s019: on
+s020: On
+s021: off
+s022: OFF
+s023: true
+s024: True
+s025: TRUE
+s026: false
+s027: False
+s028: FALSE
+s029: ~
+s030: null
+s031: Null
+s032: NULL
+s033: .inf
+s034: +.inf
+s035: -.Inf
+s036: .INF
+s037: inf
+s038: Inf
+s039: Infinity
+s040: .nan
+s041: .NaN
+s042: .NAN
+s043: nan
+s044: NaN
+s045: NA
+s046: na
+s047: 1:30
+s048: 1:30:00
+s049: 12:30:00
+s050: 2026-09-30
+s051: 2026-09-30T12:00:00Z
+s052: 2026-09-30 12:00:00
+s053: nash
+s054: 12345678901234567890
+s055: 1e400
+s056: 1.0e400
+s057: 1e+5
+s058: 1E+5
+s059: 1e-5
+s060: 1.5e3
+s061: 1.5E-3
+s062: 1.5e+3
+s063: 1.
+s064: 0.
+s065: 3.
+s066: 00
+s067: 01
+s068: 007
+s069: 0777
+s070: 08
+s071: 09
+s072: -08
+s073: 0b101
+s074: +12
+s075: -0
+s076: +0
+s077: 0
+s078: -1
+s079: 12_3
+s080: 1,5
+s081: 0x
+s082: 0xZ
+s083: 0o17
+s084: -0x1A
+s085: +0x1A
+s086: -017
+s087: 1.5e
+s088: 1e
+s089: .
+s090: +
+s091: 1.0E5
+s092: 1.0e5
+s093: .5e3
+s094: +.5
+s095: -.5
+s096: 1.5.5
+s097: 1_0.5
+s098: 0x1_A
+s099: 1e3.5
+s100: -.
+s101: 1.5f
+s102: 0.5.
+s103: .e5
+s104: 1.e5
+s105: 1.E+5
+s106: 12345678901
+s107: 2147483647
+s108: 2147483648
+s109: -2147483648
+s110: -2147483647
+s111: 1.7976931348623157e308
+s112: 1.0e309
+s113: 0.0
+s114: -0.0
+s115: 0x7FFFFFFF
+s116: 0x80000000
+s117: 0177777777777
+s118: 1,5.0
+s119: 1.5,0
+s120: 5e
+s121: e5
+s122: a b
+s123: ''
+s124: "1"
+s125: 
+s126:   
+s127: 0.1e+1000
+s128: 1.0e-5
+a_list: [1, 2, 3]
+a_mixed: [1, a]
+a_floats: [1.5, 2]
+a_strs: [a, b]
+a_bools: [yes, no]
+a_nv: !<namedVector> {x: 1, y: 2}
+a_nvmix: !<namedVector> {x: 1, y: a}
+a_nvbool: !<namedVector> {x: yes, y: 2}
+a_nvnull: !<namedVector> {x: ~, y: 2}
+a_nvfloat: !<namedVector> {x: 1, y: 2.5}
+a_nvstr: !<namedVector> {regional: rev4.tgz, cellular: cell.tgz}
+a_chr: !<character> []
+a_chr2: !<character> [a, b]
+a_chr3: !<character> 5
+a_chr4: !<character> [1, 2.5, yes]
+a_nested: {b: {c: 1}}
+a_empty_map: {}
+a_empty_seq: []
+a_base: &base {x: 1, y: 2}
+a_merge: {<<: *base, y: 3, z: 4}
+a_seq_of_maps: [{a: 1}, {b: 2}]
+a_int_seq_na: [1, 2, 99999999999]
+a_multi: |
+  line one
+  line two
+a_folded: >-
+  folded
+  text

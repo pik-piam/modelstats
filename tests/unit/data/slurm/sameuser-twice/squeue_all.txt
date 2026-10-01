@@ -1,0 +1,2 @@
+pascalfu /p/projects/synthetic/remind/output/running running 2:15:00 RUNNING standby
+pascalfu /p/projects/synthetic/remind/output/running running 0:00 PENDING standby

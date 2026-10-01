@@ -1,0 +1,17 @@
+{
+  "systime_epoch": "1790841882.230999",
+  "runstatistics": {
+    "names": ["user", "date", "config", "id", "modelstat", "timePrepareStart", "timeGAMSStart", "timeGAMSEnd", "timeOutputStart", "runtime", "setup_info", "revision"],
+    "id": "179059272175832",
+    "model_name": "REMIND",
+    "timePrepareStart": "1790584390.000000",
+    "timeGAMSStart": "1790584415.000000",
+    "timeGAMSEnd": "1790592719.400000",
+    "runtime_secs": 8303.7672,
+    "gams_secs": 8304.40000009537,
+    "gams_rounded": 8304
+  },
+  "modelstat_vec": "22NA2132",
+  "r_version": "R version 4.6.1 (2026-06-24)",
+  "modelstat_magpie": "22NA13"
+}

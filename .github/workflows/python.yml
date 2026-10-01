@@ -1,0 +1,47 @@
+name: python
+
+on:
+  push:
+    branches: [main, master, Python]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv and Python 3.14
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      - name: ruff
+        run: |
+          uv run ruff check src tests
+          uv run ruff format --check src tests
+
+      - name: mypy
+        run: uv run mypy --strict src
+
+      - name: Unit tests
+        # The golden and packaging tiers are deselected by default; the golden
+        # tier needs the fixture tree, which is not in the repository.
+        run: uv run pytest -q
+
+      - name: Build the wheel
+        run: uv build
+
+      - name: Install the wheel in a fresh venv and run the console scripts
+        run: |
+          uv venv --python 3.14 "$RUNNER_TEMP/wheelenv"
+          uv pip install --python "$RUNNER_TEMP/wheelenv/bin/python" dist/modelstats-*.whl
+          "$RUNNER_TEMP/wheelenv/bin/rs" --help
+          "$RUNNER_TEMP/wheelenv/bin/modeltests" --help
