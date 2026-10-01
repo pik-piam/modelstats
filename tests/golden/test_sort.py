@@ -18,11 +18,11 @@ from pathlib import Path
 import pytest
 
 from modelstats.runfolders import natural_order_indices, natural_sorted
-from tests.conftest import read_case_rows
+from tests.conftest import case_list, read_case_rows
 
 pytestmark = pytest.mark.golden
 
-CASES = read_case_rows(Path(__file__).resolve().parents[2] / "migration" / "cases" / "sort.tsv")
+CASES = read_case_rows(case_list("sort"))
 DEVIATING = "exotic"
 
 # The approved deviation (D-14): natsort puts ä after a_1 (ICU: right after Z) and ends ß, ﬁ (ICU: ﬁ, ß).

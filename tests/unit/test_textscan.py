@@ -70,15 +70,12 @@ def test_intern_lines_cuts_at_nul_and_chops_one_newline(output: bytes, expected:
     assert ts.intern_lines(output) == expected
 
 
-def test_intern_lines_splits_a_line_longer_than_the_fgets_buffer() -> None:
-    long_line = b"x" * (ts.INTERN_LINE_LIMIT + 3)
-    assert ts.intern_lines(long_line + b"\nnext\n") == ["x" * ts.INTERN_LINE_LIMIT, "xxx", "next"]
-    exact = b"y" * ts.INTERN_LINE_LIMIT
-    assert ts.intern_lines(exact + b"\n") == [
-        "y" * ts.INTERN_LINE_LIMIT,
-        "",
-    ]  # fgets stops before the newline
-    assert ts.intern_lines(exact + b"z") == ["y" * ts.INTERN_LINE_LIMIT, "z"]
+def test_intern_lines_keeps_a_line_longer_than_the_fgets_buffer_whole() -> None:
+    """R >= 3.3.0 reads with getline(): R 4.6.1 returns one 9000-character element (BUG-053, not a split)."""
+    assert ts.intern_lines(b"x" * 9000 + b"\nnext\n") == ["x" * 9000, "next"]
+    assert ts.intern_lines(b"y" * 8095 + b"z") == ["y" * 8095 + "z"]
+    assert ts.intern_lines(b"y" * 8095 + b"\n") == ["y" * 8095]
+    assert ts.intern_lines(b"x" * 70000 + b"\n") == ["x" * 70000]
 
 
 def test_intern_lines_keeps_undecodable_bytes() -> None:
@@ -273,6 +270,19 @@ def test_grep_z_only_matching_prints_each_match_followed_by_a_nul(tmp_path: Path
     assert ts.grep_z_only_matching(path, re.compile(rb"absent")) == b""
 
 
+def test_grep_z_matches_each_nul_delimited_record_on_its_own(tmp_path: Path) -> None:
+    """GNU grep 3.12 ``-zoP`` output (``od -c``) for a NUL inside a block and for a NUL ending the file."""
+    nul_inside = write(tmp_path / "inside.log", b"Warning messages:\n1: a\0\n2: b\n")
+    assert ts.grep_z_only_matching(nul_inside, ts.MAGPIE_WARNING_BLOCK) == b"Warning messages:\n1\0"
+    assert ts.grep_z_only_matching(nul_inside, ts.REMIND_WARNING_BLOCK) == b"Warning messages:\n\0"
+    nul_at_end = write(tmp_path / "end.log", b"Warning messages:\n1: a\n2: b\n\0")
+    assert ts.grep_z_only_matching(nul_at_end, ts.MAGPIE_WARNING_BLOCK) == b"Warning messages:\n1: a\n2\0"
+    assert (
+        ts.grep_z_only_matching(nul_at_end, ts.REMIND_WARNING_BLOCK) == b"Warning messages:\n1: a\n2: b\n\0"
+    )
+    assert ts.grep_z_only_matching(write(tmp_path / "nul.log", b"\0"), ts.MAGPIE_WARNING_BLOCK) == b""
+
+
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
@@ -283,6 +293,8 @@ def test_grep_z_only_matching_prints_each_match_followed_by_a_nul(tmp_path: Path
         (BLOCK + b"3 more lines\n", ["3"]),
         (b"Warning messages:\n12: twelve\n", ["12"]),
         (b"Warning messages:\n7 starts with a digit\n", ["7"]),
+        # the NUL ends the grep -z record after "1: a"; GNU grep 3.12 -zoP | tail -1 prints "1"
+        (b"Warning messages:\n1: a\0\n2: b\n", ["1"]),
         (b"Warning messages:\nno number\n", []),
         (b"Warning message:\nsingular\n", []),
     ],
@@ -323,6 +335,8 @@ def test_scan_warning_summary_keeps_only_the_first_summary(
         (BLOCK + b"x\nWarning messages:\n1: a\n2: b\n3: c\n", 5),
         (b"Warning messages:\n1: a\n2: b\n3: c\nnot numbered\n", 3),
         (b"Warning message:\n1: singular is not a block\n", 0),
+        # the NUL cuts the record after "1: a": grep -zoP prints "Warning messages:\n\0", no numbered line
+        (b"Warning messages:\n1: a\0\n2: b\n", 0),
     ],
 )
 def test_count_numbered_warning_lines(tmp_path: Path, text: bytes, expected: int) -> None:

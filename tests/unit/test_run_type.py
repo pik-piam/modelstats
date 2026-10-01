@@ -242,9 +242,14 @@ def test_remind_without_optimization_raises_argument_of_length_zero() -> None:
         compose_run_type(FakeConfig("REMIND"))
 
 
-def test_magpie_without_optimization_raises() -> None:
-    with pytest.raises(RunTypeError, match="NULL"):
-        compose_run_type(FakeConfig("MAgPIE"))
+def test_magpie_without_optimization_returns_none_like_r_null() -> None:
+    """``R/colRunType.R:21`` returns ``cfg$gms$optimization`` as is: R 4.6.1 gives ``NULL`` (BUG-046, D-28).
+
+    The caller's ``out[i, "RunType"] <- NULL`` then fails with ``replacement has length zero``
+    (``R/getRunStatus.R:73``); that error belongs to the ``get_run_status`` port, not here.
+    """
+    assert compose_run_type(FakeConfig("MAgPIE")) is None
+    assert compose_run_type(FakeConfig("MAgPIE", cm_nash_mode="debug", c_empty_model="on")) is None
 
 
 # --- the R-written test files through modelstats.config.load_config ---------------------------------

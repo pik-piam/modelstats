@@ -31,7 +31,7 @@ from modelstats.config import ConfigKind, find_config_file, load_config
 from modelstats.env import Mode
 from modelstats.rdata_io import RTime, r_round, read_rds, scalar, write_rds
 from modelstats.runstats import RunStatistics, read_run_statistics
-from tests.conftest import FIXTURES, GOLDENS, MIGRATION, SYNTHETIC, GoldenCase, golden_cases
+from tests.conftest import FIXTURES, GOLDENS, SYNTHETIC, GoldenCase, golden_cases
 
 pytestmark = pytest.mark.golden
 
@@ -59,7 +59,15 @@ def reader_files() -> list[Path]:
 
 
 def file_id(path: Path) -> str:
-    return str(path.relative_to(MIGRATION))
+    """``fixtures/...`` or ``synthetic/...`` relative to the configured root (``tests/conftest.py``).
+
+    ``MODELSTATS_FIXTURES`` and ``MODELSTATS_SYNTHETIC`` may point outside ``migration/``; the id is
+    built against whichever root holds the file, so collection never fails on an external tree.
+    """
+    for label, root in (("fixtures", FIXTURES), ("synthetic", SYNTHETIC)):
+        if path.is_relative_to(root):
+            return f"{label}/{path.relative_to(root)}"
+    return str(path)
 
 
 def overlay(relative: str | Path) -> Path | None:

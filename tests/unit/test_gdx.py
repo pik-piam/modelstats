@@ -39,6 +39,7 @@ from modelstats.gdx import (
     read_param,
     read_scalar,
     read_symbol_table,
+    read_typed_scalar,
     repy_modelstat_text,
     select_element,
     select_latest_gdx,
@@ -542,6 +543,61 @@ def test_first_found_tries_the_names_in_order(tmp_path: Path, remind_gdx: Path) 
     assert modelstat_text(flat_values(found)) == "222.222222"
     assert read_first_found(magpie, ["o_modelstat"]) is None
     assert read_first_found(magpie, []) is None
+
+
+# ---------------------------------------------------------------------------------------------
+# Symbol names: the GDX library folds case, gdx2's typed path does not
+# ---------------------------------------------------------------------------------------------
+
+
+def test_plain_names_resolve_case_insensitively_like_gdxfindsymbol(tmp_path: Path) -> None:
+    """R reads ``o_iterationNumber`` from a file storing ``O_ITERATIONNUMBER`` (gdx2 0.6.2, 2026-10-01).
+
+    ``as.numeric(readGDX(f, "o_iterationNumber", format = "simplest", react = "silent"))`` is 12,
+    ``c(readGDX(f, c("o_modelstat", "p80_modelstat"), format = "first_found", react = "silent"))`` is 2
+    and ``names(gamstransfer::readGDX(f, "o_iterationNumber"))`` is ``"O_ITERATIONNUMBER"``.
+    """
+    upper = write_gdx(
+        tmp_path / "upper.gdx", scalars={"O_ITERATIONNUMBER": 12, "S80_BOOL": 1, "P80_MODELSTAT": 2}
+    )
+    file = GdxFile(upper)
+    assert read_scalar(file, "o_iterationNumber") == 12.0
+    found = read_first_found(file, gdx.MODELSTAT_SYMBOLS)
+    assert found is not None and flat_values(found) == [2.0]
+    info = file.info("o_iterationnumber")
+    assert info is not None and info.name == "O_ITERATIONNUMBER"
+    assert read_param(file, "o_iterationNumber") is read_param(file, "O_ITERATIONNUMBER")  # one cache slot
+    assert file.info("o_iteration") is None and read_scalar(file, "o_iteration") is None
+
+
+def test_typed_read_of_line_281_is_exact_case_and_parameters_only(tmp_path: Path) -> None:
+    """R: ``as.numeric(readGDX(f, "s80_bool", type = "Parameter", format = "simplest"))``.
+
+    ``numeric(0)`` plus the warning ``No element of s80_bool found in GDX! NULL returned`` against the
+    stored ``S80_BOOL`` and against a *set* named ``s80_bool``; ``1`` for the exact ``S80_BOOL``.
+    """
+    upper = write_gdx(tmp_path / "upper.gdx", scalars={"S80_BOOL": 1})
+    assert read_typed_scalar(upper, "s80_bool") is None
+    assert read_typed_scalar(upper, "S80_BOOL") == 1.0
+    assert read_scalar(upper, "s80_bool") == 1.0  # the plain shape folds case
+    m = gt.Container(system_directory=gamspy_base.directory)
+    gt.Set(m, "s80_bool", records=["a"])
+    gt.Parameter(m, "o_iterationNumber", records=2)
+    set_named = tmp_path / "set-named.gdx"
+    m.write(str(set_named))
+    assert read_typed_scalar(set_named, "s80_bool") is None
+    assert read_typed_scalar(set_named, "o_iterationNumber") == 2.0
+    assert read_typed_scalar(set_named, "absent") is None
+
+
+def test_select_latest_gdx_reads_an_uppercase_iteration_symbol(tmp_path: Path) -> None:
+    older, newer = 1_790_700_000.0, 1_790_762_400.0
+    high = write_gdx(tmp_path / "fulldata.gdx", scalars={"O_ITERATIONNUMBER": 7})
+    low = write_gdx(tmp_path / "non_optimal.gdx", scalars={"o_iterationNumber": 2})
+    os.utime(high, (older, older))
+    os.utime(low, (newer, newer))
+    candidates = [GdxCandidate(GdxFile(high), older), GdxCandidate(GdxFile(low), newer)]
+    assert select_latest_gdx(candidates) is candidates[0].file  # by iteration (7 > 2), not by the newer mtime
 
 
 # ---------------------------------------------------------------------------------------------

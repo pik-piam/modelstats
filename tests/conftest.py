@@ -140,10 +140,26 @@ class GoldenCase:
         return [self.logical_path(p) for p in value.split(",")] if value else []
 
 
+def case_list(family: str) -> Path:
+    """``migration/cases/<family>.tsv``, read at collection time by the golden modules.
+
+    The case lists are tracked in git, so in a checkout they always exist; the unpacked sdist ships
+    neither ``migration/`` nor its goldens (``pyproject.toml`` ``[tool.hatch.build.targets.sdist]``),
+    and there the golden module is skipped as a whole instead of failing the collection of the unit
+    tier (pytest imports every module before it applies the marker deselection).
+    """
+    path = CASES / f"{family}.tsv"
+    if not path.is_file():
+        pytest.skip(
+            f"case list absent: {path} (migration/ is not shipped in the sdist)", allow_module_level=True
+        )
+    return path
+
+
 def golden_cases(family: str, mode: Mode | None = None) -> list[GoldenCase]:
     """The cases of one family; ``mode`` applies where the row has no ``mode`` column (status: both modes)."""
     cases: list[GoldenCase] = []
-    for row in read_case_rows(CASES / f"{family}.tsv"):
+    for row in read_case_rows(case_list(family)):
         row_mode = Mode(row["mode"]) if row.get("mode") else (mode or Mode.ONCLUSTER)
         cwd = row.get("cwd", "")
         cases.append(

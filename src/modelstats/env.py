@@ -550,9 +550,13 @@ class OverlayPaths:
         Component by component, the highest layer holding the name decides. A directory is merged with the
         same-named directories of the layers below it, down to the first layer in which the name is not a
         directory (overlayfs stops merging there, so what those layers hold underneath stays hidden); a
-        non-directory ends the walk, hiding everything below. ``(None, ())`` when nothing is shown, ``(entry,
-        ())`` for a file, ``(entry, merged directories)`` for a directory. Outside the logical root the real
-        filesystem answers.
+        non-directory ends the walk, hiding everything below. A ``..`` component returns to the merged
+        parent: the kernel resolves ``..`` to the parent dentry of the overlay, with every layer merged
+        there again, so ``a/b/../c`` shows the same ``c`` as ``a/c`` once ``b`` exists, while a missing
+        ``b`` stays ``ENOENT`` and a file ``b`` stays ``ENOTDIR``; a ``..`` at the overlay root climbs out
+        onto the real filesystem (``/p/..`` is the host's ``/``). ``(None, ())`` when nothing is shown,
+        ``(entry, ())`` for a file, ``(entry, merged directories)`` for a directory. Outside the logical
+        root the real filesystem answers.
         """
         if not logical.is_relative_to(self.logical_root):
             physical = Path(logical)
@@ -560,17 +564,22 @@ class OverlayPaths:
                 return (None, ())
             return (physical, (physical,) if os.path.isdir(physical) else ())
         parts = logical.relative_to(self.logical_root).parts
-        shown: Path | None = self.layers[0] if self.layers else None
-        merged: tuple[Path, ...] = self.layers
+        root: tuple[Path | None, tuple[Path, ...]] = (self.layers[0] if self.layers else None, self.layers)
+        states = [root]
         for index, part in enumerate(parts):
-            holders = [directory / part for directory in merged if os.path.lexists(directory / part)]
+            if part == "..":
+                if len(states) == 1:
+                    return self.lookup(self.logical_root.parent.joinpath(*parts[index + 1 :]))
+                states.pop()
+                continue
+            holders = [directory / part for directory in states[-1][1] if os.path.lexists(directory / part)]
             if not holders:
                 return (None, ())
             shown = holders[0]
             if not os.path.isdir(shown):
                 return (shown, ()) if index == len(parts) - 1 else (None, ())
-            merged = _merged_run(holders)
-        return (shown, merged)
+            states.append((shown, _merged_run(holders)))
+        return states[-1]
 
     def first_existing(self, logical: PurePosixPath) -> Path | None:
         """The physical path that the overlay shows for ``logical``, or ``None``."""
@@ -1071,7 +1080,10 @@ class FakeEffects:
         return zone
 
     def _absolute(self, path: PathLike) -> PurePosixPath:
-        """Resolve a relative path against the logical cwd (no symlink or ``..`` processing)."""
+        """Resolve a relative path against the logical cwd.
+
+        No symlink processing; ``..`` is kept, ``OverlayPaths.lookup`` walks it the way the kernel does.
+        """
         return self._cwd / PurePosixPath(os.fspath(path))
 
     def _physical(self, path: PathLike) -> Path | None:

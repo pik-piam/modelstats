@@ -12,7 +12,11 @@ file with an unanchored regular expression over ``dir(mydir)``, loads it and com
 * two matching names raise ``the condition has length > 1`` (BUG-003, D-01 pending), from the ``if``
   over a length-2 ``file.exists()`` at line 18;
 * a path that is not a directory yields ``"NA"`` (line 17); the ``full.lst`` fallback of lines 36-42 is
-  unreachable (BUG-017) and is not ported.
+  unreachable (BUG-017) and is not ported;
+* a MAgPIE configuration without ``cfg$gms$optimization`` returns ``NULL`` (line 21), ``None`` here
+  (BUG-046, decision D-28); the only caller then fails on ``out[i, "RunType"] <- NULL`` with
+  ``replacement has length zero`` (``R/getRunStatus.R:73``), which the ``get_run_status`` port raises
+  at that assignment, not here.
 
 The directory listing goes through :class:`modelstats.env.Effects` (``dir()`` order and dot-file rule
 live there); the configuration file is read by a :data:`ConfigLoader`, ``modelstats.config.load_config``
@@ -121,7 +125,7 @@ type ConfigLoader = Callable[[Path], RunConfigLike]
 """Reads the configuration file at a path; the default is ``modelstats.config.load_config``."""
 
 
-def col_run_type(mydir: PathLike, env: Effects, load: ConfigLoader = load_config) -> str:
+def col_run_type(mydir: PathLike, env: Effects, load: ConfigLoader = load_config) -> str | None:
     """``colRunType(mydir)`` (``R/colRunType.R:11-45``).
 
     Args:
@@ -130,7 +134,8 @@ def col_run_type(mydir: PathLike, env: Effects, load: ConfigLoader = load_config
         load: the configuration reader; it receives the path R would load.
 
     Returns:
-        the run type string, or ``"NA"`` when ``mydir`` is not a directory.
+        the run type string, ``"NA"`` when ``mydir`` is not a directory, or ``None`` (R's ``NULL``) for a
+        MAgPIE configuration without ``cfg$gms$optimization``.
 
     Raises:
         RunTypeError: with R's message, for a directory without a configuration file
@@ -159,10 +164,12 @@ def config_path_for(directory: str, matched_name: str) -> Path:
     return Path(directory, matched_name)
 
 
-def compose_run_type(cfg: RunConfigLike) -> str:
+def compose_run_type(cfg: RunConfigLike) -> str | None:
     """The run type of a loaded configuration (``R/colRunType.R:20-35``).
 
-    MAgPIE returns ``cfg$gms$optimization`` as is; REMIND composes it (:func:`_remind_run_type`).
+    MAgPIE returns ``cfg$gms$optimization`` as is, ``NULL`` (``None``) included (line 21; the caller
+    fails on the assignment, ``R/getRunStatus.R:73``, BUG-046, D-28); REMIND composes it
+    (:func:`_remind_run_type`).
 
     Raises:
         RunTypeError: ``argument is of length zero`` when ``model_name`` is ``NULL`` (line 20) or, for
@@ -176,12 +183,9 @@ def compose_run_type(cfg: RunConfigLike) -> str:
     return _remind_run_type(cfg)
 
 
-def _magpie_run_type(cfg: RunConfigLike) -> str:
-    """``R/colRunType.R:21``: the optimization switch, uncomposed."""
-    optimization = r_as_character(cfg.optimization)
-    if optimization is None:
-        raise RunTypeError("cfg$gms$optimization is NULL (R returns NULL, which no caller can store)")
-    return optimization
+def _magpie_run_type(cfg: RunConfigLike) -> str | None:
+    """``R/colRunType.R:21``: the optimization switch, uncomposed; ``NULL`` stays ``NULL`` (``None``)."""
+    return r_as_character(cfg.optimization)
 
 
 def _remind_run_type(cfg: RunConfigLike) -> str:

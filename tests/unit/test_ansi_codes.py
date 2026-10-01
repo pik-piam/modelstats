@@ -1,8 +1,9 @@
 """The hand-rolled ANSI table reproduces crayon's bytes.
 
 Converted from the colour part of ``migration/harness/smoke/py_misc.py``. crayon closes colours with
-``ESC[39m`` and underline with ``ESC[24m`` and nests literally; ``click.style`` and ``rich`` close
-with ``ESC[0m`` and cannot reproduce the goldens, so the port carries this seven-entry table
+``ESC[39m`` and underline with ``ESC[24m`` and, when nesting, swaps a nested style's own closing
+sequence for the enclosing style's opening one (``crayon:::crayon_template``); ``click.style`` and
+``rich`` close with ``ESC[0m`` and cannot reproduce the goldens, so the port carries this seven-entry table
 (``migration/02-python-libraries.md`` section 4.5). The R side of the contract is pinned by
 ``migration/harness/checks/crayon_codes.R``; the literals below are the same bytes.
 """

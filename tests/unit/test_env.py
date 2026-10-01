@@ -347,6 +347,32 @@ def test_fixtures_win_over_synthetic_on_a_conflict(layers: Layers) -> None:
     assert info.mtime.tzinfo == BERLIN
 
 
+def test_parent_components_return_to_the_merged_directory(layers: Layers, tmp_path: Path) -> None:
+    """``..`` restores every layer merged at the parent, as overlayfs resolves it (phase 1 Codex finding 1).
+
+    ``projects/synthetic`` exists in the synthetic layer only; walking into it and back must not drop the
+    fixture layer (``bwrap --overlay`` in ``sandbox.sh``: ``/p/projects/synthetic/../remind/runs`` exists
+    like ``/p/projects/remind/runs``, and ``ls`` of a ``..`` path lists both layers). A missing component
+    before ``..`` stays ``ENOENT``, a file before ``..`` stays ``ENOTDIR``, and ``..`` at the overlay root
+    climbs onto the real filesystem.
+    """
+    paths = OverlayPaths.sandbox(layers.fixtures_p, layers.synthetic_p, Mode.ONCLUSTER)
+    via_synthetic = PurePosixPath("/p/projects/synthetic/../remind/output/run1/log.txt")
+    assert paths.first_existing(via_synthetic) == layers.fixtures_p / "projects/remind/output/run1/log.txt"
+    shared_via_synthetic = PurePosixPath("/p/projects/synthetic/../shared")
+    assert paths.merged_names(shared_via_synthetic) == {"both.txt", "only-synthetic.txt"}
+    assert paths.merged_names(shared_via_synthetic) == paths.merged_names(PurePosixPath("/p/projects/shared"))
+    assert paths.first_existing(PurePosixPath("/p/projects/missing/../remind")) is None
+    assert paths.first_existing(PurePosixPath("/p/projects/blocker/../shared")) is None
+    outside = PurePosixPath("/p/..").joinpath(*tmp_path.parts[1:])
+    assert paths.first_existing(outside) == tmp_path
+    effects = make_fake(layers)
+    assert effects.exists(via_synthetic)
+    assert effects.read_text(via_synthetic) == "fixture log"
+    assert effects.listdir_like_r(shared_via_synthetic) == ["both.txt", "only-synthetic.txt"]
+    assert not effects.exists("/p/projects/missing/../remind")
+
+
 def test_listings_are_the_union_of_the_layers(layers: Layers) -> None:
     effects = make_fake(layers)
     assert effects.listdir_like_r("/p/projects/shared") == ["both.txt", "only-synthetic.txt"]

@@ -23,17 +23,21 @@ Pipeline semantics reproduced (GNU coreutils 9 / grep 3, as on the cluster):
   keeps the last line. The BRE ``'*** Status: '`` (``R/getRunStatus.R:157``) is *not* three literal
   stars: a leading ``*`` is literal and the next two quantify it, so it matches every line containing
   ``" Status: "`` (:data:`STATUS_LINE`, verified with GNU grep 3.12).
-* ``grep -zoP P``: ``-z`` makes the whole file one NUL-separated record, ``-o`` prints each match
-  followed by a NUL. The pattern runs over the file text with Python's ``re``, whose semantics equal
-  PCRE's for these patterns (greedy, backtracking, ``.`` excluding ``\n``).
+* ``grep -zoP P``: ``-z`` makes the NUL byte the record separator, so every NUL-delimited record of
+  the file is matched on its own (a match never spans a NUL), and ``-o`` prints each match followed
+  by a NUL. The pattern runs over each record with Python's ``re``, whose semantics equal PCRE's for
+  these patterns (greedy, backtracking, ``.`` excluding ``\n``). Verified against GNU grep 3.12:
+  ``Warning messages:\n1: a\0\n2: b\n`` yields ``Warning messages:\n1\0`` for the MAgPIE block.
 * ``tail -1``: the last ``\n``-delimited line, with its newline when it has one; nothing for an
   empty input. ``awk 'NF{s=$0}END{print s}'``: the last line with at least one whitespace-separated
   field, and an empty line when there is none (so R always receives one element, ``""`` at worst).
-* ``system(intern = TRUE)`` (``src/unix/sys-unix.c``): the output is read with ``fgets`` into an
-  8096-byte buffer and each piece becomes one element after ``strlen``, i.e. a line longer than
-  8095 bytes is split into several elements and a line is cut at its first NUL byte. The NUL cut is
-  what makes ``grep -zoP ... | tail -1`` return the digits of the last block (register BUG-011,
-  decision D-06): only the bytes after the last newline survive, up to the NUL.
+* ``system(intern = TRUE)`` (``do_system`` in ``src/unix/sys-unix.c``, the ``getline()`` branch R
+  uses on Linux since 3.3.0, PR#16544): every ``\n``-terminated line becomes one element however
+  long it is (the 8096-byte ``fgets`` buffer of ``?system`` is the branch for platforms without
+  ``getline``), and each element is cut at its first NUL byte because the buffer is turned into a
+  string with ``strlen``. The NUL cut is what makes ``grep -zoP ... | tail -1`` return the digits
+  of the last block (register BUG-011, decision D-06): only the bytes after the last newline
+  survive, up to the NUL. Verified in R 4.6.1: a 70000-byte line is one element (BUG-053).
 
 Not reproduced (documented, no golden exercises them): GNU grep's binary-file detection (a NUL byte
 in the first buffer, or an encoding error in a matching line under a UTF-8 locale, suppresses the
@@ -60,7 +64,6 @@ from typing import BinaryIO, Final
 __all__ = [
     "CALIBRATION_LINE",
     "CHUNK_SIZE",
-    "INTERN_LINE_LIMIT",
     "ITERATION_MAX_LINE",
     "LOOPS_LINE",
     "MAGPIE_OUTPUT_STORED",
@@ -116,9 +119,6 @@ type Pattern = re.Pattern[bytes] | bytes
 
 CHUNK_SIZE: Final = 1 << 20
 """Bytes read per step by the reverse scanners (plan section 5: 1 MB)."""
-
-INTERN_LINE_LIMIT: Final = 8095
-"""``INTERN_BUFSIZE - 1`` of ``src/unix/sys-unix.c``: the longest ``system(intern = TRUE)`` element."""
 
 _ENCODING: Final = "utf-8"
 _ERRORS: Final = "surrogateescape"
@@ -377,22 +377,20 @@ def tac_records(
 
 
 def intern_lines(output: bytes) -> list[str]:
-    """``system(cmd, intern = TRUE)`` applied to the bytes ``cmd`` printed (``src/unix/sys-unix.c``).
+    r"""``system(cmd, intern = TRUE)`` applied to the bytes ``cmd`` printed (``src/unix/sys-unix.c``).
 
-    Each ``fgets(buf, 8096)`` piece (through a newline or 8095 bytes) becomes one element after
-    ``strlen``: the piece is cut at its first NUL byte, then a trailing newline is dropped. An empty
-    output is ``character(0)``.
+    ``do_system`` reads the pipe with ``getline()`` (R >= 3.3.0 on Linux, PR#16544), so every
+    ``\\n``-terminated line is one element whatever its length, an unterminated last line is one too,
+    and ``strlen`` cuts each at its first NUL byte before the trailing newline is dropped. An empty
+    output is ``character(0)``. Verified in R 4.6.1 (the golden oracle): a 70000-byte line is one
+    element and ``printf 'ab\\0cd\\nef\\n'`` gives ``c("ab", "ef")`` (BUG-011, BUG-053).
     """
-    elements: list[str] = []
-    position = 0
-    size = len(output)
-    while position < size:
-        newline = output.find(b"\n", position, position + INTERN_LINE_LIMIT)
-        end = newline + 1 if newline >= 0 else min(position + INTERN_LINE_LIMIT, size)
-        piece = output[position:end].split(b"\0", 1)[0]
-        position = end
-        elements.append(_decode(_strip_newline(piece)))
-    return elements
+    if not output:
+        return []
+    lines = output.split(b"\n")
+    if output.endswith(b"\n"):
+        lines.pop()
+    return [_decode(line.split(b"\0", 1)[0]) for line in lines]
 
 
 def tail_last_line(output: bytes) -> bytes:
@@ -416,9 +414,9 @@ def _as_output(lines: list[bytes]) -> bytes:
 def scan_last_match(source: Source, pattern: Pattern, *, chunk_size: int = CHUNK_SIZE) -> list[str]:
     """``tac f | grep -m 1 P``: the last line matching ``pattern``, as R received it.
 
-    ``character(0)`` (an empty list) without a match; otherwise one element, or several when the
-    line exceeds 8095 bytes (:func:`intern_lines`). Reads the file backwards in ``chunk_size`` blocks
-    and stops at the first hit. Used by ``R/getRunStatus.R:144, 204-205, 223-224, 232``.
+    ``character(0)`` (an empty list) without a match; otherwise one element (:func:`intern_lines`).
+    Reads the file backwards in ``chunk_size`` blocks and stops at the first hit. Used by
+    ``R/getRunStatus.R:144, 204-205, 223-224, 232``.
     """
     regex = _compiled(pattern)
     for record in tac_records(source, chunk_size=chunk_size, keep_block=_block_filter(regex)):
@@ -511,15 +509,21 @@ def last_nonempty_line(source: Source, *, chunk_size: int = CHUNK_SIZE) -> str:
 
 
 def grep_z_only_matching(source: Source, pattern: re.Pattern[bytes]) -> bytes:
-    """``grep -zoP P f``: every match over the whole file, each followed by a NUL byte.
+    """``grep -zoP P f``: every match of every NUL-delimited record, each followed by a NUL byte.
 
-    Loads the file (the patterns span lines); ``pattern`` must be a compiled regex whose semantics
-    agree between PCRE and ``re`` (no PCRE-only syntax). ``R/getRunStatus.R:258, 267, 272``.
+    ``-z`` makes NUL the record separator: each record is matched on its own, so a match never spans
+    a NUL, and a NUL that ends the file closes the last record instead of opening an empty one (as a
+    final newline does in line mode). Loads the file (the patterns span lines); ``pattern`` must be a
+    compiled regex whose semantics agree between PCRE and ``re`` (no PCRE-only syntax). Output
+    verified byte for byte against GNU grep 3.12. ``R/getRunStatus.R:258, 267, 272``.
     """
     with _opened(source) as stream:
         stream.seek(0)
         text = stream.read()
-    return b"".join(match.group(0) + b"\0" for match in pattern.finditer(text))
+    records = text.split(b"\0")
+    if text.endswith(b"\0"):
+        records.pop()
+    return b"".join(match.group(0) + b"\0" for record in records for match in pattern.finditer(record))
 
 
 def last_block_match(source: Source, pattern: re.Pattern[bytes]) -> list[str]:

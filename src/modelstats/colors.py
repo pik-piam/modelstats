@@ -1,12 +1,15 @@
 """crayon's escape sequences and the row colour rules of ``R/loopRuns.R``.
 
 Parity port (``migration/03-migration-plan.md`` section 3.3; ``migration/02-python-libraries.md``
-section 4.5). crayon closes a colour with ``ESC[39m`` and underline with ``ESC[24m``, nests
-literally, uses 256-index codes for the two named colours (``orangered``, ``orange``) whenever the
-terminal reports at least 256 colours and the basic codes otherwise, and emits nothing at all when
-it is disabled. The goldens were recorded with ``options(crayon.enabled = TRUE, crayon.colors = 256)``
-("crayon on") or ``crayon.enabled = FALSE`` ("crayon off"); the port never probes a terminal here,
-the CLI decides (``Crayon.from_terminal`` is the pure part of that decision).
+section 4.5). crayon closes a colour with ``ESC[39m`` and underline with ``ESC[24m``, replaces a
+nested style's own closing sequence by the enclosing style's opening one (``crayon:::crayon_template``:
+an inner colour hands back to the outer colour, underline inside a colour stays literal), uses
+256-index codes for the two named colours (``orangered``, ``orange``) whenever the terminal reports
+at least 256 colours and the basic codes otherwise, and emits nothing at all when it is disabled. The
+goldens were recorded with ``options(crayon.enabled = TRUE, crayon.colors = 256)`` ("crayon on") or
+``crayon.enabled = FALSE`` ("crayon off"); the port never probes a terminal here, the CLI decides
+(``Crayon.from_terminal`` reproduces crayon's ``num_ansi_colors`` from the values the CLI passes,
+:func:`num_ansi_colours`; only :func:`terminfo_colours` touches the terminfo database).
 
 The row colour is the decision tree of ``R/loopRuns.R:94-135``: the MAgPIE branch when ``Iter``
 starts with ``y1``/``y2`` or ``RunType`` with ``nlp_``, the REMIND branch otherwise, both read from
@@ -19,10 +22,12 @@ Both are raised as ``ColourRuleError`` so that ``loop_runs`` fails where ``loopR
 
 from __future__ import annotations
 
+import curses
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Final
 
 from modelstats.formatting import CellValue, is_na, r_as_character
 
@@ -32,15 +37,19 @@ __all__ = [
     "MISSING_VALUE_IN_IF",
     "PLAIN",
     "SUBSCRIPT_OUT_OF_BOUNDS",
+    "TRUECOLOR",
     "ColourRuleError",
     "Crayon",
     "Style",
     "StyleName",
+    "TerminfoColours",
     "colour_for_magpie",
     "colour_for_remind",
     "colour_for_row",
     "colour_legend",
     "is_magpie_row",
+    "num_ansi_colours",
+    "terminfo_colours",
 ]
 
 #: R's message for ``if (NA)``.
@@ -53,6 +62,14 @@ _CLOSE_COLOUR = f"{_ESC}39m"
 _CLOSE_UNDERLINE = f"{_ESC}24m"
 #: crayon reports 256 colours (or truecolor, same codes) from this depth on.
 _EXTENDED_FROM = 256
+#: crayon's ``truecolor`` (cli: ``0x1000000``), what ``COLORTERM=truecolor`` reports.
+TRUECOLOR: Final = 256**3
+#: The descriptor ``setupterm`` probes (window size only); the capability lookup needs no terminal on it.
+_STDOUT_FD: Final = 1
+#: ``crayon:::guess_tty_colors()``: names that look like a colour terminal when ``tput`` fails.
+_GUESS_COLOUR_TERM: Final = re.compile(r"^screen|^xterm|^vt100|color|ansi|cygwin|linux", re.IGNORECASE)
+#: ``crayon:::emacs_version()`` keeps the digits and dots of ``INSIDE_EMACS``.
+_EMACS_VERSION_NOISE: Final = re.compile(r"[^0-9.]+")
 
 
 class StyleName(StrEnum):
@@ -75,8 +92,16 @@ class Style:
     close: str
 
     def __call__(self, text: str) -> str:
-        """Wrap ``text`` the way crayon does: open, text, close; nested styles stay literal."""
-        return f"{self.open}{text}{self.close}"
+        """Wrap ``text`` as ``crayon:::crayon_template`` does (crayon 1.5.3, ``R/machinery.R``).
+
+        ``st$open %+% gsub_(st$close, st$open, text, fixed = TRUE) %+% st$close``: every occurrence of
+        this style's own closing sequence inside ``text`` becomes its opening sequence, so a nested
+        colour restores the enclosing colour (``yellow(paste0("a", green("b"), "c"))`` is
+        ``ESC[33ma ESC[32mb ESC[33mc ESC[39m``); underline inside a colour stays literal because its
+        closing sequence differs. ``PLAIN`` (empty sequences) returns ``text`` unchanged.
+        """
+        inner = text.replace(self.close, self.open) if self.close else text
+        return f"{self.open}{inner}{self.close}"
 
 
 #: crayon disabled (``options(crayon.enabled = FALSE)``, or no terminal): the text itself.
@@ -100,6 +125,112 @@ BASIC_COLOURS: Mapping[StyleName, Style] = {
 }
 
 
+# --- crayon's colour detection -----------------------------------------------------------------------
+
+type TerminfoColours = Callable[[str], int | None]
+"""``tput colors`` of a ``TERM``: the ``max_colors`` capability, ``None`` where ``tput`` prints nothing."""
+
+
+def terminfo_colours(term: str) -> int | None:
+    """``tput colors`` through the terminfo database (``curses``), ``None`` where ``tput`` prints nothing.
+
+    ``tput`` prints nothing for an empty or unknown ``TERM`` (exit 2 or 3) and ``-1`` for a terminal
+    without the capability (``dumb``, ``vt100``); ``curses.tigetnum("colors")`` after ``setupterm`` for
+    that ``TERM`` gives the same numbers (checked for dumb, xterm, xterm-256color, screen, vt100, linux
+    and an unknown name). CPython's ``setupterm`` keeps the first terminal it loaded for the rest of
+    the process, so this answers for one ``TERM`` per process, which is all the CLI asks.
+    """
+    if not term:
+        return None
+    try:
+        curses.setupterm(term, _STDOUT_FD)
+        return int(curses.tigetnum("colors"))
+    except curses.error:
+        return None
+
+
+def _r_as_integer(text: str) -> int:
+    """``as.integer()`` of the ``R_CLI_NUM_COLORS`` value.
+
+    R parses a decimal or exponent form and truncates (``"256.7"`` is 256); a value it cannot parse
+    is ``NA``, and crayon's ``if (nc > 1)`` then stops with ``missing value where TRUE/FALSE needed``,
+    raised here as ``ValueError`` carrying that message.
+    """
+    try:
+        return int(float(text))
+    except (ValueError, OverflowError) as error:
+        raise ValueError(f"R_CLI_NUM_COLORS={text!r}: {MISSING_VALUE_IN_IF}") from error
+
+
+def _emacs_major_version(environ: Mapping[str, str]) -> float | None:
+    """``crayon:::emacs_version()[1]``: ``INSIDE_EMACS`` reduced to digits and dots, up to the first dot."""
+    digits = _EMACS_VERSION_NOISE.sub("", environ.get("INSIDE_EMACS", ""))
+    if not digits:
+        return None
+    first = digits.split(".")[0]
+    return float(first) if first else None
+
+
+def _is_emacs_with_colour(environ: Mapping[str, str]) -> bool:
+    """``crayon:::is_emacs_with_color()``: ``EMACS`` or ``INSIDE_EMACS`` set, Emacs version 23 or newer."""
+    if not (environ.get("EMACS", "") or environ.get("INSIDE_EMACS", "")):
+        return False
+    major = _emacs_major_version(environ)
+    return major is not None and major >= 23
+
+
+def _guess_tty_colours(term: str) -> int:
+    """``crayon:::guess_tty_colors()``: ``dumb`` is 1, a colour-terminal-looking name 8, anything else 1."""
+    if term == "dumb":
+        return 1
+    return 8 if _GUESS_COLOUR_TERM.search(term) else 1
+
+
+def _detect_tty_colours(environ: Mapping[str, str], terminfo: TerminfoColours) -> int:
+    """``crayon:::detect_tty_colors()`` on Unix with a terminal: ``COLORTERM``, Emacs, ``tput colors``."""
+    if "COLORTERM" in environ:
+        return TRUECOLOR if environ["COLORTERM"] in ("truecolor", "24bit") else 8
+    if _is_emacs_with_colour(environ):
+        return 8
+    term = environ.get("TERM", "")
+    colours = terminfo(term)
+    if colours is None:
+        return _guess_tty_colours(term)
+    if colours in (-1, 0, 1):
+        return 1
+    if colours == 8 and term == "xterm":
+        return 256
+    return colours
+
+
+def num_ansi_colours(
+    *, is_tty: bool, environ: Mapping[str, str], terminfo: TerminfoColours = terminfo_colours
+) -> int:
+    """``crayon:::num_ansi_colors()`` (crayon 1.5.3, vendored from cli 3.6.6) as a Linux CLI reaches it.
+
+    In order: a non-empty ``R_CLI_NUM_COLORS`` wins outright (even piped, even next to ``NO_COLOR``);
+    ``NO_COLOR`` set to anything, ``""`` included, is 1; stdout not a terminal is 1; then the terminal
+    detection: ``COLORTERM`` set is 16777216 for ``truecolor``/``24bit`` and 8 for any other value;
+    Emacs 23 or newer (``EMACS``/``INSIDE_EMACS``) is 8; otherwise ``tput colors`` for ``TERM`` decides,
+    with crayon's guess from the name when it fails (``dumb`` 1; ``^screen|^xterm|^vt100|color|ansi|
+    cygwin|linux``, case-insensitively, 8; else 1), ``-1``/``0``/``1`` meaning 1 and 8 on a ``TERM`` of
+    exactly ``xterm`` raised to 256. There is no ``FORCE_COLOR`` rule and no ``256color``-in-``TERM``
+    rule. Every row of ``tests/unit/test_colors.py`` was checked against ``crayon::num_colors()`` in R.
+
+    Not reproduced, being reachable from R only: the options ``cli.num_colors``, ``crayon.enabled``,
+    ``crayon.colors`` and ``cli.default_num_colors`` (the goldens set the crayon ones), knitr, sinks,
+    RStudio, R.app/RGui and the Windows branches.
+    """
+    value = environ.get("R_CLI_NUM_COLORS", "")
+    if value:
+        return _r_as_integer(value)
+    if "NO_COLOR" in environ:
+        return 1
+    if not is_tty:
+        return 1
+    return _detect_tty_colours(environ, terminfo)
+
+
 @dataclass(frozen=True)
 class Crayon:
     """The crayon state a ``loopRuns`` call runs under: enabled or not, and the colour depth.
@@ -117,17 +248,16 @@ class Crayon:
         return cls(enabled=False)
 
     @classmethod
-    def from_terminal(cls, *, is_tty: bool, environ: Mapping[str, str]) -> Crayon:
-        """The enable logic of crayon, as ``02`` section 4.5 records it, from values the CLI passes.
+    def from_terminal(
+        cls, *, is_tty: bool, environ: Mapping[str, str], terminfo: TerminfoColours = terminfo_colours
+    ) -> Crayon:
+        """What crayon decides for this process: :func:`num_ansi_colours` from the values the CLI passes.
 
-        Colours only when stdout is a terminal and ``NO_COLOR`` is unset, or when ``FORCE_COLOR``
-        is set; 256 colours when ``TERM`` contains ``256color`` or ``COLORTERM`` is set, 16
-        otherwise.
+        Enabled when more than one colour is detected (``crayon::has_color()`` is
+        ``num_ansi_colors() > 1``); ``terminfo`` is the ``tput colors`` lookup, injectable for tests.
         """
-        forced = bool(environ.get("FORCE_COLOR"))
-        enabled = forced or (is_tty and "NO_COLOR" not in environ)
-        extended = "256color" in environ.get("TERM", "") or bool(environ.get("COLORTERM"))
-        return cls(enabled=enabled, colours=_EXTENDED_FROM if extended else 16)
+        colours = num_ansi_colours(is_tty=is_tty, environ=environ, terminfo=terminfo)
+        return cls(enabled=colours > 1, colours=colours)
 
     def style(self, name: StyleName) -> Style:
         """The escape sequences of ``name`` at this depth, or ``PLAIN`` when disabled."""

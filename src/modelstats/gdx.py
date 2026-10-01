@@ -9,6 +9,12 @@ magclass 7.5.0, the versions pinned by the goldens), whose behaviour this module
 
 * *absent symbol*: ``react = "silent"`` returns ``NULL`` → :func:`read_param` returns ``None``, and
   ``format = "first_found"`` tries the next name (:func:`read_first_found`);
+* *names*: a plain name (every call but line 281) leaves ``gdx2:::.expandPattern`` unchanged and
+  ``gamstransfer::readGDX(gdx, name)`` resolves it through the GDX library's ``gdxFindSymbol``, which
+  is case-insensitive (GAMS identifiers are; the library refuses a second symbol differing only in
+  case), so :meth:`GdxFile.info` folds case and keeps the stored spelling; line 281's ``type =
+  "Parameter"`` takes the pattern path instead, ``grep("^name$", <parameter names>)``, exact-case and
+  parameters only (:func:`read_typed_scalar`);
 * *dense reconstruction* (``restoreZeros = TRUE``): a parameter over sets comes back as a full array
   over the cartesian product of its domain sets, in set order, with ``0`` where the GDX stores no
   record; aliases are followed to their parent set. A present parameter without records is therefore
@@ -297,8 +303,9 @@ class GdxFile:
         """Wrap ``path`` without touching it."""
         self.path = Path(path)
         self._table: dict[str, SymbolInfo] | None = None
+        self._folded: dict[str, str] = {}
         self._container: Any = None
-        self._parameters: dict[str, pd.DataFrame | None] = {}
+        self._parameters: dict[str, pd.DataFrame] = {}
 
     def __repr__(self) -> str:
         """``GdxFile('/path/fulldata.gdx')``."""
@@ -309,24 +316,36 @@ class GdxFile:
         """The symbol table; opening the file for the first time raises on a damaged one."""
         if self._table is None:
             self._table = read_symbol_table(self.path)
+            self._folded = {name.lower(): name for name in self._table}
             self._container = gt.Container(system_directory=gamspy_base.directory)
         return self._table
 
     def info(self, name: str) -> SymbolInfo | None:
-        """The table row of ``name``, ``None`` when the file has no such symbol."""
-        return self.symbols.get(name)
+        """The table row of ``name`` found like ``gdxFindSymbol``, case-insensitively; ``None`` when absent.
+
+        ``gamstransfer::readGDX(gdx, name)``, which ``gdx2::readGDX`` calls for a plain name, resolves
+        it through the GDX library; GAMS identifiers are case-insensitive and a file cannot hold two
+        that differ only in case, so the folded index is unambiguous. The row keeps the stored
+        spelling (R: ``names(gamstransfer::readGDX(f, "o_iterationNumber"))`` is the stored name).
+        """
+        table = self.symbols
+        stored = self._folded.get(name.lower())
+        return None if stored is None else table[stored]
 
     def parameter(self, name: str) -> pd.DataFrame | None:
         """``readGDX(gdx, name, format = "simplest", react = "silent")`` as a dense frame.
 
-        ``None`` for an absent symbol; :class:`GdxReadError` for a symbol that is not a parameter
-        (R would return a set's elements or a variable's five fields, which no caller can use) and
-        for a domain set missing from the file.
+        ``None`` for an absent symbol (``name`` is matched case-insensitively, :meth:`info`);
+        :class:`GdxReadError` for a symbol that is not a parameter (R would return a set's elements
+        or a variable's five fields, which no caller can use) and for a domain set missing from the
+        file. Cached per stored name, so every spelling of a name reads the file once.
         """
-        if name not in self._parameters:
-            info = self.info(name)
-            self._parameters[name] = None if info is None else self._read_parameter(info)
-        return self._parameters[name]
+        info = self.info(name)
+        if info is None:
+            return None
+        if info.name not in self._parameters:
+            self._parameters[info.name] = self._read_parameter(info)
+        return self._parameters[info.name]
 
     def _read_parameter(self, info: SymbolInfo) -> pd.DataFrame:
         if info.kind is not SymbolKind.PARAMETER:
@@ -378,15 +397,20 @@ def _as_file(gdx: GdxSource) -> GdxFile:
 
 
 def read_param(gdx: GdxSource, name: str) -> pd.DataFrame | None:
-    """``readGDX(gdx, name, react = "silent")``: the dense frame in R order, ``None`` when absent."""
+    """``readGDX(gdx, name, react = "silent")``: the dense frame in R order, ``None`` when absent.
+
+    A plain name (no ``type``) passes ``gdx2:::.expandPattern`` unchanged and is resolved by the GDX
+    library case-insensitively (:meth:`GdxFile.info`); ``R/getRunStatus.R:213, 288``.
+    """
     return _as_file(gdx).parameter(name)
 
 
 def read_scalar(gdx: GdxSource, name: str) -> float | None:
     """``as.numeric(readGDX(gdx, name, format = "simplest", react = "silent"))`` of a 0-d parameter.
 
-    ``None`` when the symbol is absent; :class:`GdxReadError` when it has dimensions (R returns a
-    vector there, which every call site in ``getRunStatus`` then mishandles).
+    ``None`` when the symbol is absent (the name is matched case-insensitively, :meth:`GdxFile.info`);
+    :class:`GdxReadError` when it has dimensions (R returns a vector there, which every call site in
+    ``getRunStatus`` then mishandles). ``R/getRunStatus.R:57, 212, 280``.
     """
     frame = read_param(gdx, name)
     if frame is None:
@@ -397,8 +421,29 @@ def read_scalar(gdx: GdxSource, name: str) -> float | None:
     return float(frame[VALUE].iloc[0])
 
 
+def read_typed_scalar(gdx: GdxSource, name: str) -> float | None:
+    """``as.numeric(readGDX(gdx, name, type = "Parameter", format = "simplest"))`` (``R/getRunStatus.R:281``).
+
+    With ``type`` given, ``gdx2:::.expandPattern`` lists the file's parameters and keeps those matching
+    ``grep("^name$", ...)``: the spelling must match exactly and the symbol must be a parameter, else
+    ``readGDX`` returns ``NULL`` (``numeric(0)`` after ``as.numeric``, with the warning ``No element of
+    name found in GDX!``), which is ``None`` here; a set or variable of that exact name is ``None`` as
+    well, not an error. Verified with gdx2 0.6.2 on a file storing ``S80_BOOL`` (``s80_bool`` →
+    ``numeric(0)``, ``S80_BOOL`` → 1) and on a set named ``s80_bool`` (``numeric(0)``). The
+    ``s80_bool`` read of the ``get_run_status`` port must use this shape, every other read the plain one.
+    """
+    file = _as_file(gdx)
+    info = file.info(name)
+    if info is None or info.name != name or info.kind is not SymbolKind.PARAMETER:
+        return None
+    return read_scalar(file, name)
+
+
 def read_first_found(gdx: GdxSource, names: Sequence[str]) -> pd.DataFrame | None:
-    """``readGDX(gdx, names, format = "first_found", react = "silent")``: the first present symbol."""
+    """``readGDX(gdx, names, format = "first_found", react = "silent")``: the first present symbol.
+
+    Each name resolves case-insensitively like a plain read (:meth:`GdxFile.info`); ``R/getRunStatus.R:84``.
+    """
     file = _as_file(gdx)
     for name in names:
         frame = file.parameter(name)

@@ -8,6 +8,10 @@ three-valued logic for a real ``NA`` (``None``) where the R code would stop with
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
+import sys
 from collections.abc import Callable
 
 import pytest
@@ -27,6 +31,7 @@ from modelstats.colors import (
     colour_for_row,
     colour_legend,
     is_magpie_row,
+    num_ansi_colours,
 )
 from modelstats.formatting import CellValue
 
@@ -72,7 +77,15 @@ def test_truecolor_uses_the_256_index_codes() -> None:
     assert Crayon(colours=256**3).style(StyleName.ORANGERED) == EXTENDED_COLOURS[StyleName.ORANGERED]
 
 
-def test_nesting_is_literal_like_crayon() -> None:
+def test_nested_colour_restores_the_enclosing_colour_like_crayon_template() -> None:
+    """R with crayon 1.5.3 at 256 colours: ``yellow(paste0("a", green("b"), "c"))`` and green in green."""
+    crayon = Crayon()
+    assert crayon.yellow("a" + crayon.green("b") + "c") == f"{ESC}33ma{ESC}32mb{ESC}33mc{ESC}39m"
+    assert crayon.green("a" + crayon.green("b") + "c") == f"{ESC}32ma{ESC}32mb{ESC}32mc{ESC}39m"
+
+
+def test_underline_inside_a_colour_stays_literal_like_crayon() -> None:
+    """``ESC[24m`` is not the colour's closing sequence, so nothing is replaced (same R capture)."""
     crayon = Crayon()
     assert crayon.yellow("a" + crayon.underline("b") + "c") == f"{ESC}33ma{ESC}4mb{ESC}24mc{ESC}39m"
 
@@ -109,26 +122,92 @@ def test_named_accessors_map_to_the_styles() -> None:
         assert accessor("x") == EXTENDED_COLOURS[name]("x")
 
 
-def test_style_is_a_plain_open_close_pair() -> None:
+def test_style_is_an_open_close_pair_that_reopens_after_its_own_close() -> None:
     assert Style("<", ">")("x") == "<x>"
+    assert Style("<", ">")("a>b") == "<a<b>"
+    assert PLAIN("a>b") == "a>b"
 
 
+TPUT_COLORS: dict[str, int] = {
+    "xterm": 8,
+    "xterm-256color": 256,
+    "screen": 8,
+    "linux": 8,
+    "dumb": -1,
+    "vt100": -1,
+}
+"""``tput colors`` per TERM (ncurses terminfo, 2026-10-01); an unknown or empty TERM prints nothing."""
+
+
+def fake_terminfo(term: str) -> int | None:
+    return TPUT_COLORS.get(term)
+
+
+# Every row was checked against crayon 1.5.3 in R 4.6.1 on 2026-10-01: the number is crayon::num_colors()
+# and colours are emitted exactly when it exceeds 1. Command (pty rows; the piped rows drop `script`):
+#   env -u COLORTERM -u NO_COLOR -u R_CLI_NUM_COLORS -u FORCE_COLOR -u EMACS -u INSIDE_EMACS -u TERM VAR=... \
+#     script -qec "Rscript -e 'cat(crayon::num_colors(), crayon::make_style(\"orangered\")(\"x\"))'" \
+#     /dev/null | od -c
 @pytest.mark.parametrize(
-    ("is_tty", "environ", "enabled", "colours"),
+    ("is_tty", "environ", "colours"),
     [
-        (True, {"TERM": "xterm-256color"}, True, 256),
-        (True, {"TERM": "xterm"}, True, 16),
-        (True, {"TERM": "xterm", "COLORTERM": "truecolor"}, True, 256),
-        (False, {"TERM": "xterm-256color"}, False, 256),
-        (True, {"TERM": "xterm-256color", "NO_COLOR": ""}, False, 256),
-        (False, {"TERM": "xterm-256color", "FORCE_COLOR": "1"}, True, 256),
-        (True, {}, True, 16),
+        (False, {"TERM": "xterm-256color", "R_CLI_NUM_COLORS": "256"}, 256),
+        (False, {"TERM": "xterm-256color", "R_CLI_NUM_COLORS": "8"}, 8),
+        (False, {"TERM": "xterm", "NO_COLOR": "1", "R_CLI_NUM_COLORS": "256"}, 256),
+        (False, {"TERM": "xterm-256color", "FORCE_COLOR": "1"}, 1),
+        (False, {"TERM": "xterm-256color"}, 1),
+        (True, {"TERM": "xterm-256color", "NO_COLOR": ""}, 1),
+        (True, {"TERM": "xterm", "COLORTERM": "truecolor"}, 256**3),
+        (True, {"TERM": "xterm", "COLORTERM": "foo"}, 8),
+        (True, {"TERM": "xterm", "COLORTERM": ""}, 8),
+        (True, {"TERM": "dumb", "INSIDE_EMACS": "28.2,comint"}, 8),
+        (True, {"TERM": "dumb", "EMACS": "t"}, 1),
+        (True, {"TERM": "xterm", "INSIDE_EMACS": "22.1,comint"}, 256),
+        (True, {"TERM": "xterm"}, 256),
+        (True, {"TERM": "xterm-256color"}, 256),
+        (True, {"TERM": "screen"}, 8),
+        (True, {"TERM": "dumb"}, 1),
+        (True, {"TERM": "vt100"}, 1),
+        (True, {"TERM": "nonsense-term"}, 1),
+        (True, {"TERM": "mycolorterm"}, 8),
+        (True, {}, 1),
     ],
 )
-def test_from_terminal_follows_crayon(
-    is_tty: bool, environ: dict[str, str], enabled: bool, colours: int
-) -> None:
-    assert Crayon.from_terminal(is_tty=is_tty, environ=environ) == Crayon(enabled=enabled, colours=colours)
+def test_from_terminal_follows_crayon(is_tty: bool, environ: dict[str, str], colours: int) -> None:
+    assert num_ansi_colours(is_tty=is_tty, environ=environ, terminfo=fake_terminfo) == colours
+    assert Crayon.from_terminal(is_tty=is_tty, environ=environ, terminfo=fake_terminfo) == Crayon(
+        enabled=colours > 1, colours=colours
+    )
+
+
+def test_truecolor_from_the_terminal_emits_the_256_index_codes() -> None:
+    crayon = Crayon.from_terminal(is_tty=True, environ={"COLORTERM": "truecolor"}, terminfo=fake_terminfo)
+    assert crayon.red("x") == f"{ESC}38;5;202mx{ESC}39m"  # R: 16777216 colours, same bytes as 256
+
+
+def test_unparseable_r_cli_num_colors_fails_like_crayons_if_on_na() -> None:
+    with pytest.raises(ValueError, match=MISSING_VALUE_IN_IF):
+        num_ansi_colours(is_tty=True, environ={"R_CLI_NUM_COLORS": "lots"}, terminfo=fake_terminfo)
+    assert (
+        num_ansi_colours(is_tty=False, environ={"R_CLI_NUM_COLORS": "256.7"}, terminfo=fake_terminfo) == 256
+    )
+
+
+TPUT = shutil.which("tput")
+
+
+@pytest.mark.skipif(TPUT is None, reason="tput (ncurses) is the oracle for terminfo_colours")
+@pytest.mark.parametrize("term", ["dumb", "xterm", "xterm-256color", "nonsense-term", ""])
+def test_terminfo_colours_equals_tput_colors(term: str) -> None:
+    """One fresh interpreter per TERM: CPython's ``setupterm`` keeps the first terminal of a process."""
+    code = "import sys; from modelstats.colors import terminfo_colours; print(terminfo_colours(sys.argv[1]))"
+    ours = subprocess.run([sys.executable, "-c", code, term], capture_output=True, text=True, check=True)
+    environ = {name: value for name, value in os.environ.items() if name != "TERM"}
+    if term:
+        environ["TERM"] = term
+    assert TPUT is not None
+    tput = subprocess.run([TPUT, "colors"], capture_output=True, text=True, env=environ, check=False)
+    assert ours.stdout.strip() == (tput.stdout.strip() or "None")
 
 
 def test_colour_legend_equals_the_looprun_golden_header() -> None:
