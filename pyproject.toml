@@ -1,0 +1,130 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "modelstats"
+version = "0.31.0"
+description = "Run analysis tools for REMIND and MAgPIE: the rs status command, the automated model tests and the Run object."
+readme = "README.md"
+requires-python = ">=3.14"
+license = "LGPL-3.0-only"
+authors = [
+  { name = "Anastasis Giannousakis", email = "giannou@pik-potsdam.de" },
+  { name = "Oliver Richters" },
+  { name = "Simon Krogmann" },
+]
+keywords = ["REMIND", "MAgPIE", "GAMS", "SLURM", "PIK"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Science/Research",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering",
+  "Typing :: Typed",
+]
+# Library decisions and verified semantics: migration/02-python-libraries.md sections 4 and 5.
+dependencies = [
+  "gamsapi[transfer]>=54.4,<55", # gams.transfer Container (route A); pulls pandas + scipy
+  "gamspy_base>=54.4,<55",       # GAMS system directory for gams.transfer, no GAMS install needed
+  "rdata>=1.1,<2",               # .Rdata/.rda/.rds (pulls pandas + xarray)
+  "pyyaml>=6.0,<7",              # config.yml (MAgPIE)
+  "natsort>=8.4,<9",             # mixedsort / stri_order stand-ins (fixed flags, D-14)
+  "typer>=0.27,<1",              # rs and modeltests CLIs
+]
+
+[project.urls]
+Homepage = "https://github.com/pik-piam/modelstats"
+Repository = "https://github.com/pik-piam/modelstats"
+"Issue Tracker" = "https://github.com/pik-piam/modelstats/issues"
+
+[project.scripts]
+rs = "modelstats.cli:app"
+modeltests = "modelstats.amt.cli:app"
+
+[dependency-groups]
+dev = [
+  "ruff>=0.16,<1",
+  "mypy>=2.3,<3",
+  "pytest>=9.1,<10",
+  "pre-commit>=4.6,<5",
+  "types-PyYAML>=6.0.12",
+  "pandas-stubs>=3.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/modelstats"]
+
+[tool.hatch.build.targets.sdist]
+# The sdist carries the Python package and its tests only; the R package, its fixtures and the
+# migration record stay in the git repository. The shipped tests must therefore not depend on files
+# outside this include list (tests/unit/test_version.py skips its DESCRIPTION mirror check when the
+# R manifest is absent). Patterns are gitignore-style: anchor them, or "tests" would also match
+# migration/fixtures/p/projects/landuse/tests.
+include = ["/src/modelstats", "/tests", "/pyproject.toml", "/README.md"]
+exclude = ["/tests/testthat", "/tests/.lintr"]
+
+# ---------------------------------------------------------------------------------------------
+# ruff: lint and format (migration/06-user-requests.md section 6, quality bar)
+# ---------------------------------------------------------------------------------------------
+[tool.ruff]
+line-length = 110
+target-version = "py314"
+src = ["src", "tests"]
+# The R oracle harness under migration/ is not part of the Python package.
+extend-exclude = ["migration"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "N", "D"]
+ignore = [
+  "D203", # one-blank-line-before-class: conflicts with D211 (google convention)
+  "D213", # multi-line-summary-second-line: conflicts with D212 (google convention)
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests need no docstrings on every function and class; the module docstring stays (D100).
+"tests/**" = ["D101", "D102", "D103", "D104", "D105", "D106", "D107"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["modelstats"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# ---------------------------------------------------------------------------------------------
+# mypy: strict on the package and the tests
+# ---------------------------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.14"
+strict = true
+files = ["src", "tests"]
+warn_unreachable = true
+pretty = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+# gamsapi ships no stubs (migration/02-python-libraries.md 4.11); gamspy_base is a plain data package.
+module = ["gams", "gams.*", "gamspy_base", "gamspy_base.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------------------------
+# pytest: tiers (migration/03-migration-plan.md section 5, tests/)
+#   unit      default; pure functions, synthetic inputs, no fixtures
+#   golden    -m golden;  needs migration/goldens + migration/fixtures (+ migration/synthetic)
+#   sandbox   -m sandbox; runs inside migration/harness/sandbox.sh
+# ---------------------------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+addopts = '-m "not golden and not sandbox" --strict-markers --strict-config'
+markers = [
+  "golden: compares against the R goldens under migration/goldens (needs the fixture trees; deselected by default)",
+  "sandbox: runs the command end to end inside migration/harness/sandbox.sh (deselected by default)",
+]
+xfail_strict = true
+filterwarnings = ["error::DeprecationWarning:modelstats"]

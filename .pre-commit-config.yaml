@@ -6,12 +6,24 @@ repos:
     rev: cef0300fd0fc4d2a87a85fa2093c6b283ea36f4b  # frozen: v5.0.0
     hooks:
     -   id: check-case-conflict
+        # The R goldens hold case-sensitive sort cases on purpose (synthetic__sortroot__output__B / __b).
+        exclude: '^migration/goldens/'
     -   id: check-json
     -   id: check-merge-conflict
     -   id: check-yaml
+        # tests/data/r/config.yml carries the !<namedVector>/!<character> tags gms::saveConfig writes
+        # (migration/02-python-libraries.md 4.3); the safe loader rejects them, so that file gets the
+        # syntax-only check below.
+        exclude: '^tests/data/r/config\.yml$'
+    -   id: check-yaml
+        name: check yaml (syntax only, gms tags)
+        alias: check-yaml-gms
+        args: ['--unsafe']
+        files: '^tests/data/r/config\.yml$'
     -   id: fix-byte-order-marker
     -   id: check-added-large-files
         args: ['--maxkb=100']
+        exclude: '^uv\.lock$'
     -   id: mixed-line-ending
 
 -   repo: https://github.com/lorenzwalthert/precommit
@@ -24,5 +36,25 @@ repos:
     -   id: no-debug-statement
     -   id: readme-rmd-rendered
     -   id: use-tidy-description
+
+# Python (src/ and tests/ only; the R oracle harness under migration/ is not linted here).
+-   repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: a56c0b927e6465d37cae3e97d35d4d18ab2b96cd  # frozen: v0.16.9
+    hooks:
+    -   id: ruff-check
+        files: '^(src|tests)/.*\.py$'
+        args: ['--fix']
+    -   id: ruff-format
+        files: '^(src|tests)/.*\.py$'
+-   repo: local
+    hooks:
+    -   id: mypy
+        name: mypy --strict (locked environment)
+        # Runs from the locked environment; where uv is absent (the R CI image, pre-commit.ci) it
+        # steps aside and .github/workflows/python.yml is the mypy gate.
+        entry: bash -c 'command -v uv >/dev/null 2>&1 || { echo "uv not found, mypy runs in the python workflow"; exit 0; }; uv run --frozen mypy --strict src tests'
+        language: system
+        files: '^(src|tests)/.*\.py$'
+        pass_filenames: false
 ci:
     autoupdate_schedule: weekly

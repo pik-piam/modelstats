@@ -30,3 +30,14 @@ R/updateReadme.R
 doc
 Meta
 /modelstats.Rproj
+
+# Python (src layout, uv, ruff, mypy, pytest)
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+dist/
+build/
+*.egg-info/

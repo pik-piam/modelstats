@@ -1,0 +1,79 @@
+name: python
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  checks:
+    name: ruff, mypy and pytest on Python 3.14
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Install the locked environment
+        run: uv sync --locked
+
+      - name: ruff check
+        run: uv run ruff check src tests
+
+      - name: ruff format --check
+        run: uv run ruff format --check src tests
+
+      - name: mypy --strict
+        run: uv run mypy --strict src tests
+
+      - name: pytest (unit and packaging tiers; the sandbox tier needs the fixtures)
+        run: uv run pytest -q
+
+      # The fixture-free parity gate of migration/03-migration-plan.md section 6: the sort cases and
+      # their R goldens are tracked in git, so this family runs on every push. -m golden overrides the
+      # default deselection; -rs makes any skip visible in the log (a skip here would be a regression).
+      - name: pytest (sort golden suite; fixture-free parity gate, 03 section 6)
+        run: uv run pytest -q -rs -m golden tests/golden/test_sort_goldens.py
+
+  wheel:
+    name: build the wheel and run the tests and console scripts from a fresh locked venv
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.14"
+
+      - name: uv build
+        run: uv build
+
+      # The fresh environment gets exactly the locked dependency set (runtime and the dev group with
+      # pytest, hashes required) and then the wheel without re-resolving, so the tests below exercise
+      # the wheel against the same library versions as the checks job (03 phase 0 step 7).
+      - name: Install the locked dependencies and the wheel into a fresh virtual environment
+        run: |
+          uv venv --python 3.14 "${RUNNER_TEMP}/fresh"
+          uv export --locked --no-emit-project -o "${RUNNER_TEMP}/requirements.txt"
+          uv pip install --python "${RUNNER_TEMP}/fresh/bin/python" --require-hashes -r "${RUNNER_TEMP}/requirements.txt"
+          uv pip install --python "${RUNNER_TEMP}/fresh/bin/python" --no-deps dist/modelstats-*.whl
+
+      - name: rs --help and modeltests --help from the installed wheel
+        run: |
+          "${RUNNER_TEMP}/fresh/bin/rs" --help
+          "${RUNNER_TEMP}/fresh/bin/modeltests" --help
+          "${RUNNER_TEMP}/fresh/bin/python" -c "import modelstats, gams.transfer, rdata, natsort, typer, yaml; print(modelstats.__version__, modelstats.__file__)"
+
+      # Run from the repository root: the src layout keeps src/ off sys.path, so `import modelstats`
+      # resolves to the installed wheel, not the checkout.
+      - name: pytest against the installed wheel (locked dependencies)
+        run: |
+          "${RUNNER_TEMP}/fresh/bin/python" -m pytest -q -p no:cacheprovider
