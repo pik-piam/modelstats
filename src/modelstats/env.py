@@ -107,8 +107,19 @@ class RunResult:
         return self.returncode == 0
 
     def lines(self) -> list[str]:
-        """The stdout lines, as ``intern = TRUE`` returns them: no newline, ``character(0)`` when empty."""
-        return self.stdout.splitlines()
+        r"""The stdout lines as ``intern = TRUE`` returns them (``src/unix/sys-unix.c``, ``getline``).
+
+        Split on ``\n`` only (``\r`` and the other ``str.splitlines`` breaks stay inside a line, as R keeps
+        them: ``printf 'a\rb\n'`` is one element), an unterminated last line is one element, each element
+        is cut at its first NUL (BUG-011) and empty output is ``character(0)``. The byte-level twin is
+        :func:`modelstats.textscan.intern_lines`.
+        """
+        if not self.stdout:
+            return []
+        lines = self.stdout.split("\n")
+        if self.stdout.endswith("\n"):
+            lines.pop()
+        return [line.split("\0", 1)[0] for line in lines]
 
 
 class CommandFailedError(RuntimeError):
@@ -1087,7 +1098,9 @@ class FakeEffects:
         return self._cwd / PurePosixPath(os.fspath(path))
 
     def _physical(self, path: PathLike) -> Path | None:
-        """The physical path the overlay shows, or ``None``."""
+        """The physical path the overlay shows, or ``None``; ``""`` is nothing, as ``file.exists("")`` is."""
+        if os.fspath(path) == "":
+            return None
         logical = self._absolute(path)
         if self._paths is None:
             physical = Path(logical)

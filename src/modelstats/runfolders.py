@@ -44,6 +44,7 @@ __all__ = [
     "natural_order_indices",
     "natural_sorted",
     "r_basename",
+    "r_dirname",
     "split_comma_list",
 ]
 
@@ -172,3 +173,20 @@ def r_basename(path: str) -> str:
     """``basename(path)``: trailing slashes removed first, so ``"a/b/"`` is ``"b"`` and ``"/"`` is ``""``."""
     stripped = path.rstrip("/")
     return os.path.basename(stripped) if stripped else ""
+
+
+def r_dirname(path: str) -> str:
+    """``dirname(path)``: trailing slashes removed first; ``"/a"`` gives ``"/"``, ``"a"`` gives ``"."``.
+
+    ``"/a/b/"`` is ``"/a"``, ``"/a//b"`` is ``"/a"``, ``"/"`` is ``"/"`` and ``""`` stays ``""``. Verified in
+    R 4.6.1 (``R/commandLineInterface.R:160`` via ``modelstats.slurm``).
+    """
+    if path == "":
+        return ""
+    stripped = path.rstrip("/")
+    if stripped == "":
+        return "/"
+    if "/" not in stripped:
+        return "."
+    head = stripped.rpartition("/")[0].rstrip("/")
+    return head or "/"

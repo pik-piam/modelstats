@@ -252,6 +252,20 @@ def test_run_missing_program_is_status_127(production: ProductionEffects) -> Non
     assert RunResult(("x",), 0, "", "").lines() == []
 
 
+def test_run_result_lines_split_on_newline_only() -> None:
+    # intern = TRUE splits on \n only (printf 'a\rb\n' is one element in R 4.6.1), keeps an unterminated
+    # last line and cuts each element at its first NUL (BUG-011)
+    assert RunResult(("x",), 0, "a\rb\nc", "").lines() == ["a\rb", "c"]
+    assert RunResult(("x",), 0, "ab\0cd\nef\n", "").lines() == ["ab", "ef"]
+
+
+def test_the_empty_path_exists_nowhere(production: ProductionEffects, layers: Layers) -> None:
+    # file.exists("") and dir.exists("") are FALSE in R 4.6.1; file.info("") is the NA row
+    assert not production.exists("") and not production.is_dir("") and production.stat("") is None
+    fake = make_fake(layers)
+    assert not fake.exists("") and not fake.is_dir("") and fake.stat("") is None
+
+
 def test_user_is_the_passwd_name_of_the_real_uid(production: ProductionEffects) -> None:
     assert production.user == pwd.getpwuid(os.getuid()).pw_name
 

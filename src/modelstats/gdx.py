@@ -409,8 +409,10 @@ def read_scalar(gdx: GdxSource, name: str) -> float | None:
     """``as.numeric(readGDX(gdx, name, format = "simplest", react = "silent"))`` of a 0-d parameter.
 
     ``None`` when the symbol is absent (the name is matched case-insensitively, :meth:`GdxFile.info`);
-    :class:`GdxReadError` when it has dimensions (R returns a vector there, which every call site in
-    ``getRunStatus`` then mishandles). ``R/getRunStatus.R:57, 212, 280``.
+    :class:`GdxReadError` when it has dimensions: R returns a vector there, which the scalar call sites
+    (``o_iterationNumber``, ``R/getRunStatus.R:57, 280``) then mishandle. The ``cm_abortOnConsecFail``
+    read of ``:212`` is not one of them: its vector goes through ``isTRUE(maxinfes > 0)`` unharmed, so it
+    reads the parameter as a whole (``facts.RunFacts.abort_threshold``).
     """
     frame = read_param(gdx, name)
     if frame is None:
