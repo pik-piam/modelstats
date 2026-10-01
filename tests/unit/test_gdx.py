@@ -9,10 +9,9 @@ Three layers:
 * with the fixture tree and R present, the seven status symbols of every real and synthetic
   fixture GDX are read by both sides and compared.
 
-Number comparison uses R's ``as.character()`` text. R distinguishes ``NaN`` (GAMS UNDEF) from
-``NA`` (GAMS NA); a Python float holds ``nan`` for both, so both R spellings compare equal to
-``nan`` here, also inside the ``p80_repy`` digit string (documented in modelstats.gdx; no status
-symbol carries either value).
+Number comparison uses R's ``as.character()`` text and is exact: R distinguishes ``NaN`` (GAMS
+UNDEF, a plain nan here) from ``NA`` (GAMS NA, a nan with the gams.transfer payload that
+``modelstats.gdx.is_na`` recognises), also inside the ``p80_repy`` digit string.
 """
 
 from __future__ import annotations
@@ -34,6 +33,7 @@ from modelstats.gdx import (
     GdxError,
     GdxFile,
     SymbolInfo,
+    is_na,
     open_gdx,
     read_first_found,
     read_param,
@@ -63,7 +63,9 @@ VALID_FILES = [name for name in MATRIX_FILES if name not in matrix.CORRUPT]
 
 # --------------------------------------------------------------------------- helpers
 def r_chr(value: float) -> str:
-    """R ``as.character(<double>)`` for the values that occur (15 significant digits)."""
+    """R ``as.character(<double>)`` for the values that occur (15 significant digits; GAMS NA is ``NA``)."""
+    if is_na(value):
+        return "NA"
     if math.isnan(value):
         return "NaN"
     if math.isinf(value):
@@ -83,17 +85,17 @@ def r_list(expected: Any) -> list[str] | None:
 
 
 def same_numbers(python: list[float] | None, expected: Any) -> bool:
-    """Python floats against R text; R "NA" and "NaN" both equal nan."""
+    """Python floats against R text, exactly (R "NA" only equals a GAMS NA, "NaN" only a plain nan)."""
     r_values = r_list(expected)
     if python is None or r_values is None:
         return python is None and r_values is None
     if len(python) != len(r_values):
         return False
-    return all(r_chr(p) == ("NaN" if r == "NA" else r) for p, r in zip(python, r_values, strict=True))
+    return all(r_chr(p) == r for p, r in zip(python, r_values, strict=True))
 
 
 def modelstat_string(frame: pd.DataFrame) -> str:
-    """``paste(p80_repy[, , "modelstat"], collapse = "")`` from the dense frame (nan as "NaN")."""
+    """``paste(p80_repy[, , "modelstat"], collapse = "")`` from the dense frame (nan as "NaN", GAMS NA as "NA")."""
     rows = frame[frame.iloc[:, -2] == "modelstat"]
     return "".join(r_chr(v) for v in rows["value"])
 
@@ -145,8 +147,7 @@ def assert_matches_oracle(gdx: GdxFile, expected: dict[str, Any]) -> None:
         assert same_numbers(gdx.values(name), r_param["values"]), (gdx.path, name, gdx.values(name))
         if name == "p80_repy":
             assert not isinstance(r_param["modelstat_string"], dict), (gdx.path, r_param["modelstat_string"])
-            # R pastes "NA" for a GAMS NA and "NaN" for UNDEF; Python has nan for both
-            assert modelstat_string(frame) == r_param["modelstat_string"].replace("NA", "NaN"), gdx.path
+            assert modelstat_string(frame) == r_param["modelstat_string"], gdx.path
         if name == "p80_trackConsecFail":
             assert frame.iloc[:, 0].tolist() == r_param["quitte"]["region"], gdx.path
             assert same_numbers(frame["value"].tolist(), r_param["quitte"]["value"]), gdx.path
@@ -236,12 +237,14 @@ def test_dense_frame_layout() -> None:
     assert track["value"].tolist() == [0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 
-def test_universe_domain_keeps_record_order_with_nan_holes() -> None:
+def test_universe_domain_keeps_record_order_with_na_holes() -> None:
     frame = read_param(MATRIX_DIR / "universe.gdx", "p80_repy")
     assert frame is not None
     assert list(frame.columns) == ["uni_0", "uni_1", "value"]
     assert frame.iloc[:, 0].tolist() == ["EUR", "EUR", "CHA", "CHA"]
-    assert [r_chr(v) for v in frame["value"]] == ["2", "NaN", "NaN", "7"]
+    # R: the missing combinations are NA (not NaN), as the oracle's "2NA" modelstat string shows
+    assert [r_chr(v) for v in frame["value"]] == ["2", "NA", "NA", "7"]
+    assert [is_na(v) for v in frame["value"]] == [False, True, True, False]
 
 
 def test_special_values_map_like_gamstransfer() -> None:
@@ -250,9 +253,9 @@ def test_special_values_map_like_gamstransfer() -> None:
     assert eps == 0.0 and math.copysign(1.0, eps) == 1.0, "EPS must be a positive zero like R's 0"
     assert read_scalar(gdx, "sv_inf") == math.inf
     assert read_scalar(gdx, "sv_neginf") == -math.inf
-    for name in ("sv_undef", "sv_na"):
-        value = read_scalar(gdx, name)
-        assert value is not None and math.isnan(value)
+    undef, na = read_scalar(gdx, "sv_undef"), read_scalar(gdx, "sv_na")
+    assert undef is not None and na is not None and math.isnan(undef) and math.isnan(na)
+    assert not is_na(undef) and is_na(na)  # R: NaN versus NA
 
 
 def test_zero_record_symbols_read_as_zeros() -> None:

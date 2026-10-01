@@ -22,6 +22,10 @@ R facts reproduced here (verified with R 4.6.1 on 2026-10-01, see the unit tests
 - ``file.exists()`` follows symlinks (a dangling one is ``FALSE``), ``Sys.glob()`` returns
   the matches sorted by code point (``glob(3)`` under ``C.utf8``) and never matches a
   leading dot with ``*``.
+- ``dir()``, ``file.exists()``, ``file.info()``, ``Sys.glob()`` (which returns the expanded
+  paths) and file connections apply ``path.expand()``: a leading ``~`` or ``~user`` becomes
+  the home directory, a tilde anywhere else is kept (``a~/b``); ``system()`` runs through a
+  shell, which expands ``~`` the same way. :func:`_expand` does that for every path here.
 - ``Sys.Date()`` is the date in the local time zone; ``Sys.time()`` is time-zone aware.
 - ``Sys.info()[["user"]]`` is the passwd name of the uid (``"unknown"`` when the uid has
   no passwd entry); ``Sys.getenv("X")`` is ``""`` when unset.
@@ -223,34 +227,40 @@ class Effects(abc.ABC):
         """``Sys.getenv(name)``: ``""`` (or ``default``) when unset."""
 
 
+def _expand(path: PathLike) -> str:
+    """R's ``path.expand()``: a leading ``~`` or ``~user`` becomes the home directory; nothing else changes."""
+    return os.path.expanduser(os.fspath(path))
+
+
 class ProductionEffects(Effects):
-    """The real environment."""
+    """The real environment (every path goes through :func:`_expand` first, as R's file functions do)."""
 
     def listdir_like_r(self, directory: PathLike) -> list[str]:
         try:
-            names = os.listdir(directory)
+            names = os.listdir(_expand(directory))
         except FileNotFoundError, NotADirectoryError, PermissionError:
             return []
         return r_sort(name for name in names if not name.startswith("."))
 
     def exists(self, path: PathLike) -> bool:
-        return os.path.exists(path)
+        return os.path.exists(_expand(path))
 
     def is_dir(self, path: PathLike) -> bool:
-        return os.path.isdir(path)
+        return os.path.isdir(_expand(path))
 
     def stat(self, path: PathLike) -> FileStat:
-        st = os.stat(path)
+        st = os.stat(_expand(path))
         return FileStat(mtime=st.st_mtime, ctime=st.st_ctime, size=st.st_size)
 
     def read_text(self, path: PathLike) -> str:
-        return Path(path).read_bytes().decode("utf-8", "surrogateescape")
+        return Path(_expand(path)).read_bytes().decode("utf-8", "surrogateescape")
 
     def read_bytes(self, path: PathLike) -> bytes:
-        return Path(path).read_bytes()
+        return Path(_expand(path)).read_bytes()
 
     def glob(self, pattern: PathLike) -> list[str]:
-        return sorted(_glob.glob(os.fspath(pattern)))
+        # Sys.glob() returns the expanded paths
+        return sorted(_glob.glob(_expand(pattern)))
 
     def run(
         self,
@@ -264,7 +274,7 @@ class ProductionEffects(Effects):
         try:
             return subprocess.run(
                 argv,
-                cwd=cwd,
+                cwd=None if cwd is None else _expand(cwd),  # system() runs through a shell, which expands ~
                 env=full_env,
                 input=input,
                 capture_output=True,

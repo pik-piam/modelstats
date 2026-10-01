@@ -82,6 +82,11 @@ def _decode(data: bytes) -> str:
     return data.decode("utf-8", "surrogateescape")
 
 
+def _expand(path: PathLike) -> str:
+    """R's ``path.expand()`` (a leading ``~`` only): applied by the shell the R pipelines run through."""
+    return os.path.expanduser(os.fspath(path))
+
+
 # ---------------------------------------------------------------------------
 # forward reading
 # ---------------------------------------------------------------------------
@@ -89,7 +94,7 @@ def _decode(data: bytes) -> str:
 
 def iter_lines(path: PathLike) -> Iterator[str]:
     """The lines of a file as grep sees them: split on ``\\n`` only, final partial line included."""
-    with open(path, "rb") as fh:
+    with open(_expand(path), "rb") as fh:
         for raw in fh:
             yield _decode(raw[:-1] if raw.endswith(b"\n") else raw)
 
@@ -173,7 +178,7 @@ def _reverse_lines(fh: BinaryIO, end: int, chunk_size: int) -> Iterator[bytes]:
 
 def tac_lines(path: PathLike, chunk_size: int = CHUNK_SIZE) -> Iterator[str]:
     """The lines ``tac FILE`` emits, in that order, with its glue quirk for a missing final newline."""
-    with open(path, "rb") as fh:
+    with open(_expand(path), "rb") as fh:
         size = fh.seek(0, os.SEEK_END)
         partial, end = _partial_tail(fh, size, chunk_size)
         lines = _reverse_lines(fh, end, chunk_size)
@@ -192,7 +197,7 @@ def last_match(path: PathLike, regex: Pattern, chunk_size: int = CHUNK_SIZE) -> 
     """
     pattern = _compile(regex)
     block_pattern = re.compile(pattern.pattern, pattern.flags | re.MULTILINE)
-    with open(path, "rb") as fh:
+    with open(_expand(path), "rb") as fh:
         size = fh.seek(0, os.SEEK_END)
         partial, end = _partial_tail(fh, size, chunk_size)
         blocks = _reverse_blocks(fh, end, chunk_size)
@@ -225,7 +230,7 @@ def _prepend(block: bytes, blocks: Iterator[bytes]) -> Iterator[bytes]:
 
 def last_nonempty_line(path: PathLike, chunk_size: int = CHUNK_SIZE) -> str:
     """``awk 'NF{s=$0}END{print s}' FILE``: the last line with a non-blank character, else ``""``."""
-    with open(path, "rb") as fh:
+    with open(_expand(path), "rb") as fh:
         size = fh.seek(0, os.SEEK_END)
         partial, end = _partial_tail(fh, size, chunk_size)
         if partial and partial.strip(b" \t"):
@@ -238,7 +243,7 @@ def last_nonempty_line(path: PathLike, chunk_size: int = CHUNK_SIZE) -> str:
 
 def last_line(path: PathLike, chunk_size: int = CHUNK_SIZE) -> str | None:
     """``tail -1 FILE``: ``None`` for an empty file, else the last line (``""`` for a trailing blank line)."""
-    with open(path, "rb") as fh:
+    with open(_expand(path), "rb") as fh:
         size = fh.seek(0, os.SEEK_END)
         if size == 0:
             return None
@@ -258,7 +263,7 @@ def grep_z_only_matching(path: PathLike, pattern: re.Pattern[str]) -> bytes:
 
     The whole file is read (the slurm.log / log.txt files this serves are a few hundred KB).
     """
-    data = Path(path).read_bytes()
+    data = Path(_expand(path)).read_bytes()
     out = bytearray()
     for record in data.split(b"\0"):
         for match in pattern.finditer(_decode(record)):

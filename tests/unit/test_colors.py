@@ -9,7 +9,7 @@ random rows including ``NA`` cells and missing columns (0 differences); the case
 from __future__ import annotations
 
 import io
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 
 import pytest
 
@@ -17,6 +17,7 @@ from modelstats.colors import (
     STYLE_NAMES,
     STYLES,
     STYLES_16,
+    _run_tput,
     colour_for_magpie,
     colour_for_remind,
     colour_for_row,
@@ -130,38 +131,88 @@ class _Tty(io.StringIO):
         return True
 
 
-def test_detect_enabled_rules() -> None:
-    tty, pipe = _Tty(), io.StringIO()
-    assert detect_enabled(pipe, {"R_CLI_NUM_COLORS": "256"}) is True
-    assert detect_enabled(tty, {"R_CLI_NUM_COLORS": "1"}) is False
-    assert detect_enabled(tty, {"R_CLI_NUM_COLORS": "abc"}) is False  # as.integer gives NA
-    assert detect_enabled(pipe, {"R_CLI_NUM_COLORS": "2", "NO_COLOR": ""}) is True  # the forced value wins
-    assert detect_enabled(tty, {"NO_COLOR": ""}) is False
-    assert detect_enabled(tty, {"NO_COLOR": "1"}) is False
-    assert detect_enabled(tty, {}) is True
-    assert detect_enabled(pipe, {}) is False
-    assert detect_enabled(None, {}) is False
+class _Tput:
+    """A canned ``tput colors``: returns ``output``, or raises like a missing command when it is None."""
+
+    def __init__(self, output: str | None) -> None:
+        self.output = output
+        self.calls = 0
+
+    def __call__(self, argv: Sequence[str]) -> str:
+        assert list(argv) == ["tput", "colors"]
+        self.calls += 1
+        if self.output is None:
+            raise FileNotFoundError("tput")
+        return self.output
 
 
-def test_detect_num_colors_rules() -> None:
+# crayon 1.5.3 on a real pty (`script -qec "Rscript ..."`, COLORTERM / NO_COLOR / R_CLI_NUM_COLORS unset), see the
+# verification of Codex finding 7 of the phase 1 review: (TERM, tput output, num_colors)
+TTY_CASES: list[tuple[str, str | None, int]] = [
+    ("dumb", "-1\n", 1),
+    ("dumb", None, 1),
+    ("xterm", "8\n", 256),  # tput says 8, crayon lifts TERM == "xterm" to 256
+    ("xterm-256color", "256\n", 256),
+    ("screen", "8\n", 8),
+    ("rxvt", "88\n", 88),
+    ("xterm", "0\n", 1),
+    ("xterm", "1\n", 1),
+    ("foo", None, 1),  # tput fails: guess_tty_colors
+    ("screen", None, 8),
+    ("xterm", None, 8),  # the guess, not the tput 8 -> 256 rule
+    ("linux", "", 8),  # no output: as.numeric(character(0))[1] is NA -> guess
+    ("xterm", "abc\n", 8),  # non-numeric: NA -> guess
+    ("vt100", "nan\n", 8),
+    ("Eterm-color", None, 8),  # "color" anywhere, case-insensitive
+    ("", None, 1),
+]
+
+
+@pytest.mark.parametrize(("term", "tput", "expected"), TTY_CASES)
+def test_detect_num_colors_follows_crayon_on_a_tty(term: str, tput: str | None, expected: int) -> None:
+    assert detect_num_colors(_Tty(), {"TERM": term}, _Tput(tput)) == expected
+    assert detect_enabled(_Tty(), {"TERM": term}, _Tput(tput)) is (expected > 1)
+
+
+def test_colorterm_decides_before_tput() -> None:
+    for value, expected in (("yes", 8), ("", 8), ("truecolor", 16777216), ("24bit", 16777216)):
+        tput = _Tput("256\n")
+        assert detect_num_colors(_Tty(), {"TERM": "xterm", "COLORTERM": value}, tput) == expected
+        assert tput.calls == 0
+
+
+def test_forced_value_no_color_and_non_tty_decide_first() -> None:
     tty, pipe = _Tty(), io.StringIO()
-    assert detect_num_colors(pipe, {"R_CLI_NUM_COLORS": "256"}) == 256
-    assert detect_num_colors(tty, {"R_CLI_NUM_COLORS": "8"}) == 8
-    assert detect_num_colors(tty, {"R_CLI_NUM_COLORS": "abc"}) == 1
-    assert detect_num_colors(pipe, {}) == 1
-    assert detect_num_colors(tty, {"NO_COLOR": ""}) == 1
-    assert detect_num_colors(tty, {"TERM": "xterm-256color"}) == 256
-    assert detect_num_colors(tty, {"TERM": "xterm", "COLORTERM": ""}) == 256
-    assert detect_num_colors(tty, {"TERM": "xterm", "COLORTERM": "truecolor"}) == 256
-    assert detect_num_colors(tty, {"TERM": "xterm"}) == 16
-    assert detect_num_colors(tty, {}) == 16
+    cases: list[tuple[io.StringIO | None, dict[str, str], int]] = [
+        (pipe, {"R_CLI_NUM_COLORS": "256"}, 256),
+        (tty, {"R_CLI_NUM_COLORS": "8"}, 8),
+        (tty, {"R_CLI_NUM_COLORS": "1"}, 1),
+        (tty, {"R_CLI_NUM_COLORS": "abc"}, 1),  # as.integer gives NA
+        (pipe, {"R_CLI_NUM_COLORS": "2", "NO_COLOR": ""}, 2),  # the forced value wins
+        (tty, {"NO_COLOR": ""}, 1),
+        (tty, {"NO_COLOR": "1", "TERM": "xterm-256color", "COLORTERM": "truecolor"}, 1),
+        (pipe, {"TERM": "xterm-256color", "COLORTERM": "truecolor"}, 1),
+        (None, {"TERM": "xterm"}, 1),
+    ]
+    for stream, env, expected in cases:
+        tput = _Tput("256\n")
+        assert detect_num_colors(stream, env, tput) == expected, env
+        assert detect_enabled(stream, env, tput) is (expected > 1), env
+        assert tput.calls == 0, env
 
 
 def test_enable_from_environment_applies_detection() -> None:
     assert enable_from_environment(io.StringIO(), {"R_CLI_NUM_COLORS": "256"}) is True
     assert (is_enabled(), num_colors()) == (True, 256)
-    assert enable_from_environment(_Tty(), {"TERM": "xterm"}) is True
-    assert (is_enabled(), num_colors()) == (True, 16)
+    assert enable_from_environment(_Tty(), {"TERM": "xterm"}, _Tput("8\n")) is True
+    assert (is_enabled(), num_colors()) == (True, 256)
+    assert style("orangered", "x") == f"{ESC}[38;5;202mx{ESC}[39m"
+    assert enable_from_environment(_Tty(), {"TERM": "screen"}, _Tput("8\n")) is True
+    assert (is_enabled(), num_colors()) == (True, 8)
+    assert style("orangered", "x") == f"{ESC}[31mx{ESC}[39m"  # crayon's 8-colour bytes equal its 16-colour bytes
+    assert enable_from_environment(_Tty(), {"TERM": "xterm", "COLORTERM": "truecolor"}) is True
+    assert (is_enabled(), num_colors()) == (True, 16777216)
+    assert style("orangered", "x") == f"{ESC}[38;5;202mx{ESC}[39m"  # and its truecolor bytes equal its 256 bytes
     assert enable_from_environment(io.StringIO(), {}) is False
     assert (is_enabled(), num_colors()) == (False, 1)
 
@@ -173,6 +224,19 @@ def test_detect_reads_the_process_environment_by_default(monkeypatch: pytest.Mon
     monkeypatch.delenv("R_CLI_NUM_COLORS")
     monkeypatch.setenv("NO_COLOR", "1")
     assert detect_enabled(_Tty()) is False
+    monkeypatch.delenv("NO_COLOR")
+    monkeypatch.delenv("COLORTERM", raising=False)
+    monkeypatch.setenv("TERM", "dumb")
+    assert detect_num_colors(_Tty(), run=_Tput("-1\n")) == 1
+
+
+def test_default_tput_runner_reads_stdout_only_and_raises_when_missing() -> None:
+    # system("tput colors 2>/dev/null", intern = TRUE): stdout regardless of the exit status, stderr dropped
+    assert _run_tput(["sh", "-c", "echo 7; echo noise >&2; exit 3"]) == "7\n"
+    with pytest.raises(OSError):
+        _run_tput(["modelstats-no-such-tput-xyz", "colors"])
+    # the real probe on a tty: whatever tput says, the result is crayon's and at least 1
+    assert detect_num_colors(_Tty(), {"TERM": "xterm-256color"}) >= 1
 
 
 # ---------------------------------------------------------------------------

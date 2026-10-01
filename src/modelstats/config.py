@@ -392,7 +392,8 @@ def load_config(path: str | os.PathLike[str], effects: Effects | None = None) ->
     name = os.fspath(path)
     if name.endswith("yml"):
         if effects is None:
-            with open(name, "rb") as handle:
+            # yaml.load_file() / file() apply path.expand() (a leading ~ only)
+            with open(os.path.expanduser(name), "rb") as handle:
                 raw = handle.read()
         else:
             raw = effects.read_bytes(name)

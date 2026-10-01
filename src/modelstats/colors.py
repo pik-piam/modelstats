@@ -4,14 +4,17 @@ The seven styles the R package uses (``make_style("orangered")`` as ``red``, ``m
 ``cyan``, ``green``, ``magenta``, ``underline``) are a hand-rolled table: crayon closes a colour with ``ESC[39m``
 and underline with ``ESC[24m``, which neither click nor rich reproduce. Nesting is literal concatenation, as in
 crayon. Colours are emitted only when explicitly enabled (``set_enabled``), never through tty detection on the
-golden path; ``detect_enabled`` / ``detect_num_colors`` implement crayon's rules for the CLI to call once.
+golden path; ``detect_enabled`` / ``detect_num_colors`` implement crayon's rules (crayon 1.5.3's
+``num_ansi_colors`` for a Unix terminal: ``R_CLI_NUM_COLORS``, ``NO_COLOR``, tty, ``COLORTERM``, ``tput colors``,
+the ``TERM`` guess) for the CLI to call once on a real terminal.
 """
 
 from __future__ import annotations
 
 import math
 import re
-from collections.abc import Callable, Collection, Mapping
+import subprocess
+from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import IO, Any
 
 from modelstats.errors import RParityError
@@ -137,41 +140,98 @@ def _is_tty(stream: IO[Any] | None) -> bool:
         return False
 
 
-def detect_enabled(stream: IO[Any] | None, environ: Mapping[str, str] | None = None) -> bool:
-    """crayon's ``has_color()``: ``R_CLI_NUM_COLORS`` set and > 1 wins; ``NO_COLOR`` set switches off; else a tty.
+#: ``run(argv) -> stdout text`` for the ``tput colors`` probe; it raises when the command cannot run.
+type TputRunner = Callable[[Sequence[str]], str]
 
-    A non-numeric ``R_CLI_NUM_COLORS`` (``NA`` in R) counts as off.
+_TRUECOLOR = 16777216
+_GUESS_TERM = re.compile("^screen|^xterm|^vt100|color|ansi|cygwin|linux", re.IGNORECASE)
+
+
+def _run_tput(argv: Sequence[str]) -> str:
+    """The default ``run``: ``system("tput colors 2>/dev/null", intern = TRUE)`` (stdout only, any exit status)."""
+    return subprocess.run(list(argv), capture_output=True, text=True, check=False).stdout
+
+
+def _as_number(value: str) -> float | None:
+    """R's ``as.numeric`` of one line: ``None`` for what R makes ``NA`` (a non-finite result counts as NA too)."""
+    try:
+        number = float(value.strip())
+    except ValueError:
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _tput_colors(run: TputRunner | None) -> float | None:
+    """``as.numeric(system("tput colors 2>/dev/null", intern = TRUE))[1]`` inside crayon's ``try``: ``None`` is NA."""
+    try:
+        output = (run or _run_tput)(["tput", "colors"])
+    except OSError, subprocess.SubprocessError, ValueError:
+        return None
+    lines = output.splitlines()
+    if not lines:
+        return None
+    return _as_number(lines[0])
+
+
+def _guess_tty_colors(term: str) -> int:
+    """crayon's ``guess_tty_colors()``.
+
+    ``dumb`` -> 1; ``TERM`` starting with screen / xterm / vt100 or containing color / ansi / cygwin / linux
+    (case-insensitive) -> 8; else 1.
+    """
+    if term == "dumb":
+        return 1
+    return 8 if _GUESS_TERM.search(term) else 1
+
+
+def detect_num_colors(
+    stream: IO[Any] | None, environ: Mapping[str, str] | None = None, run: TputRunner | None = None
+) -> int:
+    """crayon's ``num_colors()`` (crayon 1.5.3 ``num_ansi_colors`` + ``detect_tty_colors``) for a Unix terminal.
+
+    In this order: ``R_CLI_NUM_COLORS`` non-empty -> its ``as.integer`` value (a non-numeric value, R's ``NA``,
+    counts as 1); ``NO_COLOR`` present -> 1; ``stream`` not a tty -> 1; ``COLORTERM`` present -> 16777216 for
+    ``truecolor`` / ``24bit``, else 8; ``tput colors`` through ``run`` (default: a subprocess, stderr discarded;
+    a failure, no output or a non-numeric first line is R's ``NA``) -> NA gives ``_guess_tty_colors(TERM)``,
+    -1 / 0 / 1 give 1, 8 with ``TERM`` exactly ``xterm`` gives 256, anything else its number. Deliberately not
+    ported: the ``cli.num_colors`` / ``crayon.enabled`` / ``crayon.colors`` / ``cli.default_num_colors`` options,
+    knitr, sinks, RStudio, Windows and Emacs detection.
     """
     env = _environ(environ)
     forced = env.get("R_CLI_NUM_COLORS", "")
     if forced != "":
         number = _as_int(forced)
-        return number is not None and number > 1
-    if "NO_COLOR" in env:
-        return False
-    return _is_tty(stream)
-
-
-def detect_num_colors(stream: IO[Any] | None, environ: Mapping[str, str] | None = None) -> int:
-    """crayon's ``num_colors()``: the ``R_CLI_NUM_COLORS`` value when set, 1 when colours are off, otherwise 256
-    when ``TERM`` contains ``256color`` or ``COLORTERM`` is set, else 16."""
-    env = _environ(environ)
-    forced = env.get("R_CLI_NUM_COLORS", "")
-    if forced != "":
-        number = _as_int(forced)
         return number if number is not None else 1
-    if not detect_enabled(stream, env):
+    if "NO_COLOR" in env:
         return 1
-    if "256color" in env.get("TERM", "") or "COLORTERM" in env:
-        return 256
-    return 16
+    if not _is_tty(stream):
+        return 1
+    if "COLORTERM" in env:
+        return _TRUECOLOR if env["COLORTERM"] in ("truecolor", "24bit") else 8
+    cols = _tput_colors(run)
+    if cols is None:
+        return _guess_tty_colors(env.get("TERM", ""))
+    if cols in (-1, 0, 1):
+        return 1
+    if cols == 8 and env.get("TERM", "") == "xterm":
+        return 256  # xterm compatible terminals tend to support 256 colours (r-lib/crayon#17)
+    return int(cols)
 
 
-def enable_from_environment(stream: IO[Any] | None, environ: Mapping[str, str] | None = None) -> bool:
+def detect_enabled(
+    stream: IO[Any] | None, environ: Mapping[str, str] | None = None, run: TputRunner | None = None
+) -> bool:
+    """crayon's ``has_color()``: ``num_ansi_colors() > 1`` (see :func:`detect_num_colors`)."""
+    return detect_num_colors(stream, environ, run) > 1
+
+
+def enable_from_environment(
+    stream: IO[Any] | None, environ: Mapping[str, str] | None = None, run: TputRunner | None = None
+) -> bool:
     """Apply crayon's detection to the process-wide state and return whether colours are on."""
-    enabled = detect_enabled(stream, environ)
-    set_enabled(enabled, detect_num_colors(stream, environ))
-    return enabled
+    depth = detect_num_colors(stream, environ, run)
+    set_enabled(depth > 1, depth)
+    return depth > 1
 
 
 def _environ(environ: Mapping[str, str] | None) -> Mapping[str, str]:

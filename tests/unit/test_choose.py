@@ -425,3 +425,58 @@ def test_long_ranges_are_cut_but_flagged() -> None:
     values, truncated = _r_eval_c("1:5000", ENV)
     assert truncated is True
     assert values == [float(i) for i in range(1, 1001)]
+
+
+# --- the range cap follows the menu size (Codex diff finding 9) -----------------------------------
+
+
+def test_ranges_are_validated_against_the_menu_not_a_fixed_cap() -> None:
+    # R's only check is `any(!identifier %in% seq_along(theList))`: 2:1100 on a 1200-entry menu is valid
+    items = [f"./run{i:04d}" for i in range(1, 1201)]
+    out, selected = run(items, "2:1100\n")
+    assert "Try again" not in out
+    assert selected == items[:1099]
+    # a range longer than the menu is still rejected, with the pasted numbers cut at 240 characters
+    out, selected = run(items, "2:5000\n\n")
+    assert "Try again, not all in list: " in out
+    pasted = out.split("Try again, not all in list: ", 1)[1].split("...", 1)[0]
+    assert len(pasted) == 240
+    assert selected == []
+
+
+# --- POSIX character classes in `p` patterns (Codex diff finding 11; R semantics verified with TRE) ---
+
+
+@pytest.mark.filterwarnings("error::FutureWarning")
+def test_posix_class_in_a_pattern() -> None:
+    out, selected = run(ITEMS, "p\n[[:digit:]]{4}-\ny\n")
+    assert "FutureWarning" not in out
+    assert selected == [ITEMS[i] for i in (0, 1, 2, 3, 4, 5, 6, 8)]
+
+
+@pytest.mark.filterwarnings("error::FutureWarning")
+def test_negated_posix_class_in_a_pattern() -> None:
+    _, selected = run(ITEMS, "p\n[^[:digit:]]$\ny\n")
+    assert selected == [ITEMS[i] for i in (7, 9, 10, 11, 12)]
+
+
+@pytest.mark.filterwarnings("error::FutureWarning")
+def test_mixed_set_with_a_posix_class() -> None:
+    _, selected = run(ITEMS, "p\n^\\./[de[:digit:]]\ny\n")
+    assert selected == [ITEMS[8], ITEMS[9]]
+
+
+@pytest.mark.filterwarnings("error::FutureWarning")
+def test_unknown_posix_class_reprompts_like_r() -> None:
+    out, selected = run(ITEMS, "p\n[[:foo:]]\nPkBudg\ny\n")
+    assert "invalid regular expression '[[:foo:]]', reason 'Unknown character class name'" in out
+    assert "Matching created an error. Try again!" in out
+    assert selected == [ITEMS[1]]
+
+
+@pytest.mark.filterwarnings("error::FutureWarning")
+def test_class_token_outside_a_bracket_is_a_plain_set() -> None:
+    # TRE and re agree: grep("[:digit:]", ...) matches the characters : d i g t
+    items = ["d", "1", ":", "run1", "run:", "xyz"]
+    _, selected = run(items, "p\n[:digit:]\ny\n")
+    assert selected == ["d", ":", "run:"]

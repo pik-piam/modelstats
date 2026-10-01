@@ -189,7 +189,10 @@ def drop_hint_line(data: bytes) -> bytes:
 
 
 def compare_rs(case_id: str, r_dir: Path, py_dir: Path, expected_py_dir: Path | None = None) -> None:
-    """One ``rs`` case: argv lines, stdout bytes, exit status and stderr (hint line dropped on each side).
+    """One ``rs`` case: argv lines, stdout bytes, the ``.status`` file and stderr (hint line dropped on each side).
+
+    Every stream but stderr is compared byte for byte, the exit status included (both generators write
+    ``<digits>\\n``); nothing is stripped.
 
     When ``expected_py_dir/<id>.<ext>`` exists for ``out``, ``err`` or ``status`` that file replaces the R golden for
     that stream only (an approved deviation of plan 3.5); the other streams of the case still compare with R.
@@ -206,11 +209,7 @@ def compare_rs(case_id: str, r_dir: Path, py_dir: Path, expected_py_dir: Path | 
         if not py_file.is_file():
             raise AssertionError(f"{case_id}: the Python generator wrote no {py_file}")
         label = f"{case_id}.{ext}" + (" (expected-py)" if r_file.parent != r_dir else "")
-        if ext == "status":
-            r_status, py_status = r_file.read_text().strip(), py_file.read_text().strip()
-            if r_status != py_status:
-                raise AssertionError(f"{label}: exit status differs: R {r_status} vs Python {py_status}")
-        elif ext == "err":
+        if ext == "err":
             compare_bytes(drop_hint_line(r_file.read_bytes()), drop_hint_line(py_file.read_bytes()), label=label)
         else:
             compare_bytes(r_file, py_file, label=label)

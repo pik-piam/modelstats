@@ -111,6 +111,13 @@ def test_magpie_returns_gms_optimization(tmp_path: Path, effects: FsEffects, jso
     assert json_loader == [f"{tmp_path}/config.yml"]
 
 
+def test_magpie_na_optimization_is_a_real_na(tmp_path: Path, effects: FsEffects, json_loader: list[str]) -> None:
+    # R: out <- cfg$gms$optimization is NA_character_, which the harness writes as {"value": null}
+    cfg = {"model_name": "MAgPIE", "gms": {"optimization": None}}
+    (tmp_path / "config.Rdata").write_text(json.dumps(cfg), encoding="utf-8")
+    assert col_run_type(str(tmp_path), effects) is None
+
+
 def test_magpie_through_the_real_yaml_loader(tmp_path: Path, effects: FsEffects) -> None:
     (tmp_path / "config.yml").write_text(
         "model_name: MAgPIE\ngms:\n  optimization: nlp_apr17\n  c_timesteps: coup2110\n", encoding="utf-8"
@@ -153,16 +160,24 @@ def test_magpie_through_the_real_yaml_loader(tmp_path: Path, effects: FsEffects)
             "testOneRegi USA",
         ),
         ({"optimization": "testOneRegi", "c_testOneRegi_region": "EUR", "cm_MAgPIE_coupling": "on"}, "testOneRegi EUR"),
-        ({"optimization": "testOneRegi"}, "testOneRegi"),
+        ({"optimization": "testOneRegi"}, "testOneRegi "),  # paste(mode, NULL) keeps the separator
+        ({"optimization": "testOneRegi", "c_testOneRegi_region": []}, "testOneRegi "),
         ({"optimization": "testOneRegiX", "c_testOneRegi_region": "EUR"}, "testOneRegi EUR"),
         ({"c_empty_model": "on"}, "empty model"),
         ({"c_empty_model": "on", "CES_parameters": "calibrate", "cm_MAgPIE_coupling": "on"}, "empty model"),
         ({"optimization": "testOneRegi", "c_testOneRegi_region": "EUR", "c_empty_model": "on"}, "empty model"),
         ({"c_empty_model": "off"}, "nash"),
+        # an NA optimization: paste() turns it into text, otherwise it stays a real NA (None)
+        ({"optimization": None}, None),
+        ({"optimization": None, "cm_nash_mode": "debug"}, "NA debug"),
+        ({"optimization": None, "CES_parameters": "calibrate"}, "Calib_NA"),
+        ({"optimization": None, "cm_MAgPIE_coupling": "on"}, "NA + mag"),
+        ({"optimization": None, "c_empty_model": "on"}, "empty model"),
+        ({"optimization": "NA"}, "NA"),  # the string, not NA
     ],
 )
 def test_remind_composition(
-    tmp_path: Path, effects: FsEffects, json_loader: list[str], gms: dict[str, Any], expected: str
+    tmp_path: Path, effects: FsEffects, json_loader: list[str], gms: dict[str, Any], expected: str | None
 ) -> None:
     assert col_run_type(remind(tmp_path, **gms), effects) == expected
 

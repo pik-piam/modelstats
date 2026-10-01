@@ -12,7 +12,11 @@ of the decision table are pending, so the port reproduces R):
   ``argument is of length zero`` (BUG-004); the ``full.lst`` fallback is unreachable
   for an existing directory (BUG-017) and a non-existent path yields ``"NA"``;
 * a config file whose name contains ``yml`` is loaded as the literal
-  ``<mydir>/config.yml`` regardless of the matched name (BUG-003).
+  ``<mydir>/config.yml`` regardless of the matched name (BUG-003);
+* a config whose ``gms$optimization`` is ``NA`` returns a real NA (``None``, R's
+  ``NA_character_``, ``{"value": null}`` in the runtype goldens) unless a ``paste()`` step
+  turned it into text (``NA debug``, ``Calib_NA``, ``NA + mag``); the string ``"NA"`` is
+  R's initial ``out``, returned for a path that is not a directory.
 """
 
 from __future__ import annotations
@@ -165,11 +169,17 @@ def _condition_scalar(x: object) -> object:
     return vec[0]
 
 
-def _remind_run_type(gms: object) -> str:
-    """The REMIND composition of ``R/colRunType.R`` lines 23-34."""
+def _remind_run_type(gms: object) -> str | None:
+    """The REMIND composition of ``R/colRunType.R`` lines 23-34; ``None`` is a real NA.
+
+    ``paste()`` / ``paste0()`` coerce an NA optimization to the text ``NA`` (``NA debug``,
+    ``Calib_NA``, ``NA + mag``, verified in R), so the result is a real NA only when no
+    composition step touched it.
+    """
     optimization = _condition_scalar(_r_get(gms, "optimization"))
+    na = _is_na(optimization)
     # grepl("^testOneRegi", out): grepl on NA is FALSE, numbers are coerced to character
-    out = "NA" if _is_na(optimization) else _as_character(optimization)
+    out = "NA" if na else _as_character(optimization)
     nash_mode = _r_get(gms, "cm_nash_mode")
     debug = _is_true(_r_or(_is_true_eq(nash_mode, "debug"), _is_true_eq(nash_mode, 1)))
     if not _is_na(optimization) and out.startswith("testOneRegi"):
@@ -179,9 +189,11 @@ def _remind_run_type(gms: object) -> str:
             mode = "quick"
         else:
             mode = "testOneRegi"
-        # paste(mode, cfg$gms$c_testOneRegi_region): a NULL region vanishes, NA prints as NA
+        # paste(mode, cfg$gms$c_testOneRegi_region): a NULL or zero-length region is recycled
+        # to "" and the separator is still emitted (trailing space kept); NA prints as NA
         region = _r_vector(_r_get(gms, "c_testOneRegi_region"))
-        out = mode if not region else f"{mode} {'NA' if _is_na(region[0]) else _as_character(region[0])}"
+        region_text = "" if not region else ("NA" if _is_na(region[0]) else _as_character(region[0]))
+        out = f"{mode} {region_text}"
     else:
         if debug:
             out = f"{out} debug"
@@ -193,19 +205,24 @@ def _remind_run_type(gms: object) -> str:
             out = f"{out} + mag"
     if _is_true(_is_true_eq(_r_get(gms, "c_empty_model"), "on")):
         out = "empty model"
-    return out
+    # still the untouched NA only when nothing was pasted to it (a literal string "NA" has na False)
+    return None if na and out == "NA" else out
 
 
-def col_run_type(mydir: str = ".", effects: Effects | None = None) -> str:
+def col_run_type(mydir: str = ".", effects: Effects | None = None) -> str | None:
     """What is the type of this run? (``R/colRunType.R``, parity including its bugs.)
 
     Returns ``cfg$gms$optimization`` for MAgPIE, the REMIND composition otherwise
     (``nash``, ``nash debug``, ``Calib_nash``, ``nash + mag``, ``testOneRegi EUR``,
-    ``debug EUR``, ``quick EUR``, ``empty model``) and ``"NA"`` for a path that is not a
-    directory. Raises :class:`RParityError` exactly where R errors:
+    ``debug EUR``, ``quick EUR``, ``empty model``) and the string ``"NA"`` for a path that
+    is not a directory. ``None`` is R's real ``NA``: a config whose ``gms$optimization`` is
+    ``NA`` and that no ``paste()`` step turned into text (``getRunStatus`` stores it as an
+    NA cell, blank in ``printOutput``). Raises :class:`RParityError` exactly where R errors:
 
     * ``argument is of length zero`` for a directory without a config file (BUG-004) or
-      a config without ``model_name`` / ``gms$optimization``;
+      a config without ``model_name`` / ``gms$optimization`` (REMIND);
+    * ``replacement has length zero`` for a MAgPIE config without ``gms$optimization``:
+      R returns ``NULL`` and its only caller fails at the assignment (PORT-009);
     * ``the condition has length > 1`` when two or more entries match the config regex
       (BUG-003; raised by ``find_config_file``);
     * ``missing value where TRUE/FALSE needed`` when ``model_name`` is NA.
@@ -242,5 +259,5 @@ def col_run_type(mydir: str = ".", effects: Effects | None = None) -> str:
         if not optimization:
             # R returns NULL here; the only caller (getRunStatus) then fails assigning it
             raise RParityError("replacement has length zero")
-        return "NA" if _is_na(optimization[0]) else _as_character(optimization[0])
+        return None if _is_na(optimization[0]) else _as_character(optimization[0])
     return _remind_run_type(gms)

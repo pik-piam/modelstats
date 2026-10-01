@@ -171,6 +171,26 @@ def test_glob_like_sys_glob(dirtest: Path) -> None:
     assert effects.glob(str(dirtest / "sub*")) == [str(dirtest / "subdir")]
 
 
+def test_tilde_is_expanded_like_path_expand(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # R: dir(), file.exists(), file.info(), Sys.glob() and file connections go through path.expand()
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / "d").mkdir()
+    (tmp_path / "d" / "f.txt").write_text("hello\n", encoding="utf-8")
+    effects = ProductionEffects()
+    assert effects.listdir_like_r("~/d") == ["f.txt"]
+    assert effects.exists("~/d/f.txt")
+    assert effects.is_dir("~/d")
+    assert effects.stat("~/d/f.txt").size == 6
+    assert effects.read_text("~/d/f.txt") == "hello\n"
+    assert effects.read_bytes("~/d/f.txt") == b"hello\n"
+    assert effects.glob("~/d/*") == [str(tmp_path / "d" / "f.txt")]  # Sys.glob returns the expanded paths
+    cwd = effects.run([sys.executable, "-c", "import os; print(os.getcwd())"], cwd="~/d").stdout.strip()
+    assert Path(cwd).resolve() == (tmp_path / "d").resolve()
+    # path.expand() touches a leading tilde only: "a~/b" stays as it is
+    assert not effects.exists("a~/b")
+    assert effects.listdir_like_r("a~/d") == []
+
+
 def test_run_captures_output_and_status() -> None:
     effects = ProductionEffects()
     result = effects.run([sys.executable, "-c", "import sys; print('out'); print('err', file=sys.stderr); sys.exit(3)"])

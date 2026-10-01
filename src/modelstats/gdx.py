@@ -15,10 +15,12 @@ with ``0`` for absent records (``restoreZeros = TRUE``). This module reproduces 
   keeps the order, also for year-like elements, verified against R);
 * a domain given as ``*`` (or naming no set of the file) disables the dense reconstruction, as
   in R: the frame then holds the observed elements in record order and missing combinations
-  are ``nan`` (R ``NA``);
+  are GAMS NA (R ``NA``, see :func:`is_na`);
 * GAMS special values map as gamstransfer maps them for R: ``EPS`` -> ``0.0``, ``+INF`` ->
-  ``inf``, ``-INF`` -> ``-inf``, ``UNDEF`` and ``NA`` -> ``nan`` (R distinguishes ``NaN`` from
-  ``NA`` there; a float cannot, and no status symbol carries either value);
+  ``inf``, ``-INF`` -> ``-inf``, ``UNDEF`` -> a plain ``nan`` (R ``NaN``) and ``NA`` ->
+  ``gams.transfer.SpecialValues.NA`` (R ``NA``: a NaN with the payload ``0xfffffffffffffffe``
+  that survives ``float()`` and a float64 Series; ``math.isnan`` is true for both, :func:`is_na`
+  tells them apart, so a status string built from such values reads ``NaN`` / ``NA`` like R);
 * a file that is not a GDX file, is empty or truncated raises :class:`GdxError` from every
   reader. R aborts the whole process there (BUG-037); the port raises instead (D-20) and the
   callers let it propagate like the R code paths outside ``try()`` do.
@@ -38,7 +40,6 @@ function accepts either a path (opened for that one call) or an open :class:`Gdx
 from __future__ import annotations
 
 import itertools
-import math
 import os
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -50,6 +51,7 @@ __all__ = [
     "GdxError",
     "GdxFile",
     "SymbolInfo",
+    "is_na",
     "open_gdx",
     "read_first_found",
     "read_param",
@@ -103,6 +105,18 @@ def _r_value(value: float) -> float:
     if value == 0.0:
         return 0.0
     return float(value)
+
+
+def is_na(value: float) -> bool:
+    """Whether a value read from a GDX file is the GAMS special value NA (R's ``NA``, not ``NaN``).
+
+    gams.transfer hands GAMS NA over as a NaN carrying the payload ``0xfffffffffffffffe``
+    (``gams.transfer.SpecialValues.NA``); UNDEF is a plain NaN (R's ``NaN``). The payload
+    survives ``float()`` and a float64 Series, so the readers of this module keep it.
+    """
+    import gams.transfer as gt
+
+    return bool(gt.SpecialValues.isNA(value))
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,6 +254,8 @@ class GdxFile:
             return self._dense_cache[info.name]
         if info.kind != "Parameter":
             raise GdxError(f"{self.path}: {info.name} is a {info.kind}, not a Parameter")
+        import gams.transfer as gt
+
         resolved = [self._resolve_set(domain) for domain in info.domain_names]
         self._load([info.name, *(set_name for set_name in resolved if set_name is not None)])
         records = self._container[info.name].records
@@ -275,7 +291,8 @@ class GdxFile:
             columns=tuple(columns),
             elements=tuple(elements),
             lookup=lookup,
-            fill=0.0 if restore_zeros else math.nan,
+            # readGDX fills missing combinations with 0 (restoreZeros) or, under a universe domain, with R NA
+            fill=0.0 if restore_zeros else float(gt.SpecialValues.NA),
         )
         self._dense_cache[info.name] = dense
         return dense

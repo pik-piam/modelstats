@@ -200,7 +200,8 @@ def _convert(parsed: RData) -> Any:
 def _read_bytes(path: str | os.PathLike[str], effects: Effects | None) -> bytes:
     try:
         if effects is None:
-            with open(path, "rb") as handle:
+            # gzfile() applies path.expand() (a leading ~ only)
+            with open(os.path.expanduser(os.fspath(path)), "rb") as handle:
                 return handle.read()
         return effects.read_bytes(os.fspath(path))
     except OSError as exc:

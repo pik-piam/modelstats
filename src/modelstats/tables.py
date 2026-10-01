@@ -14,7 +14,8 @@ R 4.6.1 on the fixture files and on the edge cases listed in ``tests/unit/test_t
 - empty lines are skipped, lines of blanks are rows;
 - the record width is the largest field count among the first five lines; a header one name
   short of it makes the first field the row name (duplicate or missing row names are errors);
-  rows short of the width are padded with NA, surplus fields spill into a new record;
+  rows short of the width are padded with empty fields (NA only after the type conversion of a
+  numeric or logical column), surplus fields spill into a new record;
 - ``$variable`` partially matches the ``make.names``-mangled header (exact name first, then a
   unique prefix, else no column at all, which counts 0);
 - ``unique()`` sees the column after ``type.convert``: ``"NA"`` and missing fields are NA, a
@@ -110,7 +111,8 @@ def to_dataframe(table: TableLike | Iterable[Mapping[str, object]]) -> pd.DataFr
 
 
 def _load(path: PathLike) -> str:
-    text = Path(path).read_bytes().decode("utf-8", "surrogateescape")
+    # read.csv2 opens a file() connection, which applies path.expand() (a leading ~ only)
+    text = Path(os.path.expanduser(os.fspath(path))).read_bytes().decode("utf-8", "surrogateescape")
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
@@ -173,7 +175,9 @@ def _read_table(text: str, sep: str) -> tuple[list[str], list[list[str | None]]]
                 records.append(current)
                 current = []
         if current:
-            current.extend([None] * (cols - len(current)))
+            # scan(fill = TRUE) pads a short row with the empty field ""; type.convert then decides whether
+            # it becomes NA (numeric / logical column) or stays a value of its own (character column)
+            current.extend([""] * (cols - len(current)))
             records.append(current)
             current = []
     if rlabp:
