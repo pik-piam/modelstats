@@ -11,8 +11,16 @@ in the R sources was changed. Two console scripts are provided:
   -l -m -p -s -t -u USER`, bundled short flags, at most one comma-separated path argument,
   `.` by default), the status table on stdout, the information lines on stderr, exit status
   0 wherever the R version quits normally and 1 for an R error.
-- `modeltests`: the automated model tests (`modeltests()`), being ported in the last phase;
-  until then the script only answers `--help`.
+- `modeltests`: the automated model tests (`modeltests()`):
+  `modeltests --mydir DIR --gitdir DIR --model REMIND|MAgPIE --user USER [--email/--no-email]
+  [--comp-scen/--no-comp-scen] [--mattermost-token-env NAME] [--dry-run]`; reads
+  `<mydir>/../.testsstatus` and starts (`next:start`) or evaluates (`next:evaluate`) the test
+  runs, the messages on stderr; the Mattermost webhook is read from the environment variable
+  named with `--mattermost-token-env` (unset: no notification); `--dry-run` executes the reads
+  and logs every mutation as `would ...` on stderr instead of performing it (the two Rscript
+  bridges still run; they only read the checkout and write under the temporary directory);
+  exit status 0, or 1 for an R error (`Error in <call> : ...` / `Execution halted` as Rscript
+  prints it).
 
 ### Installation
 

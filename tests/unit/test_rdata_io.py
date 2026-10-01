@@ -13,6 +13,7 @@ import gzip
 import json
 import os
 import shutil
+import stat
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -315,6 +316,24 @@ def test_write_rds_is_atomic(tmp_path: Path) -> None:
         write_rds(out, {"bad": object()})
     assert scalar(read_rds(out)) == "second"
     assert sorted(os.listdir(tmp_path)) == ["state.rds"]
+
+
+def test_write_rds_honours_the_umask_and_keeps_an_existing_mode(tmp_path: Path) -> None:
+    """Like saveRDS (PORT-042): a new file is ``0666 & ~umask``, not mkstemp's ``0600``; a rewrite keeps the mode."""
+    old_umask = os.umask(0o022)
+    try:
+        fresh = tmp_path / "fresh.rds"
+        write_rds(fresh, "x")
+        assert stat.S_IMODE(fresh.stat().st_mode) == 0o644
+        existing = tmp_path / "existing.rds"
+        write_rds(existing, "first")
+        existing.chmod(0o640)
+        write_rds(existing, "second")
+        assert stat.S_IMODE(existing.stat().st_mode) == 0o640
+        assert scalar(read_rds(existing)) == "second"
+    finally:
+        os.umask(old_umask)
+    assert sorted(tmp_path.iterdir()) == [existing, fresh]
 
 
 def test_rds_bytes_is_deterministic_gzip() -> None:

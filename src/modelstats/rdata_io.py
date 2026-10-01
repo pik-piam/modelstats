@@ -12,7 +12,8 @@ its defaults:
   R's ``as.character(stats$modelstat)`` iterates over; the default converter
   cannot build their 3-D xarray;
 * :func:`write_rds` writes atomically (temporary file in the same directory,
-  then ``os.replace``) and normalises pandas frames so that R's ``readRDS`` sees
+  then ``os.replace``; a new file gets the umask mode like ``saveRDS``, an
+  existing one keeps its mode) and normalises pandas frames so that R's ``readRDS`` sees
   the same types it wrote (character, integer, double, logical columns, NA in
   each, character row names).
 
@@ -34,7 +35,8 @@ import gzip
 import lzma
 import math
 import os
-import tempfile
+import secrets
+import stat
 import warnings
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any
@@ -454,12 +456,29 @@ def write_rds(path: str | os.PathLike[str], obj: Any) -> None:
     data = rds_bytes(obj)
     target = os.fspath(path)
     directory = os.path.dirname(target) or "."
-    fd, tmp = tempfile.mkstemp(dir=directory, prefix=f".{os.path.basename(target)}.", suffix=".tmp")
+    base = os.path.basename(target)
+    # Like saveRDS: a new file gets the umask mode (0666 & ~umask, so other cluster users can read the
+    # state files), an existing one keeps its mode; mkstemp's private 0600 would survive the rename (PORT-042).
+    try:
+        mode: int | None = stat.S_IMODE(os.stat(target).st_mode)
+    except FileNotFoundError:
+        mode = None
+    for _ in range(100):
+        tmp = os.path.join(directory, f".{base}.{secrets.token_hex(6)}.tmp")
+        try:
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+        except FileExistsError:
+            continue
+        break
+    else:  # pragma: no cover - 100 collisions of a 48-bit random name
+        raise FileExistsError(f"cannot create a temporary file beside {target}")
     try:
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
+        if mode is not None:
+            os.chmod(tmp, mode)
         os.replace(tmp, target)
     except BaseException:
         try:
