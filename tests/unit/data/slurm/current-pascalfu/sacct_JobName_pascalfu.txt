@@ -1,0 +1,9 @@
+testOneRegi-AMT
+batch
+extern
+SSP3-NPi2025-AMT
+batch
+extern
+C_SSP2-NDC-LTS_2026-07-08_05.05.25
+batch
+extern

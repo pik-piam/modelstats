@@ -1,0 +1,5 @@
+pascalfu /p/projects/synthetic/remind/output/running running 3:45 RUNNING standby
+pascalfu /p/projects/synthetic/remind/output/nolog nolog 3:45 RUNNING standby
+pascalfu /p/projects/synthetic/magpie/output/mag-running mag-running 3:45 RUNNING standby
+pascalfu /p/projects/remind/modeltests/remind/output/SSP2-EU21-NPi2025-AMT_2026-09-18_22.11.36 SSP2-EU21-NPi2025-AMT_2026-09-18_22.11.36 3:45 RUNNING standby
+pascalfu /p/projects/synthetic/remind/output/reporting reporting 3:45 RUNNING standby

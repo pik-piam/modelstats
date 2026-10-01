@@ -1,0 +1,3 @@
+alice /p/projects/synthetic/remind/output/running running 2:15:00 RUNNING standby
+alice /p/projects/synthetic/remind/output/running running 0:00 PENDING standby
+bob /p/projects/synthetic/remind/output/running running 1:00:00 RUNNING standby

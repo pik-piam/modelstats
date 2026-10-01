@@ -1,0 +1,3 @@
+/p/projects/landuse/tests/magpie/output/weeklyTests_SSP1-PkBudg1000
+
+

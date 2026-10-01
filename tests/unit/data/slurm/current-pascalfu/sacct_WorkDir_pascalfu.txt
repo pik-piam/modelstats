@@ -1,0 +1,9 @@
+/p/projects/remind/modeltests/remind/output/testOneRegi-AMT
+
+
+/p/projects/remind/modeltests/remind/output/SSP3-NPi2025-AMT_2026-09-28_17.12.58
+
+
+/p/projects/remind/runs/REMIND-MAgPIE-2026-07-07
+
+

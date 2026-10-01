@@ -1,0 +1,2 @@
+pascalfu /p/projects/remind/runs/REMIND-MAgPIE-2026-07-07 C.SSP2.NDC.LTS.2026.07.08.05.05.25 5:00:00 RUNNING standby
+pascalfu /p/projects/remind/modeltests/remind/output/testOneRegi testOneRegi 2:15:00 RUNNING standby

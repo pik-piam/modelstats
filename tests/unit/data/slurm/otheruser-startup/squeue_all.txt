@@ -1,0 +1,2 @@
+alice /p/projects/synthetic/remind/output/running running 2:30 RUNNING standby
+alice /p/projects/synthetic/remind/output/nolog nolog 2:30 RUNNING standby

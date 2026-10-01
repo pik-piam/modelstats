@@ -1,0 +1,10 @@
+pascalfu /p/projects/remind/modeltests/remind/output/SSP2-NPi-AMT_2026-09-28_10.30.27 SSP2-NPi-AMT 1:02:03 RUNNING standby
+pascalfu /p/projects/remind/modeltests/remind/output/default-AMT_2026-09-28_13.23.51 default-AMT 2:00:00 RUNNING standby
+pascalfu /p/projects/remind/modeltests/remind/output/default-AMT_2026-09-28_13.23.51 default-AMT 2:00:01 RUNNING standby
+pascalfu /p/projects/remind/runs/REMIND-MAgPIE-2026-07-07 C_SSP2-NDC-LTS_2026-07-08_05.05.25 5:00:00 RUNNING medium
+pascalfu /p/projects/remind/runs/REMIND-MAgPIE-2026-07-07 batch 5:00:00 RUNNING medium
+pascalfu /p/projects/remind/runs/REMIND-MAgPIE-2026-07-07/magpie mag-run 0:10 RUNNING medium
+pascalfu /p/projects/landuse/tests/magpie/output/default_2026-09-19_04.05.47 default 0:30:00 RUNNING standby
+pascalfu /p/tmp/nowhere/run1 run1 0:01 RUNNING standby
+alice /p/projects/landuse/tests/magpie/output/weeklyTests_SSP1-Ref weeklyTests_SSP1-Ref 3:00:00 RUNNING standby
+alice /p/projects/remind/modeltests/remind/output/testOneRegi testOneRegi 0:00 PENDING standby

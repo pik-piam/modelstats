@@ -1,0 +1,4 @@
+pascalfu /p/projects/synthetic/remind/output/running running 0:00 PENDING standby
+pascalfu /p/projects/synthetic/remind/output/nolog nolog 0:00 PENDING standby
+pascalfu /p/projects/synthetic/magpie/output/mag-running mag-running 0:00 PENDING standby
+pascalfu /p/projects/synthetic/remind/output/timeout timeout 0:00 PENDING standby
