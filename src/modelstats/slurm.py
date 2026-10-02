@@ -41,11 +41,12 @@ yields ``squeue -u -h -o '%Z'`` exactly as R's ``opt$user <- NULL`` of ``-A -C``
 
 from __future__ import annotations
 
+import math
 import re
 import shlex
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Final
 
 from modelstats.env import Effects, PathLike, RunResult, sort_like_r
@@ -54,8 +55,10 @@ from modelstats.textscan import intern_lines
 
 __all__ = [
     "INVALID_REGEX",
+    "MYRUNS_CALL",
     "NO_JOB",
     "PENDING_SUFFIX",
+    "RUNNAMES_CALL",
     "USER_GREPL_CALL",
     "SQUEUE_FORMAT",
     "STARTUP_SUFFIX",
@@ -76,6 +79,9 @@ __all__ = [
     "r_dirname",
     "r_grepl",
     "r_strsplit_space",
+    "run_folders_of",
+    "sacct_since_text",
+    "scheduler_calls",
     "slurm_answer",
 ]
 
@@ -144,6 +150,12 @@ class SlurmError(RuntimeError):
 USER_GREPL_CALL: Final = 'grepl(paste0("^", user, " "), squeuefiltered)'
 """``R/foundInSlurm.R:31`` as R deparses it: the call of the invalid-regex error for a bad ``user``."""
 
+RUNNAMES_CALL: Final = "runnames[[i]]"
+"""``R/commandLineInterface.R:165``: the call of ``subscript out of bounds`` for a job name past the end."""
+
+MYRUNS_CALL: Final = "myruns[[i]]"
+"""``R/commandLineInterface.R:165``: the call of ``subscript out of bounds`` for a missing work directory."""
+
 
 # ---------------------------------------------------------------------------------------------
 # R string helpers
@@ -186,11 +198,11 @@ def r_grepl(pattern: str, text: str, call: str | None = None) -> bool:
     return compiled.search(text) is not None
 
 
-def _r_at(vector: Sequence[str], index: int) -> str:
-    """``vector[[index + 1]]``: the element, or R's ``subscript out of bounds``."""
+def _r_at(vector: Sequence[str], index: int, call: str | None = None) -> str:
+    """``vector[[index + 1]]``: the element, or R's ``subscript out of bounds`` reported under ``call``."""
     if 0 <= index < len(vector):
         return vector[index]
-    raise SlurmError(SUBSCRIPT_OUT_OF_BOUNDS)
+    raise SlurmError(SUBSCRIPT_OUT_OF_BOUNDS, call=call)
 
 
 def _without(vector: Sequence[str], dropped: Iterable[int]) -> list[str]:
@@ -261,7 +273,45 @@ def _sacct_of(user: str, since: str, field: str, env: Effects) -> SlurmCall:
 
 def _sacct_since(daysback: int, env: Effects) -> str:
     """``R/commandLineInterface.R:145``: ``as.Date(format(Sys.Date(), "%Y-%m-%d")) - daysback`` as text."""
-    return (env.now().date() - timedelta(days=daysback)).isoformat()
+    return sacct_since_text(env.now().date(), daysback)
+
+
+_EPOCH: Final = date(1970, 1, 1)
+"""R's ``Date`` origin."""
+_DAYS_PER_ERA: Final = 146097
+_DAYS_TO_ERA_START: Final = 719468
+"""Days from 1970-01-01 back to 0000-03-01, the start of an era of 400 years (H. Hinnant)."""
+
+
+def sacct_since_text(today: date, offset: float | None) -> str:
+    """``paste0(as.Date(format(Sys.Date(), "%Y-%m-%d")) - offset)`` (``R/commandLineInterface.R:145``).
+
+    The civil date ``floor(days - offset)`` days after 1970-01-01 in the proleptic Gregorian calendar as R
+    formats it, ``%Y-%m-%d`` with the year a plain signed integer (``1752-12-15``, ``99-04-05``, ``0-09-11``,
+    ``-273788674-01-19``); a non-finite offset prints ``-Inf``, ``Inf`` or ``NaN`` and ``None`` (R's ``NA``,
+    ``as.numeric()`` of a non-number) prints ``NA`` (probed in R 4.6.1 on 2026-10-02).
+    """
+    if offset is None:
+        return "NA"
+    if math.isnan(offset):
+        return "NaN"
+    if math.isinf(offset):
+        return "Inf" if offset < 0 else "-Inf"
+    year, month, day = _civil_from_days(math.floor((today - _EPOCH).days - offset))
+    return f"{year}-{month:02d}-{day:02d}"
+
+
+def _civil_from_days(days: int) -> tuple[int, int, int]:
+    """Days since 1970-01-01 to ``(year, month, day)``, proleptic Gregorian, for any integer (H. Hinnant)."""
+    z = days + _DAYS_TO_ERA_START
+    era = z // _DAYS_PER_ERA
+    day_of_era = z - era * _DAYS_PER_ERA
+    year_of_era = (day_of_era - day_of_era // 1460 + day_of_era // 36524 - day_of_era // 146096) // 365
+    day_of_year = day_of_era - (365 * year_of_era + year_of_era // 4 - year_of_era // 100)
+    shifted_month = (5 * day_of_year + 2) // 153
+    day = day_of_year - (153 * shifted_month + 2) // 5 + 1
+    month = shifted_month + 3 if shifted_month < 10 else shifted_month - 9
+    return year_of_era + era * 400 + (month <= 2), month, day
 
 
 # ---------------------------------------------------------------------------------------------
@@ -502,24 +552,52 @@ class CurrentRuns:
     calls: tuple[SlurmCall, ...]
 
 
-def current_runs(user: str, daysback: int, env: Effects) -> CurrentRuns:
-    """The ``-C`` branch of ``commandLineInterface`` (``R/commandLineInterface.R:139-176``).
+def current_runs(user: str, daysback: int, env: Effects, *, since: str | None = None) -> CurrentRuns:
+    """The ``-C`` branch of ``commandLineInterface`` (``R/commandLineInterface.R:139-176``) in one step.
 
-    Work directories (``%Z``) and job names (``%j``) come from two ``squeue`` calls paired by position
-    (BUG-028), extended by ``sacct`` for the last ``daysback`` days; ``batch`` jobs are dropped, ``default``
-    ones too when a ``mag-run`` job is listed; a job whose name is not found in its work directory (as a
-    regular expression, BUG-008) and is not ``mag-run`` is a coupled run at ``<workdir>/output/<name>``;
-    missing paths are dropped. The caller prints the "no runs" warnings and continues with ``runs``.
+    :func:`scheduler_calls` then :func:`run_folders_of`; ``rs`` runs the two steps itself so that the
+    diagnostics of the calls are kept when the second step raises. The caller prints the "no runs"
+    warnings and continues with ``runs``.
+    """
+    calls = scheduler_calls(user, daysback, env, since=since)
+    return CurrentRuns(run_folders_of(calls, env), calls)
+
+
+def scheduler_calls(
+    user: str, daysback: int, env: Effects, *, since: str | None = None
+) -> tuple[SlurmCall, ...]:
+    """``R/commandLineInterface.R:141-147``: ``squeue`` twice, then ``sacct`` twice for ``daysback > 0``.
+
+    Work directories (``%Z``, ``WorkDir``) and job names (``%j``, ``JobName``) are asked for separately, in
+    R's order. ``since`` replaces the ``-S`` date text of the ``sacct`` calls: line 145 pastes the date minus
+    ``as.numeric(opt$daysback)`` into it, which for a ``-d`` value that optparse kept as a string is ``NA``
+    (``x``, golden ``rs/daysback-nonint``), ``-Inf`` (``1e999``, golden ``rs/daysback-overflow``) or a date
+    with an absurd year (BUG-066), so ``rs`` passes that text through :func:`sacct_since_text`.
     """
     calls = [_squeue_of(user, "%Z", env), _squeue_of(user, "%j", env)]
     if daysback > 0:
-        since = _sacct_since(daysback, env)
-        calls += [_sacct_of(user, since, "WorkDir", env), _sacct_of(user, since, "JobName", env)]
+        date_text = _sacct_since(daysback, env) if since is None else since
+        calls += [_sacct_of(user, date_text, "WorkDir", env), _sacct_of(user, date_text, "JobName", env)]
+    return tuple(calls)
+
+
+def run_folders_of(calls: Sequence[SlurmCall], env: Effects) -> tuple[str, ...]:
+    """``R/commandLineInterface.R:150-176``: the run folders behind the answers of :func:`scheduler_calls`.
+
+    The work directories are the lines of the first and third call, the names those of the second and
+    fourth, paired by position (BUG-028); ``batch`` jobs are dropped, ``default`` ones too when a
+    ``mag-run`` job is listed; a job whose name is not found in its work directory (as a regular
+    expression, BUG-008) and is not ``mag-run`` is a coupled run at ``<workdir>/output/<name>``; missing
+    paths are dropped; the rest is ``sort(unique())``.
+
+    Raises:
+        SlurmError: ``subscript out of bounds`` under :data:`RUNNAMES_CALL` or :data:`MYRUNS_CALL` for
+            answers of different lengths; R's message for an invalid job name.
+    """
     workdirs = [line for call in calls[0::2] for line in call.lines]
     names = [line for call in calls[1::2] for line in call.lines]
     workdirs, names = _drop_step_jobs(workdirs, names)
-    runs = _run_folders(workdirs, names, env) if workdirs else []
-    return CurrentRuns(tuple(runs), tuple(calls))
+    return tuple(_run_folders(workdirs, names, env)) if workdirs else ()
 
 
 def _drop_step_jobs(workdirs: Sequence[str], names: Sequence[str]) -> tuple[list[str], list[str]]:
@@ -536,14 +614,15 @@ def _run_folders(workdirs: Sequence[str], names: Sequence[str], env: Effects) ->
 
     The loop runs over ``1:length(runnames)``, which is ``c(1, 0)`` for no names, so with work directories but
     no names ``runnames[[1]]`` fails with ``subscript out of bounds``; a name without a work directory fails
-    the same way (BUG-028).
+    the same way in ``myruns[[i]]`` (BUG-028). ``grepl`` forces its ``x`` before its ``pattern``, so the
+    work directory is read first.
     """
     if not names:
-        raise SlurmError(SUBSCRIPT_OUT_OF_BOUNDS)
+        raise SlurmError(SUBSCRIPT_OUT_OF_BOUNDS, call=RUNNAMES_CALL)
     coupled: list[str] = []
     remapped: list[int] = []
     for index, name in enumerate(names):
-        workdir = _r_at(workdirs, index)
+        workdir = _r_at(workdirs, index, call=MYRUNS_CALL)
         if not (r_grepl(name, workdir) or _MAGPIE_JOB in name):
             coupled.append(f"{workdir}/output/{name}")
             remapped.append(index)

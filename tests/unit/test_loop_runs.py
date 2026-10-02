@@ -69,7 +69,8 @@ LOCAL_HEADER = (
     "Conv                   modelstat            Mif   "
 )
 # What R's try() printed for the synthetic runs config-bak (migration/goldens/rs/synthetic-remind.err:5),
-# gdx-noiter (synthetic-remind.err:6-10) and noconfig-badstats (synthetic-bug005.err:5-6).
+# gdx-noiter (synthetic-remind.err:6-11: the readGDX warning text ends in a newline, hence the blank line) and
+# noconfig-badstats (synthetic-bug005.err:5-6).
 CONFIG_BAK_STDERR = "Error in gzfile(file) : invalid 'description' argument\n"
 GDX_NOITER_STDERR = (
     "Error in if (s80_bool == 0 && as.numeric(cm_iteration_max) == iter_no) { : \n"
@@ -77,6 +78,7 @@ GDX_NOITER_STDERR = (
     "In addition: Warning message:\n"
     'In readGDX(gdx = latest_gdx, "o_iterationNumber", format = "simplest") :\n'
     "  Error : User specified to read symbol o_iterationNumber, but it does not exist in the source file\n"
+    "\n"
 )
 BUG005_STDERR = (
     'Error in if (runstatistics$stats[["config"]][["model_name"]] == "MAgPIE") { : \n'

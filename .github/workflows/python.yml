@@ -77,3 +77,14 @@ jobs:
       - name: pytest against the installed wheel (locked dependencies)
         run: |
           "${RUNNER_TEMP}/fresh/bin/python" -m pytest -q -p no:cacheprovider
+
+      # The fixture-free half of tests/packaging/test_wheel.py (the module itself needs migration/fixtures and
+      # is deselected here): the wheel installs as a uv tool on Python 3.14 and its rs answers --help.
+      - name: uv tool install the wheel and run rs --help
+        env:
+          UV_TOOL_DIR: ${{ runner.temp }}/uv-tools
+          UV_TOOL_BIN_DIR: ${{ runner.temp }}/uv-tool-bin
+        run: |
+          uv tool install dist/modelstats-*.whl --python 3.14
+          "${UV_TOOL_BIN_DIR}/rs" --help
+          "${UV_TOOL_BIN_DIR}/modeltests" --help

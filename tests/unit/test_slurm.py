@@ -9,7 +9,7 @@ messages); the matching and answer rules run on hand-written squeue lines; the s
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -18,7 +18,9 @@ import pytest
 from modelstats.env import CannedSlurm, FakeEffects
 from modelstats.slurm import (
     INVALID_REGEX,
+    MYRUNS_CALL,
     NO_JOB,
+    RUNNAMES_CALL,
     SUBSCRIPT_OUT_OF_BOUNDS,
     SlurmError,
     SlurmJob,
@@ -31,10 +33,14 @@ from modelstats.slurm import (
     r_dirname,
     r_grepl,
     r_strsplit_space,
+    run_folders_of,
+    sacct_since_text,
+    scheduler_calls,
     slurm_answer,
 )
 
 NOW = datetime(2026, 9, 30, 12, 0, 0, tzinfo=ZoneInfo("Europe/Berlin"))
+TODAY = date(2026, 9, 30)
 ME = "pascalfu"
 
 
@@ -379,6 +385,59 @@ def test_current_runs_sacct_with_daysback(tmp_path: Path) -> None:
     assert len(current_runs(ME, 0, effects(files, tmp_path)).calls) == 2
 
 
+@pytest.mark.parametrize(
+    ("offset", "expected"),
+    [
+        (5, "2026-09-25"),
+        (0, "2026-09-30"),
+        (8, "2026-09-22"),
+        (99999999999, "-273788674-01-19"),
+        (-9999999999, "27381096-10-24"),
+        (2147483648, "-5877584-03-21"),
+        (2147483648.5, "-5877584-03-20"),  # fractional days floor
+        (1e10, "-27377044-09-04"),
+        (1e5, "1752-12-15"),
+        (-1e5, "2300-07-16"),
+        (375000, "1000-01-12"),
+        (704000, "99-04-05"),  # the year is not padded
+        (737000, "8-11-28"),
+        (740000, "0-09-11"),
+        (740500, "-1-04-30"),
+        (741000, "-3-12-16"),
+        (745000, "-13-01-03"),
+        (1e6, "-712-11-02"),
+        (3652425, "-7974-09-30"),
+        (36524250, "-97974-09-30"),
+        (0.5, "2026-09-29"),
+        (-0.5, "2026-09-30"),
+        (float("inf"), "-Inf"),
+        (float("-inf"), "Inf"),
+        (float("nan"), "NaN"),
+        (None, "NA"),
+    ],
+)
+def test_sacct_since_text_formats_like_r(offset: float | None, expected: str) -> None:
+    """``paste0(as.Date("2026-09-30") - offset)`` probed in R 4.6.1 on 2026-10-02."""
+    assert sacct_since_text(TODAY, offset) == expected
+
+
+def test_current_runs_since_overrides_the_sacct_date_bug_066(tmp_path: Path) -> None:
+    """``-d x``: R pastes ``as.numeric("x")``, ``NA``, after ``-S`` (``R/commandLineInterface.R:145``)."""
+    (done,) = make_dirs(tmp_path, "done")
+    files = {
+        "squeue_all.txt": "",
+        "sacct_WorkDir_pascalfu.txt": f"{done}\n",
+        "sacct_JobName_pascalfu.txt": "done\n",
+    }
+    found = current_runs(ME, 1, effects(files, tmp_path), since="NA")
+    assert found.runs == (done,)
+    assert [call.shell_text for call in found.calls[2:]] == [
+        "sacct -u pascalfu -s cd,f,cancelled,timeout,oom -S NA -E now -P -n --format WorkDir",
+        "sacct -u pascalfu -s cd,f,cancelled,timeout,oom -S NA -E now -P -n --format JobName",
+    ]
+    assert len(current_runs(ME, 0, effects(files, tmp_path), since="NA").calls) == 2  # no sacct without days
+
+
 def test_current_runs_drops_batch_and_default_only_with_mag_run(tmp_path: Path) -> None:
     coupled, magpie, default = make_dirs(tmp_path, "coupled", "coupled/magpie", "default")
     (tmp_path / "coupled" / "output" / "C_run").mkdir(parents=True)
@@ -425,12 +484,14 @@ def test_current_runs_job_name_is_a_regex_bug_008(tmp_path: Path) -> None:
 
 
 def test_current_runs_mismatched_answers_bug_028(tmp_path: Path) -> None:
+    """Reported under ``runnames[[i]]`` (no names at all) or ``myruns[[i]]`` (a name without a directory)."""
     (here, there) = make_dirs(tmp_path, "here", "there")
-    with pytest.raises(SlurmError, match=SUBSCRIPT_OUT_OF_BOUNDS):
+    with pytest.raises(SlurmError, match=SUBSCRIPT_OUT_OF_BOUNDS) as no_names:
         current_runs(
             ME, 0, effects({"squeue_Z_pascalfu.txt": f"{here}\n", "squeue_j_pascalfu.txt": ""}, tmp_path)
         )
-    with pytest.raises(SlurmError, match=SUBSCRIPT_OUT_OF_BOUNDS):
+    assert no_names.value.call == RUNNAMES_CALL == "runnames[[i]]"
+    with pytest.raises(SlurmError, match=SUBSCRIPT_OUT_OF_BOUNDS) as no_directory:
         current_runs(
             ME,
             0,
@@ -438,6 +499,7 @@ def test_current_runs_mismatched_answers_bug_028(tmp_path: Path) -> None:
                 {"squeue_Z_pascalfu.txt": f"{here}\n", "squeue_j_pascalfu.txt": "here\nthere\n"}, tmp_path
             ),
         )
+    assert no_directory.value.call == MYRUNS_CALL == "myruns[[i]]"
     # more work directories than names: the extra ones are kept as they are
     files = {"squeue_Z_pascalfu.txt": f"{here}\n{there}\n", "squeue_j_pascalfu.txt": "here\n"}
     assert current_runs(ME, 0, effects(files, tmp_path)).runs == (here, there)
@@ -448,6 +510,36 @@ def test_current_runs_mismatched_answers_bug_028(tmp_path: Path) -> None:
         ).runs
         == ()
     )
+
+
+def test_scheduler_calls_then_run_folders_of_compose_current_runs(tmp_path: Path) -> None:
+    """The two steps of ``-C``: the calls (with their diagnostics) first, the folders from their answers."""
+    (done,) = make_dirs(tmp_path, "done")
+    files = {
+        "squeue_all.txt": six(ME, done, "done") + "\n",
+        "sacct_WorkDir_pascalfu.txt": f"{done}\n",
+        "sacct_JobName_pascalfu.txt": "done\n",
+    }
+    env = effects(files, tmp_path)
+    calls = scheduler_calls(ME, 3, env)
+    assert [call.argv[-1] for call in calls] == ["%Z", "%j", "WorkDir", "JobName"]
+    assert run_folders_of(calls, env) == (done,)
+    composed = current_runs(ME, 3, env)
+    assert composed.runs == (done,) and composed.calls == calls
+    assert len(scheduler_calls(ME, 0, env)) == 2
+    # %Z answers, %j fails: the calls and the second one's warning are there before the processing fails
+    failing = effects(
+        {"squeue_all.txt": "", "squeue_Z_pascalfu.txt": f"{done}\n", "squeue_sequence": "0\n1\n"}, tmp_path
+    )
+    calls = scheduler_calls(ME, 0, failing)
+    assert [call.warning for call in calls] == [
+        None,
+        "running command 'squeue -u pascalfu -h -o '%j'' had status 1",
+    ]
+    assert calls[1].result.stderr == "squeue: error: fake squeue failure (exit 1)\n"
+    with pytest.raises(SlurmError, match=SUBSCRIPT_OUT_OF_BOUNDS) as excinfo:
+        run_folders_of(calls, failing)
+    assert excinfo.value.call == RUNNAMES_CALL
 
 
 def test_current_runs_failing_commands_warn_like_r(tmp_path: Path) -> None:

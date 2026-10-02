@@ -104,6 +104,7 @@ INVALID_DESCRIPTION: Final = "invalid 'description' argument"
 """R's message for ``load()`` on a vector of paths: ``R/getRunStatus.R:72`` with two matches (BUG-003)."""
 
 CONDITION_LENGTH_ABOVE_ONE: Final = "the condition has length > 1"
+"""R's message for ``if (c(TRUE, TRUE))``: ``R/colRunType.R:18`` after two ``yml`` matches (BUG-003)."""
 
 # The R calls the errors above are reported under, as ``deparse(conditionCall(e), nlines = 1L)`` prints them
 # (what ``try()`` puts after ``Error in``, ``R/loopRuns.R:57``); each is cited at its raise site.
@@ -132,10 +133,11 @@ CONVERGENCE_READ_CALL: Final = (
 REPY_READ_CALL: Final = 'readGDX(gdx = latest_gdx, "p80_repy")'
 EXPAND_PATTERN_CALL: Final = ".expandPattern(c(...), gdx, format, type, react)"
 ABSENT_SYMBOL_WARNING: Final = (
-    "Error : User specified to read symbol {name}, but it does not exist in the source file"
+    "Error : User specified to read symbol {name}, but it does not exist in the source file\n"
 )
+"""readGDX warns with the message of a ``try()`` error, trailing newline included, so ``PrintWarnings``
+ends the entry with a blank line (``migration/goldens/rs/synthetic-remind.err:10-11``)."""
 ABSENT_TYPED_SYMBOL_WARNING: Final = "No element of {name} found in GDX! NULL returned"
-"""R's message for ``if (c(TRUE, TRUE))``: ``R/colRunType.R:18`` after two ``yml`` matches (BUG-003)."""
 
 NO_LINES_IN_INPUT: Final = "no lines available in input"
 """R's message for ``read.csv2()`` on an empty file: ``R/getRunStatus.R:327, 336, 345``."""

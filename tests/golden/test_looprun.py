@@ -30,7 +30,7 @@ stderr: ``loopRuns`` prints base R's ``try()`` diagnostic for every failed ``get
 (``R/loopRuns.R:57``, :func:`modelstats.loop_runs.try_error_message`). The looprun goldens hold stdout
 only (``capture_bytes`` of ``make_goldens.R`` sinks stdout), so the ``err`` stream is compared with the
 lines the ``rs`` goldens of the same synthetic runs recorded on stderr (``STDERR_BLOCKS``:
-``migration/goldens/rs/synthetic-remind.err:5-10``, ``synthetic-bug005.err:5-6``), in the loop order of
+``migration/goldens/rs/synthetic-remind.err:5-11``, ``synthetic-bug005.err:5-6``), in the loop order of
 the failing runs (``EXPECTED_STDERR``), and must be empty for every other case;
 :func:`test_every_failing_row_has_a_pinned_stderr` ties the two tables to the goldens.
 """
@@ -61,7 +61,7 @@ CRAYON_OFF_TWINS = (
 """The ``off`` rows and the ``on`` rows that differ from them in the crayon state only."""
 STDERR_BLOCKS: dict[str, tuple[str, int, int]] = {
     "config-bak": ("synthetic-remind.err", 5, 5),
-    "gdx-noiter": ("synthetic-remind.err", 6, 10),
+    "gdx-noiter": ("synthetic-remind.err", 6, 11),
     "noconfig-badstats": ("synthetic-bug005.err", 5, 6),
 }
 """Synthetic run -> the ``goldens/rs`` file and the 1-based inclusive lines R's ``try()`` printed for it."""

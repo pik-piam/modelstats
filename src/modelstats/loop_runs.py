@@ -86,6 +86,7 @@ __all__ = [
     "ordered_names",
     "table_layout",
     "try_error_message",
+    "warnings_block",
 ]
 
 NO_RUNS_FOUND: Final = "No runs found"
@@ -365,16 +366,27 @@ def try_error_message(error: RunReadError) -> str:
 
 def deferred_warnings_message(warnings: Sequence[DeferredWarning]) -> str:
     """``printDeferredWarnings()`` after ``try()``'s error line: the ``In addition:`` block, or nothing."""
+    return warnings_block(warnings, in_addition=True)
+
+
+def warnings_block(warnings: Sequence[DeferredWarning], *, in_addition: bool) -> str:
+    """``PrintWarnings(header)`` (``errors.c``): the ``Warning message(s):`` block, or nothing.
+
+    ``in_addition`` selects the header ``In addition: `` of ``printDeferredWarnings()`` (after ``try()``'s
+    error line, ``R/loopRuns.R:57``, and after an uncaught error); without it the block is the one R's top
+    level prints for the warnings of a script that ends normally (``rs -C`` with a failing ``sacct``).
+    """
+    header = _WARNINGS_HEADER if in_addition else ""
     if not warnings:
         return ""
     if len(warnings) == 1:
-        return f"{_WARNINGS_HEADER}{_WARNING_ONE}{_warning_line(warnings[0], _WARN_WIDTH_OFFSET_ONE)}"
+        return f"{header}{_WARNING_ONE}{_warning_line(warnings[0], _WARN_WIDTH_OFFSET_ONE)}"
     if len(warnings) <= _WARNINGS_LISTED_MAX:
         lines = "".join(
             f"{n}: {_warning_line(warning, _WARN_WIDTH_OFFSET_MANY)}" for n, warning in enumerate(warnings, 1)
         )
-        return f"{_WARNINGS_HEADER}{_WARNING_MANY}{lines}"
-    return f"{_WARNINGS_HEADER}There were {len(warnings)} warnings (use warnings() to see them)\n"
+        return f"{header}{_WARNING_MANY}{lines}"
+    return f"{header}There were {len(warnings)} warnings (use warnings() to see them)\n"
 
 
 def _warning_line(warning: DeferredWarning, offset: int) -> str:
