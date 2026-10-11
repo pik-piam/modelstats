@@ -30,3 +30,19 @@ R/updateReadme.R
 doc
 Meta
 /modelstats.Rproj
+
+# Python (src layout, uv, ruff, mypy, pytest)
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+
+# The migration record (plan, decision table, bug register, R goldens, fixtures, sandbox harness) and the
+# orchestration workflow that produced the Python package stay outside the repository.
+/migration/
+/.claude/workflows/
