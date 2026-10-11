@@ -3,31 +3,61 @@
 The literal expectations come from R 4.6.1 under ``LC_ALL=C.utf8`` (probe of 2026-10-01; the R expression
 is quoted next to each). The tests on ``tmp_path`` trees and on ``migration/cases`` run everywhere; those
 on the gitignored fixture snapshot and the synthetic layer skip where the trees are absent
-(``tests/conftest.py``).
+(``tests/conftest.py``). The mutating part (phase 5, ``06`` sections 3.2 and 4.4) is tested on temporary
+trees: atomic writes, ``sed -i``, the file operations, streamed subprocesses, a loopback webhook, the lock
+held by another process, ``CannedAmt`` against ``migration/harness/fakebin`` and ``migration/cases/amt``,
+``RecordingEffects`` against the fake binaries' ``trace.jsonl`` of a golden case, and ``DryRunEffects``
+against a tree digest.
 """
 
 from __future__ import annotations
 
+import contextlib
+import hashlib
+import json
 import os
 import pwd
-from collections.abc import Callable
+import shlex
+import socket
+import stat
+import subprocess
+import sys
+import threading
+import time as wallclock
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path, PurePosixPath
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
 
 from modelstats.env import (
+    DRY_RUN_COMMIT,
+    DRY_RUN_RESPONSE_BODY,
+    INVALID_WEBHOOK_URL,
+    NOT_A_WEBHOOK_URL,
+    SELECT_SCENARIOS_SCRIPT,
+    CannedAmt,
     CannedSlurm,
     ClusterPaths,
     CommandFailedError,
+    DryRunEffects,
     EffectCall,
+    Effects,
     FakeEffects,
+    HttpResponse,
+    LockHeldError,
     Mode,
     OverlayPaths,
+    PostRecord,
     ProductionEffects,
+    RecordingEffects,
     RunResult,
+    Stream,
+    TraceRecord,
     sort_like_r,
 )
 from tests.conftest import (
@@ -219,6 +249,27 @@ def test_normalize_path_resolves_existing_paths_only(production: ProductionEffec
     link.symlink_to(probe_tree / "a1")
     assert production.normalize_path(link) == str((probe_tree / "a1").resolve())
     assert production.normalize_path("does/not/exist") == "does/not/exist"
+
+
+def test_is_symlink_is_the_link_itself_never_followed(
+    production: ProductionEffects, probe_tree: Path
+) -> None:
+    """``find -P`` semantics for the realization sweep: the link is reported, its target is not."""
+    link = probe_tree / "link-to-dir"
+    link.symlink_to(probe_tree / "Dir1")
+    assert production.is_symlink(link) and production.is_dir(link)
+    assert not production.is_symlink(probe_tree / "Dir1") and not production.is_symlink(probe_tree / "nope")
+    assert "link-to-dir" in production.list_dirs_like_r(probe_tree, full_names=False)  # list.dirs follows
+    recorder = RecordingEffects(now=NOW, user="amt", on_cluster=False, cwd=probe_tree)
+    assert recorder.is_symlink("link-to-dir") and not recorder.is_symlink("Dir1")
+    assert recorder.calls[-2:] == [
+        EffectCall("is_symlink", ("link-to-dir",)),
+        EffectCall("is_symlink", ("Dir1",)),
+    ]
+    fake = FakeEffects(now=NOW, user="amt", on_cluster=False, cwd=probe_tree)
+    assert fake.is_symlink("link-to-dir") and not fake.is_symlink("Dir1") and not fake.is_symlink("")
+    dry = DryRunEffects(recorder)
+    assert dry.is_symlink(link) and not dry.is_symlink(probe_tree / "a1")
 
 
 def test_exists_is_dir_and_readers(production: ProductionEffects, probe_tree: Path) -> None:
@@ -777,3 +828,753 @@ def test_case_effects_fixture_builds_a_local_mode_case(
     assert effects.listdir_like_r(".") == R_FIXTURE_RUN_DIR
     assert effects.normalize_path(".") == f"/fixtures/p/{FIXTURE_RUN}"
     assert effects.run(["squeue", "-u", "pascalfu", "-h", "-o", "%Z"]).lines() == ["/home/pascalfu"]
+
+
+# ---------------------------------------------------------------------------------------------
+# The mutating part (06 3.2, 4.1, 4.2): atomic writes, sed -i, copy, move, rename, delete, mkdir
+# ---------------------------------------------------------------------------------------------
+
+SED_FORCE_DOWNLOAD = ("cfg$force_download <- FALSE", "cfg$force_download <- TRUE")
+"""The two literals of ``sed -i 's/.../.../' config/default.cfg`` (``R/modeltests.R:100``)."""
+WEBHOOK_PATH = "/hooks/fake-amt-token"
+WEBHOOK = "https://mattermost.example.org" + WEBHOOK_PATH
+
+
+def tree_digest(root: Path) -> str:
+    """Hash every path, mode and content below ``root``: equal digests mean an untouched tree."""
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*")):
+        digest.update(f"{path.relative_to(root).as_posix()}\0{path.lstat().st_mode:o}\0".encode())
+        if path.is_symlink():
+            digest.update(os.readlink(path).encode())
+        elif path.is_file():
+            digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def temp_files(directory: Path) -> list[str]:
+    """List what an interrupted atomic write could leave behind next to its target."""
+    return sorted(p.name for p in directory.iterdir() if p.suffix == ".tmp")
+
+
+def test_write_text_replaces_the_file_atomically_and_keeps_its_mode(
+    production: ProductionEffects, tmp_path: Path
+) -> None:
+    target = tmp_path / "amt-state.json"
+    target.write_text('{"phase": "idle"}')
+    target.chmod(0o640)
+    production.write_text(target, '{"phase": "started"}\n')
+    assert target.read_text() == '{"phase": "started"}\n'
+    assert stat.S_IMODE(target.stat().st_mode) == 0o640
+    assert temp_files(tmp_path) == []
+
+
+def test_write_creates_a_missing_file_with_the_umask_mode(
+    production: ProductionEffects, tmp_path: Path
+) -> None:
+    target = tmp_path / "runcode.rds"
+    previous = os.umask(0o027)
+    try:
+        production.write_bytes(target, b"\x1f\x8b\x00")
+    finally:
+        os.umask(previous)
+    assert target.read_bytes() == b"\x1f\x8b\x00"
+    assert stat.S_IMODE(target.stat().st_mode) == 0o640
+    production.write_text(target, "é\udcff")
+    assert target.read_bytes() == b"\xc3\xa9\xff"  # surrogateescape round-trips undecodable bytes
+
+
+@pytest.mark.parametrize(
+    ("step", "failure"),
+    [("replace", KeyboardInterrupt()), ("fsync", OSError("No space left on device"))],
+    ids=["interrupted-rename", "failed-flush"],
+)
+def test_an_interrupted_atomic_write_leaves_the_old_file_and_no_temp_file(
+    production: ProductionEffects,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    step: str,
+    failure: BaseException,
+) -> None:
+    target = tmp_path / "amt-state.json"
+    target.write_text('{"phase": "idle"}')
+
+    def interrupted(*args: object, **kwargs: object) -> None:
+        raise failure
+
+    monkeypatch.setattr(os, step, interrupted)
+    with pytest.raises(type(failure)):
+        production.write_text(target, '{"phase": "started"}')
+    monkeypatch.undo()
+    assert target.read_text() == '{"phase": "idle"}'
+    assert temp_files(tmp_path) == []
+
+
+def test_replace_in_file_is_sed_i_on_the_first_occurrence_per_line(
+    production: ProductionEffects, tmp_path: Path
+) -> None:
+    cfg = tmp_path / "default.cfg"
+    cfg.write_bytes(
+        b"cfg$force_download <- FALSE\n"
+        b"# cfg$force_download <- FALSE and cfg$force_download <- FALSE\n"
+        b'cfg$title <- "\xff"\n'
+        b"cfg$force_download <- FALSE"
+    )
+    assert production.replace_in_file(cfg, *SED_FORCE_DOWNLOAD) == 3
+    assert cfg.read_bytes() == (
+        b"cfg$force_download <- TRUE\n"
+        b"# cfg$force_download <- TRUE and cfg$force_download <- FALSE\n"
+        b'cfg$title <- "\xff"\n'
+        b"cfg$force_download <- TRUE"
+    )
+
+
+def test_replace_in_file_rewrites_the_file_even_without_a_match(
+    production: ProductionEffects, tmp_path: Path
+) -> None:
+    cfg = tmp_path / "default.cfg"
+    cfg.write_text("cfg$force_download <- TRUE\n")
+    os.utime(cfg, (1_000_000_000, 1_000_000_000))
+    assert production.replace_in_file(cfg, *SED_FORCE_DOWNLOAD) == 0
+    assert cfg.read_text() == "cfg$force_download <- TRUE\n"
+    assert cfg.stat().st_mtime > 1_000_000_000  # touched like sed -i (the R golden's effects.json)
+    assert production.replace_in_file(cfg, "", "x") == 0  # an empty pattern matches nothing
+
+
+def test_copy_move_rename_delete_tree_and_mkdir(production: ProductionEffects, tmp_path: Path) -> None:
+    readme = tmp_path / "README.md"
+    readme.write_text("results")
+    readme.chmod(0o600)
+    report = tmp_path / "testing_suite"
+    production.mkdir(report / "nested")  # recursive
+    production.mkdir(report)  # an existing directory is fine
+    production.copy(readme, report)  # file.copy into a directory
+    (report / "nested" / "README.md").write_text("stale")
+    production.copy(readme, report / "nested" / "README.md")  # overwrite = TRUE
+    assert (report / "README.md").read_text() == (report / "nested" / "README.md").read_text() == "results"
+    assert stat.S_IMODE((report / "README.md").stat().st_mode) == 0o600
+    run = tmp_path / "output" / "SSP2-NPi-AMT_2026-06-01_00.00.00"
+    run.mkdir(parents=True)
+    (run / "full.log").write_text("*** Status: Normal completion\n")
+    archive = tmp_path / "output" / "archive"
+    production.mkdir(archive)
+    production.move(run, archive)  # mv <run> archive
+    assert (archive / run.name / "full.log").exists() and not run.exists()
+    log = tmp_path / "test-full.log"
+    log.write_text("new")
+    dated = tmp_path / "tests" / "test-full-2026-09-30.log"
+    production.mkdir(dated.parent)
+    dated.write_text("old")
+    production.rename(log, dated)  # file.rename replaces the existing target
+    assert dated.read_text() == "new" and not log.exists()
+    production.delete_tree(archive)
+    production.delete_tree(dated)
+    production.delete_tree(tmp_path / "missing")
+    assert not archive.exists() and not dated.exists()
+
+
+# ---------------------------------------------------------------------------------------------
+# run: line-by-line streaming (06 3.3), post_json over a loopback webhook, the flock
+# ---------------------------------------------------------------------------------------------
+
+STREAMING_CHILD = (
+    "import sys\n"
+    "print('a'); sys.stdout.flush()\n"
+    "print('b', file=sys.stderr); sys.stderr.flush()\n"
+    "sys.stdout.write('c\\rd\\n'); sys.stdout.write('tail')\n"
+    "sys.exit(3)\n"
+)
+
+
+def test_run_streams_every_line_to_the_callback_and_keeps_the_text(production: ProductionEffects) -> None:
+    seen: list[tuple[Stream, str]] = []
+    result = production.run(
+        [sys.executable, "-c", STREAMING_CHILD], on_line=lambda stream, line: seen.append((stream, line))
+    )
+    assert result.returncode == 3 and not result.ok
+    assert [line for stream, line in seen if stream is Stream.STDOUT] == ["a", "c\rd", "tail"]
+    assert [line for stream, line in seen if stream is Stream.STDERR] == ["b"]
+    assert (result.stdout, result.stderr) == ("a\nc\rd\ntail", "b\n")
+    assert result.lines() == ["a", "c\rd", "tail"]
+
+
+def test_run_check_raises_with_the_result_and_the_argument_rules(
+    production: ProductionEffects, tmp_path: Path
+) -> None:
+    with pytest.raises(CommandFailedError, match="exited with status 3") as info:
+        production.run([sys.executable, "-c", STREAMING_CHILD], check=True)
+    assert info.value.result.stdout == "a\nc\rd\ntail"
+    with pytest.raises(ValueError, match="capture=True"):
+        production.run(["true"], capture=False, on_line=lambda stream, line: None)
+    with pytest.raises(ValueError, match="needs a program"):
+        production.run([])
+    with pytest.raises(FileNotFoundError):
+        production.run(["true"], cwd=tmp_path / "missing")
+
+
+def test_run_without_capture_inherits_the_streams(
+    production: ProductionEffects, capfd: pytest.CaptureFixture[str]
+) -> None:
+    result = production.run([sys.executable, "-c", "print('inherited')"], capture=False)
+    assert result == RunResult((sys.executable, "-c", "print('inherited')"), 0, "", "")
+    assert capfd.readouterr().out == "inherited\n"
+
+
+def test_a_failing_callback_still_drains_the_child(production: ProductionEffects) -> None:
+    many = "for i in range(20000): print('x' * 100)\n"  # well beyond the pipe buffer
+
+    def boom(stream: Stream, line: str) -> None:
+        raise RuntimeError("callback failed")
+
+    with pytest.raises(RuntimeError, match="callback failed"):
+        production.run([sys.executable, "-c", many], on_line=boom)
+
+
+@dataclass
+class Webhook:
+    url: str
+    status: int
+    received: list[tuple[str, str, bytes]]
+
+
+@pytest.fixture
+def webhook() -> Iterator[Webhook]:
+    """A loopback HTTP server recording every POST (path, content type, body); ``status`` is its answer."""
+    hook = Webhook("", 200, [])
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802 - the http.server hook name
+            body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            hook.received.append((self.path, self.headers.get("Content-Type", ""), body))
+            self.send_response(hook.status)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"message":"boom"}' if hook.status >= 400 else b"ok")
+
+        def log_message(self, format: str, *args: Any) -> None:
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    hook.url = f"http://127.0.0.1:{server.server_port}{WEBHOOK_PATH}"
+    try:
+        yield hook
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def test_post_json_posts_the_payload_as_json(production: ProductionEffects, webhook: Webhook) -> None:
+    payload = {"text": "Summary: AMT runs look good.\n```\nrs -A\n```\nSSP2-NPi-AMT: 2.3 hours, 26/100 Iter"}
+    assert production.post_json(webhook.url, payload) == HttpResponse(webhook.url, 200, "ok")
+    assert webhook.received == [
+        (WEBHOOK_PATH, "application/json", json.dumps(payload, ensure_ascii=False).encode())
+    ]
+
+
+def test_post_json_reports_http_and_transport_failures_without_raising(
+    production: ProductionEffects, webhook: Webhook
+) -> None:
+    webhook.status = 500
+    failed = production.post_json(webhook.url, {"text": "x"})
+    assert failed == HttpResponse(webhook.url, 500, '{"message":"boom"}') and not failed.ok
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        closed = f"http://127.0.0.1:{probe.getsockname()[1]}{WEBHOOK_PATH}"
+    refused = production.post_json(closed, {"text": "x"})
+    assert refused.status == 0 and not refused.ok and "refused" in refused.body.lower()
+
+
+@pytest.mark.parametrize(
+    ("url", "body"),
+    [
+        ("not-a-url", NOT_A_WEBHOOK_URL),
+        ("file:///etc/hostname", NOT_A_WEBHOOK_URL),
+        ("mailto:x@y", NOT_A_WEBHOOK_URL),
+        ("data:text/plain,hi", NOT_A_WEBHOOK_URL),
+        ("", NOT_A_WEBHOOK_URL),
+        ("http://", "no host given"),
+        ("http://[::1", f"{INVALID_WEBHOOK_URL} (ValueError)"),
+        ("http://exa mple.invalid/hook", f"{INVALID_WEBHOOK_URL} (InvalidURL)"),
+        ("http://127.0.0.1/hook\x00", f"{INVALID_WEBHOOK_URL} (InvalidURL)"),
+    ],
+)
+def test_post_json_reports_malformed_urls_without_raising(
+    production: ProductionEffects, url: str, body: str
+) -> None:
+    """A misconfigured ``$AMT_MATTERMOST_URL`` is a failed exchange, never an exception (R's curl warned)."""
+    response = production.post_json(url, {"text": "x"})
+    assert response == HttpResponse(url, 0, body) and not response.ok
+    assert url == "" or url not in response.body
+
+
+LOCK_HOLDER = (
+    "import fcntl, os, sys\n"
+    "fd = os.open(sys.argv[1], os.O_RDWR | os.O_CREAT, 0o644)\n"
+    "fcntl.flock(fd, fcntl.LOCK_EX)\n"
+    "print('locked', flush=True)\n"
+    "sys.stdin.read()\n"  # released when the parent closes our stdin
+    "os.close(fd)\n"
+)
+
+
+@contextlib.contextmanager
+def held_by_another_process(path: Path) -> Iterator[Callable[[], None]]:
+    """Hold an exclusive flock on ``path`` in a child process; the yielded function releases it."""
+    child = subprocess.Popen(
+        [sys.executable, "-c", LOCK_HOLDER, str(path)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    assert child.stdout is not None and child.stdin is not None
+    assert child.stdout.readline() == "locked\n"
+    stdin = child.stdin
+
+    def release() -> None:
+        if not stdin.closed:
+            stdin.close()
+            child.wait(timeout=30)
+
+    try:
+        yield release
+    finally:
+        release()
+        child.stdout.close()
+
+
+def test_lock_contention_fails_fast_without_wait(production: ProductionEffects, tmp_path: Path) -> None:
+    path = tmp_path / "amt-state.lock"
+    with held_by_another_process(path):
+        with pytest.raises(LockHeldError, match="amt-state.lock") as info, production.lock(path, wait=False):
+            pytest.fail("the lock was taken although another process holds it")
+        assert isinstance(info.value, BlockingIOError) and info.value.path == str(path)
+    with production.lock(path, wait=False):
+        pass
+    assert path.exists()  # created when missing, never deleted
+
+
+def test_lock_waits_until_the_other_process_releases(production: ProductionEffects, tmp_path: Path) -> None:
+    path = tmp_path / "amt-state.lock"
+    released_at: list[float] = []
+    with held_by_another_process(path) as release:
+
+        def release_later() -> None:
+            wallclock.sleep(0.3)
+            released_at.append(wallclock.monotonic())
+            release()
+
+        releaser = threading.Thread(target=release_later)
+        releaser.start()
+        with production.lock(path):
+            acquired_at = wallclock.monotonic()
+        releaser.join()
+    assert released_at and acquired_at >= released_at[0]
+
+
+# ---------------------------------------------------------------------------------------------
+# CannedAmt: the fake binaries' answers (harness/fakebin/_lib.sh, git, sbatch, rsync, make, Rscript, curl)
+# ---------------------------------------------------------------------------------------------
+
+GIT_LOG_1_DEFAULT = (
+    "commit 3f5e2a1b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f\n"
+    "Author: AMT Bot <amt@example.org>\n"
+    "Date:   Mon Sep 28 10:00:00 2026 +0200\n"
+    "\n"
+    "    Merge pull request #999 from example/feature\n"
+)
+
+
+def test_canned_amt_defaults_are_the_fake_binaries_defaults() -> None:
+    amt = CannedAmt.empty()
+    assert amt.answer("git", ["log", "-1"]) == RunResult(("git", "log", "-1"), 0, GIT_LOG_1_DEFAULT, "")
+    merges = amt.answer("git", ["log", "--merges", "--pretty=oneline", "a..b", "--abbrev-commit"])
+    assert merges is not None and merges.lines() == [
+        "3f5e2a1 Merge pull request #999 from example/feature",
+        "1a2b3c4 Merge pull request #998 from example/bugfix",
+    ]
+    for argv in (["reset", "--hard", "origin/develop"], ["pull"], ["-C", "magpie", "pull"], ["push"]):
+        assert amt.answer("git", argv) == RunResult(("git", *argv), 0, "", "")
+    sbatch = ["--qos=priority", "cs2.sh"]
+    assert amt.answer("sbatch", sbatch) == RunResult(("sbatch", *sbatch), 0, "Submitted batch job 4242\n", "")
+    rsync = ["-e", "ssh", "-av", "fulldata.gdx", "rse@rse.pik-potsdam.de:/webservice/data/x.gdx"]
+    assert amt.answer("rsync", rsync) == RunResult(("rsync", *rsync), 0, "", "")
+    assert amt.answer("make", ["test-full-slurm"]) == RunResult(
+        ("make", "test-full-slurm"), 0, "fake make: test-full-slurm\n", ""
+    )
+    start = ["start.R", "--testOneRegi", "titletag=AMT"]
+    assert amt.answer("Rscript", start) == RunResult(
+        ("Rscript", *start), 0, "fake Rscript: start.R --testOneRegi titletag=AMT\n", ""
+    )
+    assert amt.answer("Rscript", ["scripts/start.R"]) is not None
+    assert amt.answer("Rscript", ["-e", "source('start.R')"]) is None  # -e first: the real Rscript runs
+    assert amt.answer("Rscript", ["select_scenarios.R", "AMT"]) is None  # a bridge, not a fake's business
+    assert amt.answer("sed", ["-i", "s/a/b/", "x"]) is None and amt.answer("curl", ["-i"]) is None
+    assert amt.http_answer(WEBHOOK) == HttpResponse(WEBHOOK, 200, "ok\n")  # printf '%s\n' of the default
+
+
+def test_canned_amt_reads_the_case_files_like_the_fakes() -> None:
+    git_fail = CASES / "amt" / "remind-evaluate-git-fail"
+    assert CannedAmt.from_case_dir(git_fail).answer("git", ["log", "-1"]) == RunResult(
+        ("git", "log", "-1"), 128, (git_fail / "git-log-1.txt").read_text(), ""
+    )
+    make_fail = CASES / "amt" / "remind-start-make-fail"
+    amt = CannedAmt.from_case_dir(make_fail)
+    assert amt.answer("make", ["test-full-slurm"]) == RunResult(
+        ("make", "test-full-slurm"), 2, (make_fail / "make.txt").read_text(), ""
+    )
+    assert amt.answer("Rscript", ["start.R"]) == RunResult(
+        ("Rscript", "start.R"), 1, "fake Rscript: start.R\n", ""
+    )
+    curl_fail = CannedAmt.from_case_dir(CASES / "amt" / "remind-evaluate-curlfail")
+    assert curl_fail.http_answer(WEBHOOK) == HttpResponse(WEBHOOK, 500, '{"message":"boom"}\n')
+    assert curl_fail.exit_status("curl") == 22
+    assert CannedAmt({"x.exit": " 7\n"}).exit_status("x") == 7
+    assert CannedAmt({"x.exit": "abc"}).exit_status("x") == 0
+    assert CannedAmt({"curl.txt": ""}).http_answer(WEBHOOK) == HttpResponse(
+        WEBHOOK, 0, "fake curl failure (exit 0)"
+    )
+    assert CannedAmt({"sbatch.txt": "custom\n"}).answer("sbatch", []) == RunResult(
+        ("sbatch",), 0, "custom\n", ""
+    )
+    assert CannedAmt({"hostname.txt": "login01\n"}).answer("hostname", []) == RunResult(
+        ("hostname",), 0, "login01\n", ""
+    )
+    with pytest.raises(FileNotFoundError, match="case directory not found"):
+        CannedAmt.from_case_dir(CASES / "amt" / "no-such-case")
+
+
+# ---------------------------------------------------------------------------------------------
+# RecordingEffects: the trace of the fake binaries, real mutations, canned programs, the webhook record
+# ---------------------------------------------------------------------------------------------
+
+SUBPROCESS_TOOLS = frozenset({"git", "Rscript", "make", "sbatch", "rsync", "squeue", "sacct"})
+"""The programs the Python AMT runs as subprocesses; the fakes' ``sed``, ``mv`` and ``curl`` are effects."""
+EFFECT_TOOLS = {"sed": "replace_in_file", "mv": "move", "curl": "post_json"}
+
+
+def recording(cwd: Path, case: str, slurm: CannedSlurm | None = None) -> RecordingEffects:
+    return RecordingEffects(
+        now=NOW,
+        user=SANDBOX_USER,
+        on_cluster=True,
+        amt=CannedAmt.from_case_dir(CASES / "amt" / case),
+        slurm=slurm,
+        cwd=cwd,
+    )
+
+
+@pytest.mark.parametrize("case", ["remind-start", "remind-evaluate"])
+def test_recording_trace_equals_the_fake_binaries_trace_of_a_case(
+    goldens_dir: Path, fixtures_dir: Path, tmp_path: Path, case: str
+) -> None:
+    """Replaying the golden's subprocess calls leaves the lines the fakes wrote, byte for byte."""
+    lines = (goldens_dir / "amt" / case / "trace.jsonl").read_text(encoding="utf-8").splitlines()
+    records = [json.loads(line) for line in lines]
+    assert {r["tool"] for r in records} - SUBPROCESS_TOOLS <= EFFECT_TOOLS.keys()
+    replayed = [(line, r) for line, r in zip(lines, records, strict=True) if r["tool"] in SUBPROCESS_TOOLS]
+    effects = recording(tmp_path, case, CannedSlurm.from_case_dir(RECORDED_SLURM))
+    for _, record in replayed:
+        effects.run([record["tool"], *record["argv"]], cwd=record["cwd"], env=record["env"])
+    assert effects.trace_lines() == [line for line, _ in replayed]
+    assert [c.tool for c in effects.runs] == [r["tool"] for _, r in replayed]
+    assert [t.exit for t in effects.trace if t.tool == "squeue"] == [0] * sum(
+        r["tool"] == "squeue" for r in records
+    )
+    assert all(t.exit is None for t in effects.trace if t.tool != "squeue")
+    effects.write_trace(tmp_path / "trace.jsonl")
+    assert (tmp_path / "trace.jsonl").read_text(encoding="utf-8") == "".join(
+        f"{line}\n" for line, _ in replayed
+    )
+
+
+def test_recording_mutations_are_real_and_relative_to_the_injected_cwd(tmp_path: Path) -> None:
+    checkout = tmp_path / "remind"
+    write(checkout / "config" / "default.cfg", "cfg$force_download <- FALSE\n")
+    effects = RecordingEffects(now=NOW, user="amt", on_cluster=False, cwd=checkout)
+    effects.write_text("amt-state.json", '{"phase": "idle"}')
+    effects.write_bytes("runcode.rds", b"rds")
+    assert effects.replace_in_file("config/default.cfg", *SED_FORCE_DOWNLOAD) == 1
+    effects.mkdir("output/archive")
+    effects.copy("amt-state.json", "output/archive")
+    effects.move("output/archive/amt-state.json", "output/moved.json")
+    effects.rename("output/moved.json", "output/renamed.json")
+    effects.delete_tree("output/archive")
+    assert (checkout / "amt-state.json").read_text() == '{"phase": "idle"}'
+    assert (checkout / "runcode.rds").read_bytes() == b"rds"
+    assert (checkout / "config" / "default.cfg").read_text() == "cfg$force_download <- TRUE\n"
+    assert (checkout / "output" / "renamed.json").read_text() == '{"phase": "idle"}'
+    assert not (checkout / "output" / "archive").exists()
+    assert effects.read_text("amt-state.json") == '{"phase": "idle"}' and effects.exists("runcode.rds")
+    assert effects.listdir_like_r("output") == ["renamed.json"]
+    assert effects.normalize_path("output") == os.path.realpath(checkout / "output")
+    assert effects.glob("*.rds") == ["runcode.rds"]
+    assert [c.name for c in effects.calls] == [
+        "write_text", "write_bytes", "replace_in_file", "mkdir", "copy", "move", "rename", "delete_tree",
+        "read_text", "exists", "listdir_like_r", "normalize_path", "glob",
+    ]  # fmt: skip
+    assert effects.calls[0] == EffectCall("write_text", ("amt-state.json", '{"phase": "idle"}'))
+    assert effects.calls[2] == EffectCall("replace_in_file", ("config/default.cfg", *SED_FORCE_DOWNLOAD))
+    assert effects.cwd == str(checkout) and effects.paths is None and effects.trace == []
+
+
+def test_recording_run_streams_the_canned_answer_and_honours_check(
+    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    effects = recording(tmp_path, "remind-start-make-fail")
+    seen: list[tuple[Stream, str]] = []
+    result = effects.run(
+        ["make", "test-full-slurm"], on_line=lambda stream, line: seen.append((stream, line))
+    )
+    assert result.returncode == 2 and seen == [(Stream.STDOUT, line) for line in result.lines()] and seen
+    with pytest.raises(CommandFailedError, match="make test-full-slurm exited with status 2"):
+        effects.run(["make", "test-full-slurm"], check=True)
+    inherited = effects.run(["sbatch", "cs2.sh"], capture=False)
+    assert inherited == RunResult(("sbatch", "cs2.sh"), 0, "", "")
+    assert capfd.readouterr().out == "Submitted batch job 4242\n"
+    squeue = effects.run(["squeue", "-h", "-o", SIX])  # CannedSlurm.empty(): success, no output
+    assert squeue.stdout == "" and squeue.ok
+    assert [c.status for c in effects.runs] == [2, 2, 0, 0]
+    assert [t.exit for t in effects.trace] == [None, None, None, 0]  # only the slurm fake records exit
+
+
+def test_recording_run_falls_back_or_fails_for_programs_without_a_fake(
+    production: ProductionEffects, tmp_path: Path
+) -> None:
+    strict = RecordingEffects(now=NOW, user="amt", on_cluster=False, cwd=tmp_path)
+    with pytest.raises(NotImplementedError, match="no canned answer for 'hostname'"):
+        strict.run(["hostname"])
+    assert [t.tool for t in strict.trace] == ["hostname"] and strict.runs == []
+    delegating = RecordingEffects(
+        now=NOW,
+        user="amt",
+        on_cluster=False,
+        cwd=tmp_path,
+        environ={"TZ": "Europe/Berlin"},
+        fallback=production,
+    )
+    script = "import os; print(os.getcwd())"
+    result = delegating.run([sys.executable, "-c", script], env={"USER": "amt"})
+    assert result.lines() == [os.path.realpath(tmp_path)]
+    assert delegating.trace == [
+        TraceRecord(
+            os.path.basename(sys.executable),
+            ("-c", script),
+            str(tmp_path),
+            {"USER": "amt", "TZ": "Europe/Berlin"},
+        )
+    ]
+
+
+def test_recording_post_json_answers_from_curl_txt_and_records_like_the_fake(
+    goldens_dir: Path, tmp_path: Path
+) -> None:
+    golden = json.loads(
+        (goldens_dir / "amt" / "remind-evaluate" / "mattermost.json").read_text(encoding="utf-8")
+    )
+    effects = recording(tmp_path, "remind-evaluate")
+    payload = {
+        "text": "Please find below the status of the REMIND automated model tests (AMT) of 2026-09-30."
+    }
+    assert effects.post_json(golden["url"], payload) == HttpResponse(golden["url"], 200, "ok\n")
+    record = effects.posts[0]
+    assert record == PostRecord(golden["url"], payload) and json.loads(record.raw) == payload
+    assert set(record.to_json()) == {"payload", "payload_json", "url"}
+    assert set(golden) - {"payload_json", "payload_json_error"} == {"payload", "url"}  # R's string: BUG-015
+    assert effects.post_lines() == [json.dumps(record.to_json(), ensure_ascii=False, sort_keys=True)]
+    assert effects.calls[-1] == EffectCall("post_json", (golden["url"], record.raw), 200)
+    failing = recording(tmp_path, "remind-evaluate-curlfail")
+    assert failing.post_json(WEBHOOK, payload) == HttpResponse(WEBHOOK, 500, '{"message":"boom"}\n')
+
+
+def test_recording_sleep_never_waits_and_can_advance_the_clock(tmp_path: Path) -> None:
+    frozen = RecordingEffects(now=NOW, user="amt", on_cluster=False, cwd=tmp_path)
+    started = wallclock.monotonic()
+    frozen.sleep(600)
+    assert wallclock.monotonic() - started < 1 and frozen.now() == NOW
+    advancing = RecordingEffects(now=NOW, user="amt", on_cluster=False, cwd=tmp_path, advance_on_sleep=True)
+    advancing.sleep(600)
+    assert advancing.now() == NOW + timedelta(seconds=600)
+    assert [c for c in advancing.calls if c.name == "sleep"] == [EffectCall("sleep", ("600",))]
+    with advancing.lock("amt-state.lock"):
+        assert (tmp_path / "amt-state.lock").exists()
+    assert advancing.calls[-1] == EffectCall("lock", ("amt-state.lock",))
+    assert (advancing.user, advancing.on_cluster, advancing.getenv("X")) == ("amt", False, "")
+    with pytest.raises(ValueError, match="aware"):
+        RecordingEffects(now=datetime(2026, 9, 30), user="amt", on_cluster=False)
+
+
+# ---------------------------------------------------------------------------------------------
+# DryRunEffects: reads for real, nothing written, run, posted or locked
+# ---------------------------------------------------------------------------------------------
+
+
+def test_dry_run_never_writes_runs_posts_or_locks(tmp_path: Path) -> None:
+    checkout = tmp_path / "remind"
+    run = checkout / "output" / "SSP2-NPi-AMT_2026-06-01_00.00.00"
+    write(checkout / "amt-state.json", '{"phase": "idle"}')
+    write(checkout / "config" / "default.cfg", "cfg$force_download <- FALSE\n")
+    write(run / "full.log", "*** Status: Normal completion\n")
+    write(checkout / "test-full.log", "ok")
+    cfg = checkout / "config" / "default.cfg"
+    old, new = SED_FORCE_DOWNLOAD
+    before = tree_digest(tmp_path)
+    inner = RecordingEffects(now=NOW, user="amt", on_cluster=False, cwd=checkout)
+    logged: list[str] = []
+    dry = DryRunEffects(inner, log=logged.append)
+    dry.write_text(checkout / "amt-state.json", '{"phase": "started"}')
+    dry.write_bytes(checkout / "runcode.rds", b"rds")
+    assert dry.replace_in_file(checkout / "config" / "default.cfg", *SED_FORCE_DOWNLOAD) == 1
+    dry.mkdir(checkout / "output" / "archive")
+    dry.copy(checkout / "README.md", tmp_path / "testing_suite")
+    dry.move(run, checkout / "output" / "archive")
+    dry.rename(checkout / "test-full.log", checkout / "tests" / "test-full-2026-09-30.log")
+    dry.delete_tree(checkout / "modules" / "01_macro" / "emptyReal")
+    squeue = dry.run(["squeue", "-u", "amt", "-h", "-o", TEN], cwd=checkout)
+    log1 = dry.run(["git", "log", "-1"], cwd=checkout, check=True)
+    sbatch = dry.run(["sbatch", "cs2.sh"], check=True)
+    revision = dry.run(["git", "rev-parse", "HEAD"])
+    response = dry.post_json(WEBHOOK, {"text": "hi"})
+    dry.sleep(600)
+    with dry.lock(checkout / "amt-state.lock"):
+        pass
+    assert tree_digest(tmp_path) == before
+    assert squeue == RunResult(("squeue", "-u", "amt", "-h", "-o", TEN), 0, "", "") and squeue.lines() == []
+    assert log1.ok and log1.lines()[0] == f"commit {DRY_RUN_COMMIT}"
+    assert sbatch.lines() == ["Submitted batch job 0"] and revision.lines() == [DRY_RUN_COMMIT]
+    assert response == HttpResponse(WEBHOOK, 200, DRY_RUN_RESPONSE_BODY)
+    assert (
+        dry.messages
+        == logged
+        == [
+            f"would write {checkout / 'amt-state.json'}",
+            f"would write {checkout / 'runcode.rds'}",
+            f"would replace {old!r} by {new!r} in {cfg}",
+            f"would create directory {checkout / 'output' / 'archive'}",
+            f"would copy {checkout / 'README.md'} to {tmp_path / 'testing_suite'}",
+            f"would move {run} to {checkout / 'output' / 'archive'}",
+            f"would rename {checkout / 'test-full.log'} to {checkout / 'tests' / 'test-full-2026-09-30.log'}",
+            f"would delete {checkout / 'modules' / '01_macro' / 'emptyReal'}",
+            f"would run {shlex.join(['squeue', '-u', 'amt', '-h', '-o', TEN])} in {checkout}",
+            f"would run git log -1 in {checkout}",
+            "would run sbatch cs2.sh",
+            "would run git rev-parse HEAD",
+            "would post JSON to the webhook at https://mattermost.example.org (path redacted, 14 characters)",
+            "would sleep 600 s",
+            f"would lock {checkout / 'amt-state.lock'}",
+        ]
+    )
+    assert all(WEBHOOK_PATH not in message for message in dry.messages + logged)  # the secret stays out
+    assert [c.name for c in dry.calls] == [
+        "write_text", "write_bytes", "replace_in_file", "mkdir", "copy", "move", "rename", "delete_tree",
+        "run", "run", "run", "run", "post_json", "sleep", "lock",
+    ]  # fmt: skip
+    assert dry.calls[-3] == EffectCall("post_json", (WEBHOOK, '{"text": "hi"}'), None)
+    assert {c.name for c in inner.calls} <= {"read_text", "now"} and inner.trace == [] and inner.posts == []
+    assert dry.read_text(checkout / "config" / "default.cfg") == "cfg$force_download <- FALSE\n"
+    assert not dry.exists(checkout / "runcode.rds") and dry.is_dir(run) and dry.stat(run) is not None
+    assert dry.listdir_like_r(checkout) == ["amt-state.json", "config", "output", "test-full.log"]
+    assert dry.list_dirs_like_r(checkout, full_names=False) == ["config", "output"]
+    assert dry.glob(str(checkout / "*.log")) == [str(checkout / "test-full.log")]
+    assert dry.normalize_path(checkout / "output" / "..") == os.path.realpath(checkout)
+    assert dry.read_bytes(checkout / "test-full.log") == b"ok"
+    with dry.open_binary(checkout / "test-full.log") as stream:
+        assert stream.read() == b"ok"
+    assert (dry.user, dry.on_cluster, dry.cwd, dry.now(), dry.getenv("X")) == (
+        "amt",
+        False,
+        str(checkout),
+        NOW,
+        "",
+    )
+    assert dry.magpie_results_archive == "" and dry.cluster_paths == ClusterPaths() and dry.inner is inner
+    assert dry.paths is None
+
+
+def test_dry_run_redacts_an_unparseable_webhook_url_too() -> None:
+    dry = DryRunEffects(RecordingEffects(now=NOW, user="amt", on_cluster=False, cwd="/"))
+    assert dry.post_json("hooks/SECRET", {"text": "x"}) == HttpResponse(
+        "hooks/SECRET", 200, DRY_RUN_RESPONSE_BODY
+    )
+    assert dry.messages == ["would post JSON to the webhook (URL redacted) (path redacted, 13 characters)"]
+
+
+def test_dry_run_answers_the_scenario_bridge_with_an_empty_selection(tmp_path: Path) -> None:
+    """``Rscript <...>/select_scenarios.R <group>`` sources the checkout's R code: not run, answered empty."""
+    from modelstats.amt.bridges import parse_payload
+
+    dry = DryRunEffects(RecordingEffects(now=NOW, user="amt", on_cluster=False, cwd=tmp_path))
+    script = tmp_path / "pkg" / SELECT_SCENARIOS_SCRIPT
+    result = dry.run(["Rscript", str(script), "AMT"], cwd=tmp_path)
+    assert result.ok and json.loads(result.lines()[-1]) == {
+        "schema": 1,
+        "startgroup": "AMT",
+        "names": [],
+        "columns": {},
+    }
+    selection = parse_payload(result.lines()[-1])
+    assert (selection.startgroup, selection.names, selection.columns, len(selection)) == ("AMT", (), {}, 0)
+    assert dry.messages == [f"would run Rscript {script} AMT in {tmp_path}"]
+    assert json.loads(dry.run(["Rscript", str(script), "1"]).lines()[-1])["startgroup"] == "1"
+    assert json.loads(dry.run(["Rscript", str(script)]).lines()[-1])["startgroup"] == "AMT"
+    assert dry.run(["Rscript", "start.R", "startgroup=AMT"]).lines() == []  # start.R stays silent
+
+
+def test_dry_run_wraps_production_by_default_and_passes_an_overlay_through(layers: Layers) -> None:
+    assert isinstance(DryRunEffects().inner, ProductionEffects)
+    fake = make_fake(layers)
+    dry = DryRunEffects(fake)
+    assert dry.paths is fake.paths and dry.on_cluster and dry.cwd == "/p"
+    assert dry.read_text("/p/projects/shared/both.txt") == "fixture"
+    with pytest.raises(ValueError, match="needs a program"):
+        dry.run([])
+    seen: list[tuple[Stream, str]] = []
+    dry.run(["git", "log", "-1"], on_line=lambda stream, line: seen.append((stream, line)))
+    assert seen[0] == (Stream.STDOUT, f"commit {DRY_RUN_COMMIT}") and (Stream.STDERR, "") not in seen
+
+
+# ---------------------------------------------------------------------------------------------
+# The protocol and FakeEffects' mutating part
+# ---------------------------------------------------------------------------------------------
+
+
+def test_every_implementation_satisfies_the_effects_protocol(
+    production: ProductionEffects, tmp_path: Path
+) -> None:
+    implementations: list[Effects] = [
+        production,
+        FakeEffects(now=NOW, user="amt", on_cluster=False),
+        RecordingEffects(now=NOW, user="amt", on_cluster=False, cwd=tmp_path),
+        DryRunEffects(production),
+    ]  # the annotation is the static check (mypy --strict); the loop only touches every object
+    assert all(effects.cluster_paths == ClusterPaths() for effects in implementations)
+
+
+def test_fake_effects_mutates_outside_the_overlay_only(layers: Layers, tmp_path: Path) -> None:
+    fake = make_fake(layers)
+    outside = tmp_path / "outside"
+    fake.mkdir(outside)
+    fake.write_text(outside / "amt-state.json", "{}")
+    fake.copy("/p/projects/shared/both.txt", outside)  # the overlay's file (the fixtures win) copied out
+    assert (outside / "amt-state.json").read_text() == "{}" and (
+        outside / "both.txt"
+    ).read_text() == "fixture"
+    with pytest.raises(NotImplementedError, match="read-only"):
+        fake.write_text("/p/projects/shared/both.txt", "x")
+    with pytest.raises(NotImplementedError, match="read-only"):
+        fake.delete_tree("projects/shared")  # relative to the logical cwd /p
+    assert (layers.fixtures_p / "projects/shared/both.txt").read_text() == "fixture"
+    assert fake.post_json(WEBHOOK, {"text": "hi"}) == HttpResponse(WEBHOOK, 200, "ok\n")
+    fake.sleep(600)
+    with fake.lock(outside / "amt-state.lock"):
+        pass
+    assert fake.calls[-3:] == [
+        EffectCall("post_json", (WEBHOOK, '{"text": "hi"}'), 200),
+        EffectCall("sleep", ("600",)),
+        EffectCall("lock", (str(outside / "amt-state.lock"),)),
+    ]
+    with pytest.raises(NotImplementedError, match="no canned answer for 'git'"):
+        fake.run(["git", "log", "-1"])

@@ -10,8 +10,8 @@ A collection of tools to analyze model runs.
 
 ## Python package
 
-The Python port of **modelstats** (same version, `pyproject.toml`) ships the `rs` command and the `Run`
-object; the `modeltests` command follows in phase 5. It is being developed on this branch phase by phase
+The Python port of **modelstats** (same version, `pyproject.toml`) ships the `rs` command, the `Run`
+object and the `modeltests` command. It is being developed on this branch phase by phase
 (`migration/06-user-requests.md` section 7); the R package described further below stays available during
 the transition.
 
@@ -66,16 +66,22 @@ Python types (enums for the status, the convergence and the mif state, numbers a
 a missing value); `run.to_status_record()` is the R-compatible record `rs` prints. The full API, the
 `RunState` table and the differences from the R view are in [docs/run-object.md](docs/run-object.md).
 
-### The `modeltests` command (planned, phase 5)
+### The `modeltests` command
 
-Planned for phase 5 of the migration (`migration/06-user-requests.md` section 7): at this commit
-`modeltests` is a placeholder that only answers `--help` (`modeltests run` exits 2), and `docs/amt.md` does
-not exist yet. The design: `modeltests` will replace the `Rscript -e 'modelstats::modeltests(...)'` line of
-the REMIND automated model tests (AMT) cron job; `modeltests run` will start a cycle when none is running and
-evaluate it otherwise, with `start`, `evaluate`, `status` and `reset` as the single steps. One JSON state
-file, one lock and one log per cycle will replace the `.rds` toggles (only `runcode.rds` keeps being written,
-for `rs -A`); REMIND only, the MAgPIE weekly tests stay with the R package (D-27). The commands, the state
-machine, the log and the recovery steps will be documented in [docs/amt.md](docs/amt.md) when they land.
+`modeltests` replaces the `Rscript -e 'modelstats::modeltests(...)'` line of the REMIND automated model tests
+(AMT) cron job (`migration/06-user-requests.md` sections 3 and 4): `modeltests run` starts a cycle when none is
+running and evaluates it otherwise (the drop-in for the old `.testsstatus` toggle); `start`, `evaluate`,
+`status` and `reset` are the single steps. The global options go in front of the command: `--dir` (the REMIND
+checkout), `--report-repo` (the clone that receives README.md), `--user`, `--mattermost-url-env` (default
+`AMT_MATTERMOST_URL`; unset means no notification), `--publish/--no-publish`,
+`--compare-scenarios/--no-compare-scenarios`, `--log-dir`, `--dry-run`, `--force` and `--no-wait`. One JSON
+state file (`<dir>/amt-state.json`), one lock (`<dir>/amt-state.lock`) and one log per cycle
+(`<log-dir>/amt-<cycle id>.log`) replace the `.testsstatus` toggle and the `.rds` state files; only
+`runcode.rds` keeps being written, for `rs-r -A`. Exit statuses: 0 the command did what it says, 1 the cycle
+crashed and the state is `failed` (a Mattermost message is sent when a URL is configured), 2 refused before any
+effect. REMIND only: the MAgPIE weekly tests stay with the R package (D-27). The cron lines, the state machine,
+the log, the recovery steps and what changed against the R version are in [docs/amt.md](docs/amt.md), the
+operator's guide.
 
 ### The R package during the transition
 
@@ -83,7 +89,7 @@ The R package stays in this repository with the version the Python package mirro
 (`tests/unit/test_version.py`). On the cluster the `rs` wrapper
 (`/p/projects/rd3mod/tools/rs`) switches to the Python entry point and the R command line stays available
 as `rs-r`, with `RS_IMPL=r` as the escape hatch for one release (`migration/03-migration-plan.md` phase 7).
-Both implementations read the AMT cycle's regular expression from the same place: the Python AMT will keep
+Both implementations read the AMT cycle's regular expression from the same place: the Python AMT keeps
 writing `runcode.rds` next to its JSON state, so `rs -A`, `rs-r -A` and `remindstatus` agree while both
 exist (`migration/06-user-requests.md` section 3.4).
 

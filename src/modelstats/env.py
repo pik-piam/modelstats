@@ -1,11 +1,27 @@
 """``Effects``: the only door to the environment (``migration/03-migration-plan.md`` sections 2.3 and 5).
 
-Everything the R package reads from outside its own process goes through one injectable object: the
-filesystem below the run folders, ``squeue`` and ``sacct``, the clock, the user name, the ``/p`` probe
-and the environment variables. ``ProductionEffects`` maps the calls to the real system; ``FakeEffects``
-is the test double. This phase defines the read-only subset ``rs`` needs; phase 5 (the AMT rewrite,
-``migration/06-user-requests.md`` section 7) adds the mutating part (write, copy, rename, delete,
-``post_json``, ``sleep``) and the recording and dry-run variants in this same module.
+Everything the package reads from or does to the outside of its own process goes through one injectable
+object: the filesystem below the run folders and the AMT checkout, the scheduler (``squeue``, ``sacct``,
+``sbatch``), every other subprocess (``git``, ``Rscript``, ``make``, ``rsync``), HTTP (the Mattermost
+webhook), the clock, sleeping, the user name, the ``/p`` probe, the environment variables and the lock that
+serialises AMT invocations. Four implementations:
+
+* ``ProductionEffects`` maps every call to the real system.
+* ``FakeEffects`` is the test double of the ``rs`` goldens: an overlay of the fixture layers, a canned
+  scheduler, a frozen clock and an injected identity (below). Mutations are real outside the overlay root
+  (temporary trees in tests) and refused inside it, because the layers are the canonical snapshot.
+* ``RecordingEffects`` is the AMT test double (``06`` section 4.4): the filesystem is real (a sandbox clone
+  or a temporary checkout), subprocesses are answered from a case directory with the exact rules of the
+  fake binaries (``CannedAmt`` ports ``migration/harness/fakebin/_lib.sh`` and the ``git``, ``sbatch``,
+  ``rsync``, ``make``, ``Rscript`` and ``curl`` fakes; ``CannedSlurm`` the ``squeue``/``sacct`` fake), the
+  webhook is answered from the same ``curl.txt``, ``sleep`` returns at once (the R oracle ran with a no-op
+  ``Sys.sleep``), and every call is recorded: ``calls`` for all of them, ``trace`` in the schema of the
+  fakes' ``trace.jsonl`` and ``posts`` in the schema of their ``mattermost.jsonl``, so that R and Python
+  see the same answers and leave comparable records.
+* ``DryRunEffects`` (``--dry-run``, ``03`` 2.3): reads execute for real through the wrapped effects, every
+  mutation is logged (``would write <path>``) and answered with a synthetic result (a fake commit hash for
+  ``git log -1``, an empty ``squeue``, ``Submitted batch job 0``), notifications are suppressed, nothing is
+  written, run, posted or locked.
 
 The R behaviours reproduced here, with the lines they come from:
 
@@ -21,14 +37,22 @@ The R behaviours reproduced here, with the lines they come from:
   name, so a trailing slash yields ``output//run``; ``list.dirs(recursive = FALSE)``
   (``R/commandLineInterface.R:198-200``) lists directories including dot-names, joined the same way;
   ``Sys.glob`` (``R/getRunStatus.R:114, 179``) is glob(3): byte order, dot-names not matched by wildcards.
-* ``file.info()`` (``R/getRunStatus.R:30, 61, 114, 126, 181-183``): size, isdir, mtime and ctime, a
-  missing path giving ``NA``.
+* ``file.info()`` (``R/getRunStatus.R:30, 61, 114, 126, 181-183``, ``R/modeltests.R:382, 405``): size,
+  isdir, mtime and ctime, a missing path giving ``NA``.
 * ``normalizePath()`` (``R/getRunStatus.R:25``, ``R/foundInSlurm.R:13``): the real absolute path of an
   existing file, the input unchanged otherwise.
-* ``system("squeue ...", intern = TRUE)`` and ``sacct`` (``R/foundInSlurm.R:19``,
-  ``R/commandLineInterface.R:141-147``): stdout as lines, the exit status kept, no exception.
-* ``Sys.time()`` / ``Sys.Date()`` (``R/getRunStatus.R:181, 183, 313``, ``R/commandLineInterface.R:145``):
-  an aware datetime in the session's time zone (``TZ``).
+* ``system(cmd, intern = TRUE)`` and ``system(cmd)`` (``R/foundInSlurm.R:19``,
+  ``R/commandLineInterface.R:141-147``, ``R/modeltests.R:98-146, 182-201, 310, 355, 435-443``): stdout
+  as lines, the exit status kept, no exception; the AMT streams the lines into its cycle log instead of
+  letting the child print (``06`` 3.3).
+* ``writeLines()`` / ``saveRDS()`` of the AMT state (``R/modeltests.R:42, 51, 138, 164, 172, 232, 489``):
+  written atomically here (temp file and ``os.replace`` in the same directory, ``06`` 3.2); ``sed -i``
+  on ``config/default.cfg`` (``:100, 117``) is ``replace_in_file``; ``unlink(recursive = TRUE)`` (``:83``)
+  is ``delete_tree``; ``file.copy()`` (``:263, 437``) is ``copy``; ``file.rename()`` (``:389``) is
+  ``rename``; ``mv ... archive`` (``:417``) is ``move`` (``06`` 4.2); ``Sys.sleep()`` (``:153, 193``) is
+  ``sleep``; the ``curl`` webhook call (``:58-61``) is ``post_json`` (``06`` 4.2, decision D-15).
+* ``Sys.time()`` / ``Sys.Date()`` (``R/getRunStatus.R:181, 183, 313``, ``R/commandLineInterface.R:145``,
+  ``R/modeltests.R:34, 93, 176``): an aware datetime in the session's time zone (``TZ``).
 * ``Sys.getenv("MAGPIE_RESULTS_ARCHIVE_PATH")`` (``R/getRunStatus.R:109``) and the hard-coded cluster
   paths (``R/commandLineInterface.R:127-133``, ``R/getSanityChecks.R:22-24``, ``R/getRunStatus.R:111``,
   ``R/modeltests.R:456``) in ``ClusterPaths``.
@@ -51,21 +75,36 @@ accept ``str`` or any ``os.PathLike``.
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import glob as globmodule
+import http.client
+import json
 import os
 import pwd
 import re
 import shlex
+import shutil
 import stat as statmodule
 import subprocess
+import sys
+import tempfile
+import threading
+import time
 import unicodedata
-from collections.abc import Iterable, Mapping, Sequence
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from datetime import datetime, tzinfo
+from datetime import datetime, timedelta, tzinfo
 from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO, Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from modelstats.errors import ModelstatsError
 
 type PathLike = str | os.PathLike[str]
 
@@ -81,7 +120,8 @@ class FileInfo:
     ``mtime_epoch`` and ``ctime_epoch`` are the stat seconds as R stores a POSIXct (a double carrying the
     nanosecond fraction), for the arithmetic against the epoch values of ``runstatistics.rda``; ``mtime``
     and ``ctime`` are the same instants as aware datetimes in the session's time zone (microsecond
-    resolution), as R prints them.
+    resolution), as R prints them. ``ctime`` is what the MAgPIE AMT selected runs by
+    (``R/modeltests.R:247``) and what ``file.info()$ctime`` reports for the archive rules.
     """
 
     size: int
@@ -90,6 +130,21 @@ class FileInfo:
     ctime_epoch: float
     mtime: datetime
     ctime: datetime
+
+
+class Stream(Enum):
+    """Which pipe of a subprocess a streamed line came from (``Effects.run``'s ``on_line``)."""
+
+    STDOUT = "stdout"
+    STDERR = "stderr"
+
+
+type LineCallback = Callable[[Stream, str], None]
+"""Receives every complete line of a subprocess as it arrives, without its trailing newline.
+
+The AMT's cycle log writes each line with a ``[<tool>]`` prefix and mirrors it to stderr
+(``migration/06-user-requests.md`` section 3.3).
+"""
 
 
 @dataclass(frozen=True)
@@ -114,12 +169,17 @@ class RunResult:
         is cut at its first NUL (BUG-011) and empty output is ``character(0)``. The byte-level twin is
         :func:`modelstats.textscan.intern_lines`.
         """
-        if not self.stdout:
-            return []
-        lines = self.stdout.split("\n")
-        if self.stdout.endswith("\n"):
-            lines.pop()
-        return [line.split("\0", 1)[0] for line in lines]
+        return [line.split("\0", 1)[0] for line in _split_lines(self.stdout)]
+
+
+def _split_lines(text: str) -> list[str]:
+    r"""Split on ``\n`` only, an unterminated last line kept, nothing for empty text."""
+    if not text:
+        return []
+    lines = text.split("\n")
+    if text.endswith("\n"):
+        lines.pop()
+    return lines
 
 
 class CommandFailedError(RuntimeError):
@@ -129,6 +189,39 @@ class CommandFailedError(RuntimeError):
         """Carry the failed ``RunResult`` in ``result``."""
         super().__init__(f"{shlex.join(result.argv)} exited with status {result.returncode}")
         self.result = result
+
+
+@dataclass(frozen=True)
+class HttpResponse:
+    """What ``post_json`` observes: the HTTP status and the response body.
+
+    ``status`` is ``0`` when no HTTP exchange happened (connection refused, name resolution, timeout) and
+    ``body`` then carries the reason, the way ``RunResult`` reports a missing program as status 127
+    instead of raising: the R version's ``system(curl, intern = TRUE)`` (``R/modeltests.R:61``) warned
+    and went on, and the notification layer decides what a failure means.
+    """
+
+    url: str
+    status: int
+    body: str
+
+    @property
+    def ok(self) -> bool:
+        """True for a 2xx status."""
+        return 200 <= self.status < 300
+
+
+class LockHeldError(ModelstatsError, BlockingIOError):
+    """``lock(path, wait=False)`` found the lock held by another process (``06`` 3.2, ``--no-wait``).
+
+    It is the package's error (a ``ModelstatsError`` with a message naming the lock file) and at the same
+    time the ``BlockingIOError`` that ``fcntl.flock(LOCK_NB)`` raises, so a caller may catch either.
+    """
+
+    def __init__(self, path: str) -> None:
+        """Name the lock file in the message."""
+        super().__init__(f"lock held by another process: {path}")
+        self.path = path
 
 
 @dataclass(frozen=True)
@@ -153,6 +246,75 @@ class ClusterPaths:
 MAGPIE_RESULTS_ARCHIVE_VARIABLE = "MAGPIE_RESULTS_ARCHIVE_PATH"
 """The environment variable naming the MAgPIE results archive (``R/getRunStatus.R:109``)."""
 
+TRACE_ENV_KEYS: tuple[str, ...] = (
+    "RS_AMT_CASE",
+    "RS_SLURM_CASE",
+    "USER",
+    "autoRenvFixDeps",
+    "FAKETIME",
+    "TZ",
+    "LC_ALL",
+)
+"""The variables a fake binary records with each call (``harness/fakebin/_trace.py``, ``ENV_KEYS``)."""
+
+
+@dataclass(frozen=True)
+class TraceRecord:
+    """One subprocess call in the schema of the fake binaries' ``trace.jsonl`` (``_trace.py``).
+
+    ``tool`` is the program's basename, ``argv`` its arguments without the program, ``cwd`` the absolute
+    working directory, ``env`` the ``TRACE_ENV_KEYS`` subset of the child's environment and ``exit`` the
+    status, present for ``squeue``/``sacct`` only (``_slurm.py`` adds it, the shell fakes do not).
+    """
+
+    tool: str
+    argv: tuple[str, ...]
+    cwd: str
+    env: Mapping[str, str]
+    exit: int | None = None
+
+    def to_json(self) -> dict[str, object]:
+        """The record as the fake writes it (``exit`` only when set)."""
+        record: dict[str, object] = {
+            "tool": self.tool,
+            "argv": list(self.argv),
+            "cwd": self.cwd,
+            "env": dict(self.env),
+        }
+        if self.exit is not None:
+            record["exit"] = self.exit
+        return record
+
+    def json_line(self) -> str:
+        """The ``trace.jsonl`` line: ``json.dumps(ensure_ascii=False, sort_keys=True)``."""
+        return json.dumps(self.to_json(), ensure_ascii=False, sort_keys=True)
+
+
+@dataclass(frozen=True)
+class PostRecord:
+    """One ``post_json`` call in the schema of the fake ``curl``'s ``mattermost.jsonl``.
+
+    The fake records ``url``, the raw ``-d`` payload and its parse (``payload_json``, or
+    ``payload_json_error`` when the R-built string is not JSON, BUG-015); the Python payload is built with
+    ``json.dumps`` (``06`` 4.2), so it always parses.
+    """
+
+    url: str
+    payload: object
+
+    @property
+    def raw(self) -> str:
+        """The payload as sent: ``json.dumps(payload, ensure_ascii=False)``."""
+        return json.dumps(self.payload, ensure_ascii=False)
+
+    def to_json(self) -> dict[str, object]:
+        """The record as the fake writes it."""
+        return {"url": self.url, "payload": self.raw, "payload_json": self.payload}
+
+    def json_line(self) -> str:
+        """The ``mattermost.jsonl`` line."""
+        return json.dumps(self.to_json(), ensure_ascii=False, sort_keys=True)
+
 
 # ---------------------------------------------------------------------------------------------
 # The protocol
@@ -160,10 +322,10 @@ MAGPIE_RESULTS_ARCHIVE_VARIABLE = "MAGPIE_RESULTS_ARCHIVE_PATH"
 
 
 class Effects(Protocol):
-    """The read-only subset of the environment that ``rs`` needs (``03`` section 5, "Effects").
+    """The whole environment (``03`` sections 2.3 and 5, "Effects").
 
-    Phase 5 extends this protocol with the mutating calls of the AMT. Implementations: ``ProductionEffects``
-    and ``FakeEffects``.
+    ``rs`` uses the read-only part plus ``run`` for ``squeue``/``sacct``; the AMT uses all of it.
+    Implementations: ``ProductionEffects``, ``FakeEffects``, ``RecordingEffects``, ``DryRunEffects``.
     """
 
     @property
@@ -199,6 +361,8 @@ class Effects(Protocol):
         """``Sys.time()``: an aware datetime in the session's time zone."""
         ...
 
+    # -- reading ---------------------------------------------------------------------------------
+
     def exists(self, path: PathLike) -> bool:
         """``file.exists(path)`` (symlinks followed)."""
         ...
@@ -207,8 +371,12 @@ class Effects(Protocol):
         """``dir.exists(path)`` / ``file.info(path)$isdir`` for an existing path."""
         ...
 
+    def is_symlink(self, path: PathLike) -> bool:
+        """``os.path.islink``: true for a symbolic link itself, never followed (``find -P`` semantics)."""
+        ...
+
     def stat(self, path: PathLike) -> FileInfo | None:
-        """``file.info(path)``; ``None`` where R reports an ``NA`` row (missing path)."""
+        """``file.info(path)`` with mtime and ctime; ``None`` where R reports an ``NA`` row (missing path)."""
         ...
 
     def listdir_like_r(
@@ -245,6 +413,52 @@ class Effects(Protocol):
         """A seekable binary stream for the bounded-memory scanners of ``textscan``."""
         ...
 
+    # -- writing (``06`` 3.2, 4.1, 4.2) ---------------------------------------------------------
+
+    def write_text(
+        self, path: PathLike, text: str, *, encoding: str = "utf-8", errors: str = "surrogateescape"
+    ) -> None:
+        """Write the whole file atomically: a temp file in the same directory, then ``os.replace``.
+
+        A crash before the rename leaves the old file untouched and no temp file behind; the mode of an
+        existing file is kept. Text is written as is (no newline translation).
+        """
+        ...
+
+    def write_bytes(self, path: PathLike, data: bytes) -> None:
+        """``write_text`` for bytes (``runcode.rds`` and other serialised files)."""
+        ...
+
+    def replace_in_file(self, path: PathLike, old: str, new: str) -> int:
+        """``sed -i 's/old/new/' path`` (``R/modeltests.R:100, 117``): literal, first occurrence per line.
+
+        The file is rewritten atomically even when nothing matches (``sed -i`` does the same, which is why
+        the R golden shows ``default.cfg`` as touched). Returns the number of lines changed.
+        """
+        ...
+
+    def copy(self, src: PathLike, dst: PathLike) -> None:
+        """``file.copy(src, dst, overwrite = TRUE)`` (``R/modeltests.R:437``); ``dst`` may be a directory."""
+        ...
+
+    def move(self, src: PathLike, dst: PathLike) -> None:
+        """``mv src dst`` (``R/modeltests.R:417``, ``06`` 4.2); ``dst`` may be a directory."""
+        ...
+
+    def rename(self, src: PathLike, dst: PathLike) -> None:
+        """``file.rename(src, dst)`` (``R/modeltests.R:389``): an existing ``dst`` file is replaced."""
+        ...
+
+    def delete_tree(self, path: PathLike) -> None:
+        """``unlink(path, recursive = TRUE)`` (``R/modeltests.R:83``): a file or a tree; missing is fine."""
+        ...
+
+    def mkdir(self, path: PathLike) -> None:
+        """``dir.create(path, recursive = TRUE)``: parents created, an existing directory is fine."""
+        ...
+
+    # -- processes, network, time, locking ------------------------------------------------------
+
     def run(
         self,
         argv: Sequence[str],
@@ -252,11 +466,37 @@ class Effects(Protocol):
         cwd: PathLike | None = None,
         env: Mapping[str, str] | None = None,
         check: bool = False,
+        capture: bool = True,
+        on_line: LineCallback | None = None,
     ) -> RunResult:
-        """Run a program (``squeue``, ``sacct``) and capture both streams; ``check`` raises on failure.
+        r"""Run a program and observe it the way ``system()`` does; ``check`` raises on failure.
 
-        ``env`` overrides single variables on top of the inherited environment. A missing program answers
-        with status 127 and a ``command not found`` line on stderr, as ``sh`` does for ``system()``.
+        ``env`` overrides single variables on top of the inherited environment. With ``capture`` (the
+        default) both streams are read through pipes, every complete line (split on ``\n`` only) goes to
+        ``on_line`` as it arrives, and the whole text lands in the result; without ``capture`` the child
+        inherits the parent's stdout and stderr (R's ``system(cmd)`` without ``intern``), the result's
+        streams are empty and ``on_line`` must be ``None``. A missing program answers with status 127 and a
+        ``command not found`` line on stderr, as ``sh`` does for ``system()``; a missing ``cwd`` raises.
+        """
+        ...
+
+    def post_json(self, url: str, payload: object) -> HttpResponse:
+        """POST ``payload`` as ``application/json`` (``R/modeltests.R:58-61`` through ``json.dumps``, D-15).
+
+        Never raises for a failed exchange: an HTTP error status is returned as such, a transport failure
+        as status 0 with the reason in the body.
+        """
+        ...
+
+    def sleep(self, seconds: float) -> None:
+        """``Sys.sleep(seconds)`` (``R/modeltests.R:193``, the 600 s between ``squeue`` polls)."""
+        ...
+
+    def lock(self, path: PathLike, *, wait: bool = True) -> AbstractContextManager[None]:
+        """An exclusive ``fcntl.flock`` on ``path`` for the ``with`` block (``06`` 3.2).
+
+        The file is created when missing and never deleted (deleting it would let a later invocation lock
+        a different inode). ``wait=False`` raises ``LockHeldError`` at once when another process holds it.
         """
         ...
 
@@ -359,9 +599,236 @@ def _file_info(result: os.stat_result, zone: tzinfo) -> FileInfo:
     )
 
 
+def _stat_or_none(physical: PathLike, zone: tzinfo) -> FileInfo | None:
+    """``file.info`` of a physical path, ``None`` for a missing one."""
+    try:
+        return _file_info(os.stat(physical), zone)
+    except OSError:
+        return None
+
+
+def _listdir_or_none(physical: PathLike) -> list[str] | None:
+    """The entries of a physical directory, ``None`` when it is missing or not a directory."""
+    try:
+        return os.listdir(physical)
+    except OSError:
+        return None
+
+
+# ---------------------------------------------------------------------------------------------
+# The real calls, shared by the implementations that touch the filesystem or a process
+# ---------------------------------------------------------------------------------------------
+
+
 def _not_found_result(argv: Sequence[str]) -> RunResult:
     """What ``sh -c`` reports for a program that is not on the PATH (status 127)."""
     return RunResult(tuple(argv), 127, "", f"{argv[0]}: command not found\n")
+
+
+def _target_mode(path: str) -> int:
+    """The permission bits a written file gets: those of the file it replaces, else ``0666 & ~umask``."""
+    try:
+        return statmodule.S_IMODE(os.stat(path).st_mode)
+    except OSError:
+        mask = os.umask(0)
+        os.umask(mask)
+        return 0o666 & ~mask
+
+
+def _write_bytes_atomically(path: str, data: bytes) -> None:
+    """Temp file next to ``path``, data flushed to disk, then ``os.replace`` (``06`` 3.2).
+
+    Any failure before the rename removes the temp file and leaves the old file as it was.
+    """
+    directory = os.path.dirname(path) or "."
+    descriptor, temp = tempfile.mkstemp(prefix=f".{os.path.basename(path)}.", suffix=".tmp", dir=directory)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temp, _target_mode(path))
+        os.replace(temp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(temp)
+        raise
+
+
+_LINE_PIECES = re.compile(r"(?<=\n)")
+"""Splits text into its lines with the newline kept on each piece (``sed`` works line by line)."""
+
+
+def _replace_in_file(path: str, old: str, new: str) -> int:
+    """``sed -i 's/old/new/'``: the first occurrence per line, literal; the count of changed lines."""
+    text = Path(path).read_bytes().decode("utf-8", "surrogateescape")
+    changed = 0
+    pieces: list[str] = []
+    for piece in _LINE_PIECES.split(text):
+        if old and old in piece:
+            changed += 1
+            piece = piece.replace(old, new, 1)
+        pieces.append(piece)
+    _write_bytes_atomically(path, "".join(pieces).encode("utf-8", "surrogateescape"))
+    return changed
+
+
+def _delete_tree(path: str) -> None:
+    """``unlink(recursive = TRUE)``: a tree, a file or a symlink; nothing to do for a missing path."""
+    if os.path.isdir(path) and not os.path.islink(path):
+        shutil.rmtree(path)
+        return
+    with contextlib.suppress(FileNotFoundError):
+        os.remove(path)
+
+
+@contextlib.contextmanager
+def _flock(path: str, wait: bool) -> Iterator[None]:
+    """An exclusive ``flock`` held for the block; the descriptor's close releases it."""
+    descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o644)
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
+        except BlockingIOError:
+            raise LockHeldError(path) from None
+        yield
+    finally:
+        os.close(descriptor)
+
+
+def _pump(
+    stream: BinaryIO,
+    which: Stream,
+    chunks: list[str],
+    on_line: LineCallback | None,
+    guard: threading.Lock,
+    failures: list[BaseException],
+) -> None:
+    r"""Read one pipe to its end, line by line (``\n`` only), collecting text and calling ``on_line``.
+
+    A callback failure is kept for the caller; the pipe is still drained so the child never blocks.
+    """
+    try:
+        for raw in stream:
+            text = raw.decode("utf-8", "replace")
+            chunks.append(text)
+            if on_line is not None:
+                with guard:
+                    on_line(which, text.removesuffix("\n"))
+    except BaseException as error:  # noqa: BLE001 - re-raised by the caller after the join
+        failures.append(error)
+        for _ in stream:
+            pass
+
+
+def _run_process(
+    argv: Sequence[str],
+    cwd: PathLike | None,
+    env: Mapping[str, str],
+    capture: bool,
+    on_line: LineCallback | None,
+) -> RunResult:
+    """``subprocess.Popen`` with the semantics of ``Effects.run``."""
+    pipe = subprocess.PIPE if capture else None
+    try:
+        process = subprocess.Popen(list(argv), cwd=cwd, env=env, stdout=pipe, stderr=pipe)
+    except FileNotFoundError as error:
+        if cwd is not None and os.fspath(error.filename) == os.fspath(cwd):
+            raise
+        return _not_found_result(argv)
+    with process:
+        if not capture:
+            return RunResult(tuple(argv), process.wait(), "", "")
+        assert process.stdout is not None and process.stderr is not None  # pipes were requested
+        out: list[str] = []
+        err: list[str] = []
+        failures: list[BaseException] = []
+        guard = threading.Lock()
+        readers = [
+            threading.Thread(target=_pump, args=(stream, which, chunks, on_line, guard, failures))
+            for stream, which, chunks in (
+                (process.stdout, Stream.STDOUT, out),
+                (process.stderr, Stream.STDERR, err),
+            )
+        ]
+        for reader in readers:
+            reader.start()
+        for reader in readers:
+            reader.join()
+        returncode = process.wait()
+    if failures:
+        raise failures[0]
+    return RunResult(tuple(argv), returncode, "".join(out), "".join(err))
+
+
+def _deliver(result: RunResult, capture: bool, on_line: LineCallback | None) -> RunResult:
+    """Hand a canned or synthetic result over the way a real child would have produced it.
+
+    With ``capture`` the lines go to ``on_line`` and the text stays in the result; without it the text is
+    printed on the process's own streams (what an inheriting child would have done) and the result's
+    streams are empty.
+    """
+    if not capture:
+        sys.stdout.write(result.stdout)
+        sys.stderr.write(result.stderr)
+        return RunResult(result.argv, result.returncode, "", "")
+    if on_line is not None:
+        for line in _split_lines(result.stdout):
+            on_line(Stream.STDOUT, line)
+        for line in _split_lines(result.stderr):
+            on_line(Stream.STDERR, line)
+    return result
+
+
+def _check_run_arguments(argv: Sequence[str], capture: bool, on_line: LineCallback | None) -> None:
+    """The argument rules every ``run`` shares."""
+    if not argv:
+        raise ValueError("run() needs a program")
+    if on_line is not None and not capture:
+        raise ValueError("on_line needs capture=True (an inheriting child cannot be streamed)")
+
+
+_WEBHOOK_SCHEMES = frozenset({"http", "https"})
+NOT_A_WEBHOOK_URL = "webhook URL is not an http(s) URL"
+"""The body of the status-0 answer for a URL that is not ``http://`` or ``https://``."""
+INVALID_WEBHOOK_URL = "webhook URL rejected before any exchange"
+"""The body of the status-0 answer for a URL that urllib or http.client refuse to use (``no host``, a
+space or control character, an unbalanced IPv6 bracket, ...). Neither body echoes the URL or the
+library's message, which quotes it: the URL carries the webhook secret."""
+
+
+def _post_json(url: str, payload: object, timeout: float) -> HttpResponse:
+    """``urllib`` POST of ``json.dumps(payload)`` with ``Content-Type: application/json``.
+
+    Never raises for a bad ``url``: a scheme other than ``http`` or ``https`` (which keeps urllib's
+    ``file:`` and ``data:`` handlers out) answers :data:`NOT_A_WEBHOOK_URL`, and every ``ValueError`` or
+    ``http.client.InvalidURL`` of the libraries' own validation (``unknown url type``, ``Invalid IPv6
+    URL``, control characters in the host or path) answers :data:`INVALID_WEBHOOK_URL`, both with status
+    ``0`` as a transport failure does. R's ``system("curl ...")`` only warned about a failing call
+    (``R/modeltests.R:61``), and a misconfigured webhook must not fail a finished evaluation.
+    """
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    try:
+        if urllib.parse.urlsplit(url).scheme not in _WEBHOOK_SCHEMES:
+            return HttpResponse(url, 0, NOT_A_WEBHOOK_URL)
+        request = urllib.request.Request(
+            url, data=data, headers={"Content-Type": "application/json"}, method="POST"
+        )
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return HttpResponse(url, int(response.status), response.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as error:
+        return HttpResponse(url, error.code, error.read().decode("utf-8", "replace"))
+    except urllib.error.URLError as error:
+        return HttpResponse(url, 0, str(error.reason))
+    except (http.client.InvalidURL, ValueError) as error:
+        return HttpResponse(url, 0, f"{INVALID_WEBHOOK_URL} ({type(error).__name__})")
+    except (OSError, http.client.HTTPException) as error:
+        return HttpResponse(url, 0, str(error))
+
+
+def _trace_env(environ: Mapping[str, str]) -> dict[str, str]:
+    """The ``TRACE_ENV_KEYS`` subset of a child's environment, in the fake's key order."""
+    return {key: environ[key] for key in TRACE_ENV_KEYS if key in environ}
 
 
 # ---------------------------------------------------------------------------------------------
@@ -370,13 +837,17 @@ def _not_found_result(argv: Sequence[str]) -> RunResult:
 
 
 class ProductionEffects:
-    """The real environment: the process's filesystem, PATH, clock, uid and variables."""
+    """The real environment: the process's filesystem, PATH, clock, uid, variables and network."""
 
-    def __init__(self, environ: Mapping[str, str] | None = None) -> None:
-        """Bind to ``os.environ`` or to an explicit variable mapping (used for the time zone and ``run``)."""
+    def __init__(self, environ: Mapping[str, str] | None = None, *, http_timeout: float = 60.0) -> None:
+        """Bind to ``os.environ`` or to an explicit variable mapping (used for the time zone and ``run``).
+
+        ``http_timeout`` bounds a ``post_json`` exchange in seconds.
+        """
         self._environ: Mapping[str, str] = os.environ if environ is None else environ
         self._zone = _local_timezone(self._environ)
         self._cluster_paths = ClusterPaths()
+        self._http_timeout = http_timeout
 
     @property
     def user(self) -> str:
@@ -414,6 +885,8 @@ class ProductionEffects:
         """``Sys.time()`` in the session's zone (libfaketime applies inside the sandbox)."""
         return datetime.now(tz=self._zone)
 
+    # -- reading ---------------------------------------------------------------------------------
+
     def exists(self, path: PathLike) -> bool:
         """``file.exists(path)``."""
         return os.path.exists(path)
@@ -422,29 +895,28 @@ class ProductionEffects:
         """``dir.exists(path)``."""
         return os.path.isdir(path)
 
+    def is_symlink(self, path: PathLike) -> bool:
+        """``os.path.islink(path)``: the link itself, not followed."""
+        return os.path.islink(path)
+
     def stat(self, path: PathLike) -> FileInfo | None:
         """``file.info(path)``, ``None`` for a missing path."""
-        try:
-            return _file_info(os.stat(path), self._zone)
-        except OSError:
-            return None
+        return _stat_or_none(path, self._zone)
 
     def listdir_like_r(
         self, path: PathLike, *, pattern: str | None = None, full_names: bool = False
     ) -> list[str]:
         """``dir(path, pattern, full.names)``."""
-        try:
-            names = os.listdir(path)
-        except OSError:
+        names = _listdir_or_none(path)
+        if names is None:
             return []
         selected = _select_names(names, pattern)
         return [_join_like_r(os.fspath(path), n) for n in selected] if full_names else selected
 
     def list_dirs_like_r(self, path: PathLike, *, full_names: bool = True) -> list[str]:
         """``list.dirs(path, recursive = FALSE, full.names)``."""
-        try:
-            names = os.listdir(path)
-        except OSError:
+        names = _listdir_or_none(path)
+        if names is None:
             return []
         dirs = sort_like_r(n for n in names if os.path.isdir(os.path.join(path, n)))
         return [_join_like_r(os.fspath(path), n) for n in dirs] if full_names else dirs
@@ -470,6 +942,44 @@ class ProductionEffects:
         """A binary stream; the caller closes it."""
         return open(path, "rb")  # noqa: SIM115 - the stream is handed to the caller
 
+    # -- writing ---------------------------------------------------------------------------------
+
+    def write_text(
+        self, path: PathLike, text: str, *, encoding: str = "utf-8", errors: str = "surrogateescape"
+    ) -> None:
+        """Atomic whole-file write; see ``Effects.write_text``."""
+        _write_bytes_atomically(os.fspath(path), text.encode(encoding, errors))
+
+    def write_bytes(self, path: PathLike, data: bytes) -> None:
+        """Atomic whole-file write of bytes."""
+        _write_bytes_atomically(os.fspath(path), data)
+
+    def replace_in_file(self, path: PathLike, old: str, new: str) -> int:
+        """``sed -i 's/old/new/'``; see ``Effects.replace_in_file``."""
+        return _replace_in_file(os.fspath(path), old, new)
+
+    def copy(self, src: PathLike, dst: PathLike) -> None:
+        """``file.copy(overwrite = TRUE)``: content and mode, into ``dst`` when it is a directory."""
+        shutil.copy(src, dst)
+
+    def move(self, src: PathLike, dst: PathLike) -> None:
+        """``mv src dst``: into ``dst`` when it is a directory, across filesystems if need be."""
+        shutil.move(os.fspath(src), os.fspath(dst))
+
+    def rename(self, src: PathLike, dst: PathLike) -> None:
+        """``file.rename``: ``os.replace`` (an existing ``dst`` file is overwritten, as on POSIX)."""
+        os.replace(src, dst)
+
+    def delete_tree(self, path: PathLike) -> None:
+        """``unlink(recursive = TRUE)``."""
+        _delete_tree(os.fspath(path))
+
+    def mkdir(self, path: PathLike) -> None:
+        """``dir.create(recursive = TRUE)``."""
+        os.makedirs(path, exist_ok=True)
+
+    # -- processes, network, time, locking ------------------------------------------------------
+
     def run(
         self,
         argv: Sequence[str],
@@ -477,27 +987,28 @@ class ProductionEffects:
         cwd: PathLike | None = None,
         env: Mapping[str, str] | None = None,
         check: bool = False,
+        capture: bool = True,
+        on_line: LineCallback | None = None,
     ) -> RunResult:
-        """``subprocess.run`` with both streams captured as text; see ``Effects.run``."""
+        """``subprocess.Popen`` with both streams read line by line; see ``Effects.run``."""
+        _check_run_arguments(argv, capture, on_line)
         merged = {**self._environ, **(env or {})}
-        try:
-            completed = subprocess.run(
-                list(argv),
-                cwd=cwd,
-                env=merged,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
-            )
-        except FileNotFoundError:
-            result = _not_found_result(argv)
-        else:
-            result = RunResult(tuple(argv), completed.returncode, completed.stdout, completed.stderr)
+        result = _run_process(argv, cwd, merged, capture, on_line)
         if check and not result.ok:
             raise CommandFailedError(result)
         return result
+
+    def post_json(self, url: str, payload: object) -> HttpResponse:
+        """``urllib`` POST; see ``Effects.post_json``."""
+        return _post_json(url, payload, self._http_timeout)
+
+    def sleep(self, seconds: float) -> None:
+        """``time.sleep`` (the monotonic clock: it works under the sandbox's stopped clock)."""
+        time.sleep(seconds)
+
+    def lock(self, path: PathLike, *, wait: bool = True) -> AbstractContextManager[None]:
+        """An exclusive ``flock`` on ``path``; see ``Effects.lock``."""
+        return _flock(os.fspath(path), wait)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -629,7 +1140,7 @@ def _merged_run(holders: Sequence[Path]) -> tuple[Path, ...]:
 
 @dataclass(frozen=True)
 class EffectCall:
-    """One logged ``FakeEffects`` call: the method, its stringified arguments and, for ``run``, the status."""
+    """One logged call: the method, its stringified arguments and, for ``run``/``post_json``, the status."""
 
     name: str
     args: tuple[str, ...]
@@ -732,6 +1243,17 @@ def _printed(lines: Iterable[str]) -> str:
     return "".join(f"{line}\n" for line in lines)
 
 
+def _case_files(case_dir: Path) -> dict[str, str]:
+    """Every regular file of a case directory as ``name -> text`` (UTF-8, undecodable bytes replaced)."""
+    if not case_dir.is_dir():
+        raise FileNotFoundError(f"case directory not found: {case_dir}")
+    return {
+        entry.name: entry.read_text(encoding="utf-8", errors="replace")
+        for entry in sorted(case_dir.iterdir())
+        if entry.is_file()
+    }
+
+
 class CannedSlurm:
     """``squeue`` and ``sacct`` answers from a case directory (port of ``harness/fakebin/_slurm.py``).
 
@@ -756,14 +1278,7 @@ class CannedSlurm:
     @classmethod
     def from_case_dir(cls, case_dir: Path) -> CannedSlurm:
         """Load every regular file of ``case_dir`` (UTF-8, undecodable bytes replaced, like the fake)."""
-        if not case_dir.is_dir():
-            raise FileNotFoundError(f"slurm case directory not found: {case_dir}")
-        files = {
-            entry.name: entry.read_text(encoding="utf-8", errors="replace")
-            for entry in sorted(case_dir.iterdir())
-            if entry.is_file()
-        }
-        return cls(files)
+        return cls(_case_files(case_dir))
 
     @classmethod
     def empty(cls) -> CannedSlurm:
@@ -891,9 +1406,12 @@ class FakeEffects:
 
     ``paths`` maps the logical fixture root onto physical layers (``OverlayPaths.sandbox``); without it
     every path is taken as is. ``slurm`` answers ``squeue`` and ``sacct``; any other program raises
-    ``NotImplementedError`` so that a stray shell-out fails loudly (phase 5 adds the AMT's programs).
-    ``cwd`` is a logical directory (the fixture root by default). ``environ`` backs ``getenv``. Every
-    call is appended to ``calls``.
+    ``NotImplementedError`` so that a stray shell-out fails loudly (the AMT's programs are
+    ``RecordingEffects``' business). ``cwd`` is a logical directory (the fixture root by default).
+    ``environ`` backs ``getenv``. Every call is appended to ``calls``. Mutations are performed for real on
+    paths outside the overlay root (temporary trees) and refused inside it, where the layers are the
+    canonical, read-only snapshot; ``post_json`` answers ``200 ok`` without a network, ``sleep`` returns at
+    once, both logged.
     """
 
     def __init__(
@@ -984,16 +1502,17 @@ class FakeEffects:
         physical = self._physical(path)
         return physical is not None and os.path.isdir(physical)
 
+    def is_symlink(self, path: PathLike) -> bool:
+        """``os.path.islink`` of the highest layer's entry (the link itself, not followed)."""
+        self._log("is_symlink", path)
+        physical = self._physical(path)
+        return physical is not None and os.path.islink(physical)
+
     def stat(self, path: PathLike) -> FileInfo | None:
         """``file.info`` of the highest layer's entry, times in the frozen clock's zone."""
         self._log("stat", path)
         physical = self._physical(path)
-        if physical is None:
-            return None
-        try:
-            return _file_info(os.stat(physical), self._zone())
-        except OSError:
-            return None
+        return _stat_or_none(physical, self._zone()) if physical is not None else None
 
     def listdir_like_r(
         self, path: PathLike, *, pattern: str | None = None, full_names: bool = False
@@ -1057,7 +1576,51 @@ class FakeEffects:
         self._log("open_binary", path)
         return open(self._require(path), "rb")  # noqa: SIM115 - the stream is handed to the caller
 
-    # -- programs --------------------------------------------------------------------------------
+    # -- mutations (real outside the overlay root, refused inside it) ----------------------------
+
+    def write_text(
+        self, path: PathLike, text: str, *, encoding: str = "utf-8", errors: str = "surrogateescape"
+    ) -> None:
+        """Atomic write on a path outside the overlay."""
+        self._log("write_text", path, text)
+        _write_bytes_atomically(self._writable(path), text.encode(encoding, errors))
+
+    def write_bytes(self, path: PathLike, data: bytes) -> None:
+        """Atomic write on a path outside the overlay."""
+        self._log("write_bytes", path, f"{len(data)} bytes")
+        _write_bytes_atomically(self._writable(path), data)
+
+    def replace_in_file(self, path: PathLike, old: str, new: str) -> int:
+        """``sed -i`` on a path outside the overlay."""
+        self._log("replace_in_file", path, old, new)
+        return _replace_in_file(self._writable(path), old, new)
+
+    def copy(self, src: PathLike, dst: PathLike) -> None:
+        """Copy the overlay's (or real) ``src`` to a ``dst`` outside the overlay."""
+        self._log("copy", src, dst)
+        shutil.copy(self._require(src), self._writable(dst))
+
+    def move(self, src: PathLike, dst: PathLike) -> None:
+        """Move between paths outside the overlay."""
+        self._log("move", src, dst)
+        shutil.move(self._writable(src), self._writable(dst))
+
+    def rename(self, src: PathLike, dst: PathLike) -> None:
+        """Rename between paths outside the overlay."""
+        self._log("rename", src, dst)
+        os.replace(self._writable(src), self._writable(dst))
+
+    def delete_tree(self, path: PathLike) -> None:
+        """Delete a path outside the overlay."""
+        self._log("delete_tree", path)
+        _delete_tree(self._writable(path))
+
+    def mkdir(self, path: PathLike) -> None:
+        """Create a directory outside the overlay."""
+        self._log("mkdir", path)
+        os.makedirs(self._writable(path), exist_ok=True)
+
+    # -- programs, network, time, locking --------------------------------------------------------
 
     def run(
         self,
@@ -1066,10 +1629,11 @@ class FakeEffects:
         cwd: PathLike | None = None,
         env: Mapping[str, str] | None = None,
         check: bool = False,
+        capture: bool = True,
+        on_line: LineCallback | None = None,
     ) -> RunResult:
         """Answer ``squeue``/``sacct`` from the canned case; any other program is an error."""
-        if not argv:
-            raise ValueError("run() needs a program")
+        _check_run_arguments(argv, capture, on_line)
         tool = os.path.basename(argv[0])
         if tool not in _CANNED_TOOLS:
             self._log("run", *argv)
@@ -1078,7 +1642,22 @@ class FakeEffects:
         self.calls.append(EffectCall("run", tuple(argv), result.returncode))
         if check and not result.ok:
             raise CommandFailedError(result)
-        return result
+        return _deliver(result, capture, on_line)
+
+    def post_json(self, url: str, payload: object) -> HttpResponse:
+        """No network: the fake ``curl``'s default answer (``200``, body ``ok`` plus newline), logged."""
+        response = CannedAmt.empty().http_answer(url)
+        self.calls.append(EffectCall("post_json", (url, PostRecord(url, payload).raw), response.status))
+        return response
+
+    def sleep(self, seconds: float) -> None:
+        """Logged, never waits (the oracle's ``Sys.sleep`` was a no-op)."""
+        self._log("sleep", str(seconds))
+
+    def lock(self, path: PathLike, *, wait: bool = True) -> AbstractContextManager[None]:
+        """A real ``flock`` on a path outside the overlay."""
+        self._log("lock", path)
+        return _flock(self._writable(path), wait)
 
     # -- internals -------------------------------------------------------------------------------
 
@@ -1107,6 +1686,16 @@ class FakeEffects:
             return physical if os.path.exists(physical) else None
         return self._paths.first_existing(logical)
 
+    def _writable(self, path: PathLike) -> str:
+        """The real path for a mutation; refused inside the overlay root (the layers are canonical)."""
+        logical = self._absolute(path)
+        if self._paths is not None and logical.is_relative_to(self._paths.logical_root):
+            raise NotImplementedError(
+                f"FakeEffects cannot modify {os.fspath(path)}: the overlay layers are read-only"
+                " (use RecordingEffects on a clone)"
+            )
+        return str(logical)
+
     def _is_dir_logical(self, logical: PurePosixPath) -> bool:
         physical = self._paths.first_existing(logical) if self._paths is not None else Path(logical)
         return physical is not None and os.path.isdir(physical)
@@ -1128,20 +1717,732 @@ class FakeEffects:
         return physical
 
 
+# ---------------------------------------------------------------------------------------------
+# The AMT fakes: git, sbatch, rsync, make, Rscript start.R and curl (harness/fakebin)
+# ---------------------------------------------------------------------------------------------
+
+_GIT_LOG_1_DEFAULT = (
+    "commit 3f5e2a1b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f\n"
+    "Author: AMT Bot <amt@example.org>\n"
+    "Date:   Mon Sep 28 10:00:00 2026 +0200\n"
+    "\n"
+    "    Merge pull request #999 from example/feature"
+)
+_GIT_LOG_MERGES_DEFAULT = (
+    "3f5e2a1 Merge pull request #999 from example/feature\n"
+    "1a2b3c4 Merge pull request #998 from example/bugfix"
+)
+_SBATCH_DEFAULT = "Submitted batch job 4242"
+_CURL_DEFAULT = "HTTP/1.1 200 OK\nContent-Type: text/plain\n\nok"
+_HTTP_STATUS_LINE = re.compile(r"^HTTP/\d(?:\.\d)? (\d{3})")
+
+
+def _git_canned_name(argv: Sequence[str]) -> str:
+    """The fake ``git``'s file stem: ``git-<sub>``, with ``log -1`` and ``log --merges`` told apart."""
+    sub = next((a for a in argv if not a.startswith("-")), "")
+    if sub == "log":
+        joined = f" {' '.join(argv)} "
+        if " -1 " in joined:
+            return "git-log-1"
+        if " --merges " in joined:
+            return "git-log-merges"
+    return f"git-{sub}"
+
+
+def _is_start_script_call(argv: Sequence[str]) -> bool:
+    """The fake ``Rscript`` intercepts ``start.R`` (or ``*/start.R``) unless a ``-e`` comes first."""
+    for arg in argv:
+        if arg == "start.R" or arg.endswith("/start.R"):
+            return True
+        if arg == "-e":
+            return False
+    return False
+
+
+class CannedAmt:
+    """Canned answers of the AMT fakes from ``migration/cases/amt/<case>/`` (``harness/fakebin/_lib.sh``).
+
+    ``canned NAME DEFAULT`` prints ``<name>.txt`` verbatim when the file exists, else ``DEFAULT`` plus a
+    newline (nothing for an empty default); ``canned_exit NAME`` is the digits of ``<name>.exit``, else 0.
+    The names: ``git-<sub>`` (``git-log-1``, ``git-log-merges``, ``git-reset``, ``git-pull``, ...),
+    ``sbatch``, ``rsync``, ``make``, ``rscript-start`` (``Rscript start.R ...`` only) and ``curl`` (the
+    webhook; ``http_answer``). A program without a fake answers from a generic ``<tool>.txt`` /
+    ``<tool>.exit`` pair when the case has one, and ``None`` otherwise (the sandbox would have run the
+    real program). Every canned program writes to stdout only, as the shell fakes do.
+    """
+
+    def __init__(self, files: Mapping[str, str]) -> None:
+        """Take the case directory's regular files as ``name -> text``."""
+        self._files = dict(files)
+
+    @classmethod
+    def from_case_dir(cls, case_dir: Path) -> CannedAmt:
+        """Load every regular file of ``case_dir`` (``RS_AMT_CASE_DIR``)."""
+        return cls(_case_files(case_dir))
+
+    @classmethod
+    def empty(cls) -> CannedAmt:
+        """No case directory: the defaults only (``RS_AMT_CASE_DIR`` unset)."""
+        return cls({})
+
+    def canned(self, name: str, default: str) -> str:
+        """``canned NAME DEFAULT``."""
+        text = self._files.get(f"{name}.txt")
+        if text is not None:
+            return text
+        return f"{default}\n" if default else ""
+
+    def exit_status(self, name: str) -> int:
+        """``canned_exit NAME``: the digits of ``<name>.exit`` (``tr -dc '0-9'``), 0 without the file."""
+        text = self._files.get(f"{name}.exit")
+        if text is None:
+            return 0
+        digits = re.sub(r"[^0-9]", "", text)
+        return int(digits) if digits else 0
+
+    def answer(self, tool: str, argv: Sequence[str]) -> RunResult | None:
+        """The fake's result for ``tool argv...``, or ``None`` when no fake handles the program."""
+        selection = self._selection(tool, argv)
+        if selection is None:
+            return None
+        name, default = selection
+        return RunResult((tool, *argv), self.exit_status(name), self.canned(name, default), "")
+
+    def http_answer(self, url: str) -> HttpResponse:
+        """The fake ``curl``'s ``curl.txt`` as an HTTP exchange: the status line's code and the body.
+
+        Without a status line (``curl.txt`` empty) the exchange counts as a transport failure: status 0,
+        the ``curl.exit`` status in the body.
+        """
+        text = self.canned("curl", _CURL_DEFAULT)
+        head, _, body = text.partition("\n\n")
+        status_line = _HTTP_STATUS_LINE.match(head)
+        if status_line:
+            return HttpResponse(url, int(status_line.group(1)), body)
+        return HttpResponse(url, 0, f"fake curl failure (exit {self.exit_status('curl')})")
+
+    def _selection(self, tool: str, argv: Sequence[str]) -> tuple[str, str] | None:
+        """The canned name and default text for a program, as the shell fakes choose them."""
+        if tool == "git":
+            name = _git_canned_name(argv)
+            defaults = {"git-log-1": _GIT_LOG_1_DEFAULT, "git-log-merges": _GIT_LOG_MERGES_DEFAULT}
+            return (name, defaults.get(name, ""))
+        if tool == "sbatch":
+            return ("sbatch", _SBATCH_DEFAULT)
+        if tool == "rsync":
+            return ("rsync", "")
+        if tool == "make":
+            return ("make", f"fake make: {' '.join(argv)}")
+        if tool == "Rscript" and _is_start_script_call(argv):
+            return ("rscript-start", f"fake Rscript: {' '.join(argv)}")
+        if f"{tool}.txt" in self._files or f"{tool}.exit" in self._files:
+            return (tool, "")
+        return None
+
+
+# ---------------------------------------------------------------------------------------------
+# RecordingEffects: real files, canned programs, frozen clock, every call recorded
+# ---------------------------------------------------------------------------------------------
+
+
+class RecordingEffects:
+    """The AMT test double (``06`` 4.4): real filesystem, canned programs and webhook, recorded calls.
+
+    Paths are real; relative ones resolve against the injected ``cwd`` (the process's directory by
+    default), so a test can point the effects at a temporary checkout without ``chdir``. ``amt`` answers
+    ``git``, ``sbatch``, ``rsync``, ``make`` and ``Rscript start.R`` (``CannedAmt``), ``slurm`` answers
+    ``squeue`` and ``sacct`` (``CannedSlurm``); a program neither knows goes to ``fallback`` when one is
+    given and raises ``NotImplementedError`` otherwise. ``post_json`` answers from ``curl.txt``. ``now()``
+    is frozen; ``sleep`` returns at once and, with ``advance_on_sleep``, moves the clock forward by the
+    requested seconds instead (for wait loops with a deadline). ``lock`` is a real ``flock``. Records:
+    ``calls`` (every call, ``EffectCall``), ``trace`` (every ``run``, ``TraceRecord``, the fake binaries'
+    ``trace.jsonl`` schema) and ``posts`` (every ``post_json``, ``PostRecord``, the ``mattermost.jsonl``
+    schema).
+    """
+
+    def __init__(
+        self,
+        *,
+        now: datetime,
+        user: str,
+        on_cluster: bool,
+        amt: CannedAmt | None = None,
+        slurm: CannedSlurm | None = None,
+        cwd: PathLike | None = None,
+        environ: Mapping[str, str] | None = None,
+        cluster_paths: ClusterPaths | None = None,
+        fallback: Effects | None = None,
+        advance_on_sleep: bool = False,
+    ) -> None:
+        """Inject the frozen clock (aware), the identity, the canned answers and the working directory."""
+        if now.tzinfo is None:
+            raise ValueError("RecordingEffects needs an aware datetime for now()")
+        self._now = now
+        self._user = user
+        self._on_cluster = on_cluster
+        self._amt = amt if amt is not None else CannedAmt.empty()
+        self._slurm = slurm if slurm is not None else CannedSlurm.empty()
+        self._cwd = os.path.abspath(os.fspath(cwd)) if cwd is not None else os.getcwd()
+        self._environ: dict[str, str] = dict(environ or {})
+        self._cluster_paths = cluster_paths if cluster_paths is not None else ClusterPaths()
+        self._fallback = fallback
+        self._advance_on_sleep = advance_on_sleep
+        self.calls: list[EffectCall] = []
+        self.trace: list[TraceRecord] = []
+        self.posts: list[PostRecord] = []
+
+    # -- identity, clock, variables ------------------------------------------------------------
+
+    @property
+    def user(self) -> str:
+        """The injected ``Sys.info()[["user"]]``."""
+        self._log("user")
+        return self._user
+
+    @property
+    def on_cluster(self) -> bool:
+        """The injected ``file.exists("/p")``."""
+        self._log("on_cluster")
+        return self._on_cluster
+
+    @property
+    def cluster_paths(self) -> ClusterPaths:
+        """The injected cluster locations (a test points ``amt_dir`` at its checkout)."""
+        return self._cluster_paths
+
+    @property
+    def cwd(self) -> str:
+        """The injected working directory (absolute)."""
+        return self._cwd
+
+    @property
+    def paths(self) -> OverlayPaths | None:
+        """No overlay: paths are physical (``modelstats.facts.physical_path`` resolves against ``cwd``)."""
+        return None
+
+    @property
+    def runs(self) -> list[EffectCall]:
+        """The logged ``run`` calls."""
+        return [c for c in self.calls if c.name == "run"]
+
+    def getenv(self, name: str) -> str:
+        """``Sys.getenv(name)`` on the injected variables."""
+        self._log("getenv", name)
+        return self._environ.get(name, "")
+
+    @property
+    def magpie_results_archive(self) -> str:
+        """The injected ``MAGPIE_RESULTS_ARCHIVE_PATH``."""
+        return self.getenv(MAGPIE_RESULTS_ARCHIVE_VARIABLE)
+
+    def now(self) -> datetime:
+        """The frozen clock (advanced by ``sleep`` only with ``advance_on_sleep``)."""
+        self._log("now")
+        return self._now
+
+    # -- reading ---------------------------------------------------------------------------------
+
+    def exists(self, path: PathLike) -> bool:
+        """``file.exists`` on the real filesystem."""
+        self._log("exists", path)
+        return os.path.exists(self._resolve(path))
+
+    def is_dir(self, path: PathLike) -> bool:
+        """``dir.exists`` on the real filesystem."""
+        self._log("is_dir", path)
+        return os.path.isdir(self._resolve(path))
+
+    def is_symlink(self, path: PathLike) -> bool:
+        """``os.path.islink`` on the real filesystem (the link itself, not followed)."""
+        self._log("is_symlink", path)
+        return os.path.islink(self._resolve(path))
+
+    def stat(self, path: PathLike) -> FileInfo | None:
+        """``file.info``, times in the frozen clock's zone."""
+        self._log("stat", path)
+        return _stat_or_none(self._resolve(path), self._zone())
+
+    def listdir_like_r(
+        self, path: PathLike, *, pattern: str | None = None, full_names: bool = False
+    ) -> list[str]:
+        """``dir(path, pattern, full.names)``; the pasted path keeps the caller's spelling."""
+        self._log("listdir_like_r", path)
+        names = _listdir_or_none(self._resolve(path))
+        if names is None:
+            return []
+        selected = _select_names(names, pattern)
+        return [_join_like_r(os.fspath(path), n) for n in selected] if full_names else selected
+
+    def list_dirs_like_r(self, path: PathLike, *, full_names: bool = True) -> list[str]:
+        """``list.dirs(path, recursive = FALSE, full.names)``."""
+        self._log("list_dirs_like_r", path)
+        resolved = self._resolve(path)
+        names = _listdir_or_none(resolved)
+        if names is None:
+            return []
+        dirs = sort_like_r(n for n in names if os.path.isdir(os.path.join(resolved, n)))
+        return [_join_like_r(os.fspath(path), n) for n in dirs] if full_names else dirs
+
+    def glob(self, pattern: PathLike) -> list[str]:
+        """``Sys.glob`` relative to the injected cwd (a relative pattern gives relative matches)."""
+        self._log("glob", pattern)
+        return sorted(globmodule.glob(os.fspath(pattern), root_dir=self._cwd))
+
+    def normalize_path(self, path: PathLike) -> str:
+        """``normalizePath``: realpath of an existing path, the input unchanged otherwise."""
+        self._log("normalize_path", path)
+        resolved = self._resolve(path)
+        return os.path.realpath(resolved) if os.path.exists(resolved) else os.fspath(path)
+
+    def read_text(self, path: PathLike, *, encoding: str = "utf-8", errors: str = "surrogateescape") -> str:
+        """The whole file as text."""
+        self._log("read_text", path)
+        return Path(self._resolve(path)).read_text(encoding=encoding, errors=errors)
+
+    def read_bytes(self, path: PathLike) -> bytes:
+        """The whole file as bytes."""
+        self._log("read_bytes", path)
+        return Path(self._resolve(path)).read_bytes()
+
+    def open_binary(self, path: PathLike) -> BinaryIO:
+        """A binary stream; the caller closes it."""
+        self._log("open_binary", path)
+        return open(self._resolve(path), "rb")  # noqa: SIM115 - the stream is handed to the caller
+
+    # -- writing (real, recorded) ----------------------------------------------------------------
+
+    def write_text(
+        self, path: PathLike, text: str, *, encoding: str = "utf-8", errors: str = "surrogateescape"
+    ) -> None:
+        """Atomic write; see ``Effects.write_text``."""
+        self._log("write_text", path, text)
+        _write_bytes_atomically(self._resolve(path), text.encode(encoding, errors))
+
+    def write_bytes(self, path: PathLike, data: bytes) -> None:
+        """Atomic write of bytes."""
+        self._log("write_bytes", path, f"{len(data)} bytes")
+        _write_bytes_atomically(self._resolve(path), data)
+
+    def replace_in_file(self, path: PathLike, old: str, new: str) -> int:
+        """``sed -i 's/old/new/'``."""
+        self._log("replace_in_file", path, old, new)
+        return _replace_in_file(self._resolve(path), old, new)
+
+    def copy(self, src: PathLike, dst: PathLike) -> None:
+        """``file.copy(overwrite = TRUE)``."""
+        self._log("copy", src, dst)
+        shutil.copy(self._resolve(src), self._resolve(dst))
+
+    def move(self, src: PathLike, dst: PathLike) -> None:
+        """``mv src dst``."""
+        self._log("move", src, dst)
+        shutil.move(self._resolve(src), self._resolve(dst))
+
+    def rename(self, src: PathLike, dst: PathLike) -> None:
+        """``file.rename``."""
+        self._log("rename", src, dst)
+        os.replace(self._resolve(src), self._resolve(dst))
+
+    def delete_tree(self, path: PathLike) -> None:
+        """``unlink(recursive = TRUE)``."""
+        self._log("delete_tree", path)
+        _delete_tree(self._resolve(path))
+
+    def mkdir(self, path: PathLike) -> None:
+        """``dir.create(recursive = TRUE)``."""
+        self._log("mkdir", path)
+        os.makedirs(self._resolve(path), exist_ok=True)
+
+    # -- programs, network, time, locking --------------------------------------------------------
+
+    def run(
+        self,
+        argv: Sequence[str],
+        *,
+        cwd: PathLike | None = None,
+        env: Mapping[str, str] | None = None,
+        check: bool = False,
+        capture: bool = True,
+        on_line: LineCallback | None = None,
+    ) -> RunResult:
+        """Answer from the canned AMT or scheduler case, trace the call, stream the canned lines."""
+        _check_run_arguments(argv, capture, on_line)
+        tool = os.path.basename(argv[0])
+        where = self._resolve(cwd) if cwd is not None else self._cwd
+        merged = {**self._environ, **(env or {})}
+        canned = self._canned_answer(tool, argv)
+        self.trace.append(
+            TraceRecord(
+                tool,
+                tuple(argv[1:]),
+                where,
+                _trace_env(merged),
+                canned.returncode if canned is not None and tool in _CANNED_TOOLS else None,
+            )
+        )
+        if canned is None:
+            result = self._fallback_run(tool, argv, where, env, capture, on_line)
+        else:
+            result = _deliver(canned, capture, on_line)
+        self.calls.append(EffectCall("run", tuple(argv), result.returncode))
+        if check and not result.ok:
+            raise CommandFailedError(result)
+        return result
+
+    def post_json(self, url: str, payload: object) -> HttpResponse:
+        """The fake ``curl``'s answer for the case; the payload recorded like ``mattermost.jsonl``."""
+        record = PostRecord(url, payload)
+        self.posts.append(record)
+        response = self._amt.http_answer(url)
+        self.calls.append(EffectCall("post_json", (url, record.raw), response.status))
+        return response
+
+    def sleep(self, seconds: float) -> None:
+        """Recorded, never waits; advances the frozen clock when ``advance_on_sleep`` is set."""
+        self._log("sleep", str(seconds))
+        if self._advance_on_sleep:
+            self._now = self._now + timedelta(seconds=seconds)
+
+    def lock(self, path: PathLike, *, wait: bool = True) -> AbstractContextManager[None]:
+        """A real ``flock``; see ``Effects.lock``."""
+        self._log("lock", path)
+        return _flock(self._resolve(path), wait)
+
+    # -- records ---------------------------------------------------------------------------------
+
+    def trace_lines(self) -> list[str]:
+        """The ``trace.jsonl`` lines of every ``run`` so far."""
+        return [record.json_line() for record in self.trace]
+
+    def write_trace(self, path: PathLike) -> None:
+        """Write ``trace.jsonl`` (one record per line, as ``_trace.py`` appends them)."""
+        Path(path).write_text("".join(f"{line}\n" for line in self.trace_lines()), encoding="utf-8")
+
+    def post_lines(self) -> list[str]:
+        """The ``mattermost.jsonl`` lines of every ``post_json`` so far."""
+        return [record.json_line() for record in self.posts]
+
+    # -- internals -------------------------------------------------------------------------------
+
+    def _log(self, name: str, *args: PathLike) -> None:
+        self.calls.append(EffectCall(name, tuple(os.fspath(a) for a in args)))
+
+    def _zone(self) -> tzinfo:
+        zone = self._now.tzinfo
+        assert zone is not None  # checked in __init__
+        return zone
+
+    def _resolve(self, path: PathLike) -> str:
+        """A relative path against the injected cwd; ``""`` stays ``""`` (``file.exists("")`` is FALSE)."""
+        text = os.fspath(path)
+        return os.path.join(self._cwd, text) if text else text
+
+    def _canned_answer(self, tool: str, argv: Sequence[str]) -> RunResult | None:
+        if tool in _CANNED_TOOLS:
+            return self._slurm.answer(tool, argv[1:])
+        answer = self._amt.answer(tool, argv[1:])
+        return RunResult(tuple(argv), answer.returncode, answer.stdout, answer.stderr) if answer else None
+
+    def _fallback_run(
+        self,
+        tool: str,
+        argv: Sequence[str],
+        where: str,
+        env: Mapping[str, str] | None,
+        capture: bool,
+        on_line: LineCallback | None,
+    ) -> RunResult:
+        if self._fallback is None:
+            raise NotImplementedError(
+                f"RecordingEffects has no canned answer for {tool!r} (argv {list(argv)}) and no fallback"
+            )
+        return self._fallback.run(argv, cwd=where, env=env, check=False, capture=capture, on_line=on_line)
+
+
+# ---------------------------------------------------------------------------------------------
+# DryRunEffects: reads for real, mutations logged and answered synthetically
+# ---------------------------------------------------------------------------------------------
+
+DRY_RUN_COMMIT = "deadbeef" * 5
+"""The commit hash a dry run reports for ``git log -1`` / ``git rev-parse`` (40 hex digits, plainly fake)."""
+
+DRY_RUN_RESPONSE_BODY = "dry run: nothing was sent"
+"""The body of the ``200`` a dry run answers for ``post_json``."""
+
+SELECT_SCENARIOS_SCRIPT = "select_scenarios.R"
+"""The ``selectScenarios()`` bridge script of ``modelstats.amt.bridges`` (its ``BRIDGE_SCRIPT``): a dry run
+recognises ``Rscript <...>/select_scenarios.R <group>`` and answers an empty selection instead of running
+it, because the script sources the checkout's ``scripts/start/*.R`` (REMIND code, not a read)."""
+
+
+def _dry_run_answer(argv: Sequence[str], now: datetime) -> RunResult:
+    """The synthetic result of a program that was not run (``03`` 2.3)."""
+    tool = os.path.basename(argv[0])
+    rest = argv[1:]
+    stdout = ""
+    if tool == "git":
+        sub = next((a for a in rest if not a.startswith("-")), "")
+        if sub == "log" and "-1" in rest:
+            stdout = (
+                f"commit {DRY_RUN_COMMIT}\nAuthor: dry run <dry-run@localhost>\n"
+                f"Date:   {now:%a %b %d %H:%M:%S %Y %z}\n\n    dry run: no repository was read\n"
+            )
+        elif sub == "rev-parse":
+            stdout = f"{DRY_RUN_COMMIT}\n"
+    elif tool == "sbatch":
+        stdout = "Submitted batch job 0\n"
+    elif tool == "Rscript" and rest and os.path.basename(rest[0]) == SELECT_SCENARIOS_SCRIPT:
+        stdout = _dry_run_selection(rest[1] if len(rest) > 1 else "AMT")
+    return RunResult(tuple(argv), 0, stdout, "")
+
+
+def _dry_run_selection(startgroup: str) -> str:
+    """The bridge payload of an empty selection (``modelstats.amt.bridges.parse_payload`` reads it)."""
+    return json.dumps({"schema": 1, "startgroup": startgroup, "names": [], "columns": {}}) + "\n"
+
+
+class DryRunEffects:
+    """``--dry-run``: reads go to the wrapped effects, mutations are logged and answered synthetically.
+
+    ``messages`` collects every ``would ...`` line (and ``log`` receives each one as it happens, for the
+    cycle log); ``calls`` records the mutating calls as ``EffectCall``. ``run`` executes nothing, not even
+    a query (``squeue`` answers empty, ``git log -1`` the fake commit ``DRY_RUN_COMMIT``, ``sbatch`` job
+    ``0``, ``Rscript select_scenarios.R`` an empty selection), so a wait loop ends at once and later steps
+    still have inputs; ``post_json`` is suppressed and answers ``200`` (its announcement names the webhook
+    host only: the URL path carries the secret); ``sleep`` and ``lock`` do nothing (a dry run writes
+    nothing, so it cannot interleave).
+    """
+
+    def __init__(self, inner: Effects | None = None, *, log: Callable[[str], None] | None = None) -> None:
+        """Wrap ``inner`` (production by default); ``log`` receives every ``would ...`` message."""
+        self._inner: Effects = inner if inner is not None else ProductionEffects()
+        self._log_sink = log
+        self.messages: list[str] = []
+        self.calls: list[EffectCall] = []
+
+    @property
+    def inner(self) -> Effects:
+        """The wrapped effects that answer the reads."""
+        return self._inner
+
+    # -- identity, clock, variables: the wrapped effects' --------------------------------------
+
+    @property
+    def user(self) -> str:
+        """The wrapped effects' user."""
+        return self._inner.user
+
+    @property
+    def on_cluster(self) -> bool:
+        """The wrapped effects' cluster probe."""
+        return self._inner.on_cluster
+
+    @property
+    def cluster_paths(self) -> ClusterPaths:
+        """The wrapped effects' cluster locations."""
+        return self._inner.cluster_paths
+
+    @property
+    def cwd(self) -> str:
+        """The wrapped effects' working directory."""
+        return self._inner.cwd
+
+    @property
+    def paths(self) -> OverlayPaths | None:
+        """The wrapped effects' overlay, if it has one (so ``physical_path`` resolves as it would)."""
+        paths = getattr(self._inner, "paths", None)
+        return paths if isinstance(paths, OverlayPaths) else None
+
+    def getenv(self, name: str) -> str:
+        """The wrapped effects' variables."""
+        return self._inner.getenv(name)
+
+    @property
+    def magpie_results_archive(self) -> str:
+        """The wrapped effects' ``MAGPIE_RESULTS_ARCHIVE_PATH``."""
+        return self._inner.magpie_results_archive
+
+    def now(self) -> datetime:
+        """The wrapped effects' clock."""
+        return self._inner.now()
+
+    # -- reading: delegated ----------------------------------------------------------------------
+
+    def exists(self, path: PathLike) -> bool:
+        """Delegated."""
+        return self._inner.exists(path)
+
+    def is_dir(self, path: PathLike) -> bool:
+        """Delegated."""
+        return self._inner.is_dir(path)
+
+    def is_symlink(self, path: PathLike) -> bool:
+        """Delegated."""
+        return self._inner.is_symlink(path)
+
+    def stat(self, path: PathLike) -> FileInfo | None:
+        """Delegated."""
+        return self._inner.stat(path)
+
+    def listdir_like_r(
+        self, path: PathLike, *, pattern: str | None = None, full_names: bool = False
+    ) -> list[str]:
+        """Delegated."""
+        return self._inner.listdir_like_r(path, pattern=pattern, full_names=full_names)
+
+    def list_dirs_like_r(self, path: PathLike, *, full_names: bool = True) -> list[str]:
+        """Delegated."""
+        return self._inner.list_dirs_like_r(path, full_names=full_names)
+
+    def glob(self, pattern: PathLike) -> list[str]:
+        """Delegated."""
+        return self._inner.glob(pattern)
+
+    def normalize_path(self, path: PathLike) -> str:
+        """Delegated."""
+        return self._inner.normalize_path(path)
+
+    def read_text(self, path: PathLike, *, encoding: str = "utf-8", errors: str = "surrogateescape") -> str:
+        """Delegated."""
+        return self._inner.read_text(path, encoding=encoding, errors=errors)
+
+    def read_bytes(self, path: PathLike) -> bytes:
+        """Delegated."""
+        return self._inner.read_bytes(path)
+
+    def open_binary(self, path: PathLike) -> BinaryIO:
+        """Delegated."""
+        return self._inner.open_binary(path)
+
+    # -- mutations: logged, nothing happens ------------------------------------------------------
+
+    def write_text(
+        self, path: PathLike, text: str, *, encoding: str = "utf-8", errors: str = "surrogateescape"
+    ) -> None:
+        """``would write <path>``."""
+        self._would(f"write {os.fspath(path)}", "write_text", path, text)
+
+    def write_bytes(self, path: PathLike, data: bytes) -> None:
+        """``would write <path>``."""
+        self._would(f"write {os.fspath(path)}", "write_bytes", path, f"{len(data)} bytes")
+
+    def replace_in_file(self, path: PathLike, old: str, new: str) -> int:
+        """``would replace ... in <path>``; reports the lines that would change."""
+        self._would(f"replace {old!r} by {new!r} in {os.fspath(path)}", "replace_in_file", path, old, new)
+        text = self._inner.read_text(path)
+        return sum(1 for piece in _LINE_PIECES.split(text) if old and old in piece)
+
+    def copy(self, src: PathLike, dst: PathLike) -> None:
+        """``would copy <src> to <dst>``."""
+        self._would(f"copy {os.fspath(src)} to {os.fspath(dst)}", "copy", src, dst)
+
+    def move(self, src: PathLike, dst: PathLike) -> None:
+        """``would move <src> to <dst>``."""
+        self._would(f"move {os.fspath(src)} to {os.fspath(dst)}", "move", src, dst)
+
+    def rename(self, src: PathLike, dst: PathLike) -> None:
+        """``would rename <src> to <dst>``."""
+        self._would(f"rename {os.fspath(src)} to {os.fspath(dst)}", "rename", src, dst)
+
+    def delete_tree(self, path: PathLike) -> None:
+        """``would delete <path>``."""
+        self._would(f"delete {os.fspath(path)}", "delete_tree", path)
+
+    def mkdir(self, path: PathLike) -> None:
+        """``would create directory <path>``."""
+        self._would(f"create directory {os.fspath(path)}", "mkdir", path)
+
+    # -- programs, network, time, locking: synthetic ---------------------------------------------
+
+    def run(
+        self,
+        argv: Sequence[str],
+        *,
+        cwd: PathLike | None = None,
+        env: Mapping[str, str] | None = None,
+        check: bool = False,
+        capture: bool = True,
+        on_line: LineCallback | None = None,
+    ) -> RunResult:
+        """``would run <command>``; the synthetic result of ``_dry_run_answer`` (always status 0)."""
+        _check_run_arguments(argv, capture, on_line)
+        where = f" in {os.fspath(cwd)}" if cwd is not None else ""
+        message = f"run {shlex.join(argv)}{where}"
+        result = _dry_run_answer(argv, self._inner.now())
+        self._would(message, "run", *argv)
+        return _deliver(result, capture, on_line)
+
+    def post_json(self, url: str, payload: object) -> HttpResponse:
+        """``would post JSON to the webhook at <scheme>://<host> (...)``; answers ``200`` without sending.
+
+        The path of the URL, which carries the webhook secret, is redacted from the announcement (the
+        in-memory ``calls`` record keeps the full URL, as ``FakeEffects.posts`` does; neither is logged).
+        """
+        raw = PostRecord(url, payload).raw
+        self._would(
+            f"post JSON to {_webhook_location(url)} (path redacted, {len(raw)} characters)",
+            "post_json",
+            url,
+            raw,
+        )
+        return HttpResponse(url, 200, DRY_RUN_RESPONSE_BODY)
+
+    def sleep(self, seconds: float) -> None:
+        """``would sleep <n> s``; returns at once."""
+        self._would(f"sleep {seconds} s", "sleep", str(seconds))
+
+    def lock(self, path: PathLike, *, wait: bool = True) -> AbstractContextManager[None]:
+        """``would lock <path>``; no lock file is created."""
+        self._would(f"lock {os.fspath(path)}", "lock", path)
+        return contextlib.nullcontext()
+
+    # -- internals -------------------------------------------------------------------------------
+
+    def _would(self, what: str, name: str, *args: PathLike) -> None:
+        message = f"would {what}"
+        self.messages.append(message)
+        self.calls.append(EffectCall(name, tuple(os.fspath(a) for a in args), 0 if name == "run" else None))
+        if self._log_sink is not None:
+            self._log_sink(message)
+
+
+def _webhook_location(url: str) -> str:
+    """``the webhook at <scheme>://<host>`` of a URL, or ``the webhook (URL redacted)`` when it has none."""
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme and parts.netloc:
+        return f"the webhook at {parts.scheme}://{parts.netloc}"
+    return "the webhook (URL redacted)"
+
+
 __all__ = [
+    "DRY_RUN_COMMIT",
+    "DRY_RUN_RESPONSE_BODY",
+    "INVALID_WEBHOOK_URL",
     "MAGPIE_RESULTS_ARCHIVE_VARIABLE",
+    "NOT_A_WEBHOOK_URL",
+    "SELECT_SCENARIOS_SCRIPT",
+    "TRACE_ENV_KEYS",
+    "CannedAmt",
     "CannedSlurm",
     "ClusterPaths",
     "CommandFailedError",
+    "DryRunEffects",
     "EffectCall",
     "Effects",
     "FakeEffects",
     "FileInfo",
+    "HttpResponse",
+    "LineCallback",
+    "LockHeldError",
     "Mode",
     "OverlayPaths",
     "PathLike",
+    "PostRecord",
     "ProductionEffects",
+    "RecordingEffects",
     "RunResult",
+    "Stream",
+    "TraceRecord",
     "r_collation_key",
     "sort_like_r",
 ]

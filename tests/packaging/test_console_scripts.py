@@ -6,7 +6,8 @@ holding the locked dependency set plus the built wheel, where CI runs the whole 
 (this module included) so the wheel's entry points are tested, not source imports. ``rs`` is the
 drop-in of phase 4 (``migration/06-user-requests.md`` section 7): without runs below the working
 directory it warns ``No runs found`` and exits 0 (``R/commandLineInterface.R:263-265``);
-``modeltests`` stays the placeholder until phase 5. The wheel built by ``uv build``, a fresh
+``modeltests`` is the AMT command of phase 5: without a command it prints its help page on stderr
+and exits 2 (click's ``no_args_is_help``). The wheel built by ``uv build``, a fresh
 environment and ``uv tool install`` are covered by ``tests/packaging/test_wheel.py`` (golden tier).
 """
 
@@ -62,9 +63,9 @@ def test_rs_found_in_slurm_prints_one_line(tmp_path: Path) -> None:
     assert result.stderr == ""
 
 
-def test_modeltests_placeholder_names_its_phase() -> None:
+def test_modeltests_without_a_command_prints_the_help_on_stderr() -> None:
+    """``modeltests`` alone: the usage page on stderr, nothing on stdout, exit 2 (``no_args_is_help``)."""
     result = run("modeltests")
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert result.stdout == ""
-    assert "NotImplementedError" in result.stderr
-    assert "phase 5" in result.stderr
+    assert result.stderr.startswith("Usage: modeltests [OPTIONS] COMMAND [ARGS]...")
