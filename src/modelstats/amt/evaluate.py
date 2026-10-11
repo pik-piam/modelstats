@@ -860,9 +860,14 @@ def readme_path(log_dir: Path, cycle_id: str) -> Path:
 
 
 def publish_readme(
-    effects: Effects, logger: logging.Logger, report_repo: PathLike, readme: PathLike
+    effects: Effects, logger: logging.Logger, report_repo: PathLike, readme: PathLike, *, text: str
 ) -> Publication:
     """``R/modeltests.R:434-444`` in the report repository: reset, pull, copy, add, commit, push.
+
+    ``readme`` is the file written by :func:`readme_path` and ``text`` its content: the comparison
+    below uses the text in hand instead of reading the file back, so that a ``--dry-run`` evaluate,
+    which only announced the write, reaches the ``would copy`` announcement instead of failing on the
+    absent file.
 
     Each ``git`` runs through :func:`modelstats.amt.logs.run_logged` with ``check=True``: a non-zero
     status raises :class:`modelstats.env.CommandFailedError`, which ``evaluate_cycle`` records as the
@@ -875,7 +880,7 @@ def publish_readme(
     run_logged(effects, logger, [GIT, "reset", "--hard", "origin/master"], cwd=report_repo, check=True)
     run_logged(effects, logger, [GIT, "pull"], cwd=report_repo, check=True)
     target = f"{os.fspath(report_repo)}/{PUBLISHED_NAME}"
-    if effects.exists(target) and effects.read_text(target) == effects.read_text(readme):
+    if effects.exists(target) and effects.read_text(target) == text:
         logger.info("%s unchanged in %s: nothing to commit or push", PUBLISHED_NAME, os.fspath(report_repo))
         return Publication.UNCHANGED
     effects.copy(readme, target)
@@ -991,7 +996,7 @@ def _evaluate(ctx: EvaluateContext, cycle: Cycle, report_repo: Path | None) -> E
     logger.info("Finished compiling README.md (%s)", readme_file)
     publication = None
     if report_repo is not None:
-        publication = publish_readme(effects, logger, report_repo, readme_file)
+        publication = publish_readme(effects, logger, report_repo, readme_file, text=readme)
     delivery = _notify_status(ctx, report, verdict.sentence, started)
     archive_testthat_log(effects, logger, verdict)
     state = complete_state(ctx.state, evaluated_at=effects.now(), tested_commit=commit, summary=summary)

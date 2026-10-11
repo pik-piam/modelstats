@@ -68,6 +68,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import shutil
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -144,6 +145,7 @@ from modelstats.env import (
     CannedSlurm,
     ClusterPaths,
     CommandFailedError,
+    DryRunEffects,
     EffectCall,
     HttpResponse,
     LineCallback,
@@ -870,15 +872,19 @@ def test_readme_path_is_next_to_the_cycle_log(tmp_path: Path) -> None:
     assert readme_path(tmp_path / "logs", "2026-09-30") == tmp_path / "logs" / "amt-2026-09-30-README.md"
 
 
+REPORT_TEXT = "```\nreport\n```\n"
+
+
 def test_publish_readme_runs_r_s_git_sequence_in_the_report_repository(
     tmp_path: Path, log_stream: tuple[logging.Logger, io.StringIO]
 ) -> None:
     logger, _ = log_stream
     tree = make_checkout(tmp_path)
     readme = tree.root / "README-draft.md"
-    readme.write_text("```\nreport\n```\n")
+    readme.write_text(REPORT_TEXT)
     effects = recording(tree)
-    assert publish_readme(effects, logger, tree.report_repo, readme) is Publication.COMMITTED
+    published = publish_readme(effects, logger, tree.report_repo, readme, text=REPORT_TEXT)
+    assert published is Publication.COMMITTED
     repo = str(tree.report_repo)
     assert runs_of(effects, "git") == [
         (["reset", "--hard", "origin/master"], repo),
@@ -887,7 +893,7 @@ def test_publish_readme_runs_r_s_git_sequence_in_the_report_repository(
         (["commit", "-m", COMMIT_MESSAGE], repo),
         (["push"], repo),
     ]
-    assert (tree.report_repo / "README.md").read_text() == "```\nreport\n```\n"
+    assert (tree.report_repo / "README.md").read_text() == REPORT_TEXT
 
 
 def test_publish_readme_leaves_an_unchanged_readme_alone(
@@ -897,10 +903,11 @@ def test_publish_readme_leaves_an_unchanged_readme_alone(
     logger, stream = log_stream
     tree = make_checkout(tmp_path)
     readme = tree.root / "README-draft.md"
-    readme.write_text("```\nreport\n```\n")
-    (tree.report_repo / "README.md").write_text("```\nreport\n```\n")
+    readme.write_text(REPORT_TEXT)
+    (tree.report_repo / "README.md").write_text(REPORT_TEXT)
     effects = recording(tree)
-    assert publish_readme(effects, logger, tree.report_repo, readme) is Publication.UNCHANGED
+    published = publish_readme(effects, logger, tree.report_repo, readme, text=REPORT_TEXT)
+    assert published is Publication.UNCHANGED
     assert [argv[0] for argv, _ in runs_of(effects, "git")] == ["reset", "pull"]
     assert [call for call in effects.calls if call.name == "copy"] == []
     assert f"README.md unchanged in {tree.report_repo}: nothing to commit or push" in stream.getvalue()
@@ -914,12 +921,37 @@ def test_publish_readme_stops_before_the_copy_when_the_repository_cannot_be_upda
     logger, _ = log_stream
     tree = make_checkout(tmp_path)
     readme = tree.root / "README-draft.md"
-    readme.write_text("```\nreport\n```\n")
+    readme.write_text(REPORT_TEXT)
     effects = recording(tree, amt=CannedAmt({f"git-{step}.exit": "1"}))
     with pytest.raises(CommandFailedError, match=f"git {step}.* exited with status 1"):
-        publish_readme(effects, logger, tree.report_repo, readme)
+        publish_readme(effects, logger, tree.report_repo, readme, text=REPORT_TEXT)
     assert [argv[0] for argv, _ in runs_of(effects, "git")][-1] == step
     assert not (tree.report_repo / "README.md").exists()
+
+
+def test_publish_readme_dry_run_announces_the_copy_of_a_readme_that_was_never_written(
+    tmp_path: Path, log_stream: tuple[logging.Logger, io.StringIO]
+) -> None:
+    """``--dry-run``: the README draft was only announced, so the comparison uses the text in hand."""
+    logger, _ = log_stream
+    tree = make_checkout(tmp_path)
+    readme = tree.root / "README-draft.md"
+    (tree.report_repo / "README.md").write_text("```\nold report\n```\n")
+    messages: list[str] = []
+    effects = DryRunEffects(recording(tree), log=messages.append)
+    assert not readme.exists()
+    assert (
+        publish_readme(effects, logger, tree.report_repo, readme, text=REPORT_TEXT) is Publication.COMMITTED
+    )
+    assert f"would copy {readme} to {tree.report_repo}/README.md" in messages
+    assert [m for m in messages if m.startswith("would run git ")] == [
+        f"would run git reset --hard origin/master in {tree.report_repo}",
+        f"would run git pull in {tree.report_repo}",
+        f"would run git add README.md in {tree.report_repo}",
+        f"would run git commit -m {shlex.quote(COMMIT_MESSAGE)} in {tree.report_repo}",
+        f"would run git push in {tree.report_repo}",
+    ]
+    assert (tree.report_repo / "README.md").read_text() == "```\nold report\n```\n"
 
 
 # ---------------------------------------------------------------------------------------------
