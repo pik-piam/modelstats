@@ -36,11 +36,10 @@ jobs:
       - name: pytest (unit and packaging tiers; the sandbox tier needs the fixtures)
         run: uv run pytest -q
 
-      # The fixture-free parity gate of migration/03-migration-plan.md section 6: the sort cases and
-      # their R goldens are tracked in git, so this family runs on every push. -m golden overrides the
-      # default deselection; -rs makes any skip visible in the log (a skip here would be a regression).
-      - name: pytest (sort golden suite; fixture-free parity gate, 03 section 6)
-        run: uv run pytest -q -rs -m golden tests/golden/test_sort_goldens.py
+      # The golden and sandbox tiers need the migration record (R goldens, fixtures, sandbox harness),
+      # which is kept outside the repository; they run locally and skip as a whole here.
+      - name: pytest (golden tier skips without the migration record; -rs shows the skips)
+        run: uv run pytest -q -rs -m golden
 
   wheel:
     name: build the wheel and run the tests and console scripts from a fresh locked venv
@@ -78,8 +77,9 @@ jobs:
         run: |
           "${RUNNER_TEMP}/fresh/bin/python" -m pytest -q -p no:cacheprovider
 
-      # The fixture-free half of tests/packaging/test_wheel.py (the module itself needs migration/fixtures and
-      # is deselected here): the wheel installs as a uv tool on Python 3.14 and its rs answers --help.
+      # The fixture-free half of tests/packaging/test_wheel.py (the module itself needs the migration record,
+      # which is not in the repository, and is deselected here): the wheel installs as a uv tool on Python 3.14
+      # and its rs answers --help.
       - name: uv tool install the wheel and run rs --help
         env:
           UV_TOOL_DIR: ${{ runner.temp }}/uv-tools

@@ -1,9 +1,10 @@
 # The `modeltests` command: REMIND automated model tests (AMT)
 
 `modeltests` replaces the `Rscript -e 'modelstats::modeltests(...)'` line of the REMIND AMT cron job
-(`R/modeltests.R`, modelstats 0.31.0). It is REMIND only (`migration/06-user-requests.md` section 2,
-decision D-27): the MAgPIE weekly tests keep running on the R package, see the last section. The design is
-`06` sections 3 and 4; this page is the operator's guide: the cron lines, the state file and its
+(`R/modeltests.R`, modelstats 0.31.0). It is REMIND only (decision D-27): the MAgPIE weekly tests keep
+running on the R package, see the last section. The design follows the user amendments of the migration
+record (`06` sections 3 and 4; the record is kept outside the repository, see the README); this page is the
+operator's guide: the cron lines, the state file and its
 transitions, recovery from a failed cycle, the log, the webhook variable, `--dry-run`, and what changed
 compared with the R version.
 
@@ -276,8 +277,9 @@ run also in `tests/unit/test_env.py`), the replay of every `remind-evaluate*` R 
 (`tests/unit/test_amt_evaluate.py`, `pytest -m golden`), the README block against the R goldens
 (`tests/golden/test_amt_readme.py`, `pytest -m golden`) and the end-to-end runs of the command inside the
 sandbox on every `remind-*` case plus the round trips (`tests/golden/test_amt_e2e.py`, `pytest -m
-sandbox`, driven by `migration/harness/run_amt_case.sh`); every difference to an R golden is classified in
-`migration/reviews/2026-10-11-phase5-amt-differences.md`. `migration/README.md` says how to run the tiers.
+sandbox`, driven by the sandbox harness of the migration record); every difference to an R golden is
+classified in the record's phase 5 differences file. The golden and sandbox tiers need the record, which is
+kept outside the repository (README, "The migration record").
 
 ## The MAgPIE weekly tests stay on R
 
@@ -289,5 +291,5 @@ selection, `magpie4::addToDataChangelog`, the MAgPIE Mattermost texts) keep runn
 Rscript -e 'modelstats::modeltests(mydir = "/p/projects/landuse/tests/magpie/", gitdir = "...", model = "MAgPIE", user = "...", mattermostToken = ...)'
 ```
 
-with its `.testsstatus` toggle, until the landuse group decides otherwise. The R goldens
-`migration/goldens/amt/magpie-*` document that behaviour.
+with its `.testsstatus` toggle, until the landuse group decides otherwise. The R goldens of the `magpie-*`
+AMT cases in the migration record document that behaviour.

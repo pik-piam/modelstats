@@ -25,7 +25,7 @@ classifiers = [
   "Topic :: Scientific/Engineering",
   "Typing :: Typed",
 ]
-# Library decisions and verified semantics: migration/02-python-libraries.md sections 4 and 5.
+# Library decisions and verified semantics: the library notes of the migration record (02, sections 4-5).
 dependencies = [
   "gamsapi[transfer]>=54.4,<55", # gams.transfer Container (route A); pulls pandas + scipy
   "gamspy_base>=54.4,<55",       # GAMS system directory for gams.transfer, no GAMS install needed
@@ -58,22 +58,22 @@ dev = [
 packages = ["src/modelstats"]
 
 [tool.hatch.build.targets.sdist]
-# The sdist carries the Python package and its tests only; the R package, its fixtures and the
-# migration record stay in the git repository. The shipped tests must therefore not depend on files
-# outside this include list (tests/unit/test_version.py skips its DESCRIPTION mirror check when the
-# R manifest is absent). Patterns are gitignore-style: anchor them, or "tests" would also match
-# migration/fixtures/p/projects/landuse/tests.
+# The sdist carries the Python package and its tests only; the R package stays in the git repository and
+# the migration record (goldens, fixtures, harness; gitignored) outside it. The shipped tests must therefore
+# not depend on files outside this include list (tests/unit/test_version.py skips its DESCRIPTION mirror
+# check when the R manifest is absent). Patterns are gitignore-style: anchor them, or "tests" would also
+# match a local migration/fixtures/p/projects/landuse/tests.
 include = ["/src/modelstats", "/tests", "/pyproject.toml", "/README.md"]
 exclude = ["/tests/testthat", "/tests/.lintr"]
 
 # ---------------------------------------------------------------------------------------------
-# ruff: lint and format (migration/06-user-requests.md section 6, quality bar)
+# ruff: lint and format (the quality bar of the migration record, 06 section 6)
 # ---------------------------------------------------------------------------------------------
 [tool.ruff]
 line-length = 110
 target-version = "py314"
 src = ["src", "tests"]
-# The R oracle harness under migration/ is not part of the Python package.
+# The local migration record under migration/ (gitignored) is not part of the Python package.
 extend-exclude = ["migration"]
 
 [tool.ruff.lint]
@@ -108,23 +108,23 @@ pretty = true
 show_error_codes = true
 
 [[tool.mypy.overrides]]
-# gamsapi ships no stubs (migration/02-python-libraries.md 4.11); gamspy_base is a plain data package.
+# gamsapi ships no stubs (library notes 02, 4.11); gamspy_base is a plain data package.
 module = ["gams", "gams.*", "gamspy_base", "gamspy_base.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------------------------
-# pytest: tiers (migration/03-migration-plan.md section 5, tests/)
+# pytest: tiers (tests/conftest.py)
 #   unit      default; pure functions, synthetic inputs, no fixtures
-#   golden    -m golden;  needs migration/goldens + migration/fixtures (+ migration/synthetic)
-#   sandbox   -m sandbox; runs inside migration/harness/sandbox.sh
+#   golden    -m golden;  needs the local migration record (goldens, fixtures, synthetic layer; gitignored)
+#   sandbox   -m sandbox; runs inside the migration record's sandbox harness
 # ---------------------------------------------------------------------------------------------
 [tool.pytest.ini_options]
 minversion = "9.0"
 testpaths = ["tests"]
 addopts = '-m "not golden and not sandbox" --strict-markers --strict-config'
 markers = [
-  "golden: compares against the R goldens under migration/goldens (needs the fixture trees; deselected by default)",
-  "sandbox: runs the command end to end inside migration/harness/sandbox.sh (deselected by default)",
+  "golden: compares against the R goldens of the local migration record (skipped without it; deselected by default)",
+  "sandbox: runs the command end to end inside the migration record's sandbox (deselected by default)",
 ]
 xfail_strict = true
 filterwarnings = ["error::DeprecationWarning:modelstats"]

@@ -6,13 +6,11 @@ repos:
     rev: cef0300fd0fc4d2a87a85fa2093c6b283ea36f4b  # frozen: v5.0.0
     hooks:
     -   id: check-case-conflict
-        # The R goldens hold case-sensitive sort cases on purpose (synthetic__sortroot__output__B / __b).
-        exclude: '^migration/goldens/'
     -   id: check-json
     -   id: check-merge-conflict
     -   id: check-yaml
         # tests/data/r/config.yml carries the !<namedVector>/!<character> tags gms::saveConfig writes
-        # (migration/02-python-libraries.md 4.3); the safe loader rejects them, so that file gets the
+        # (library notes of the migration record, 02 4.3); the safe loader rejects them, so that file gets the
         # syntax-only check below.
         exclude: '^tests/data/r/config\.yml$'
     -   id: check-yaml
@@ -37,7 +35,7 @@ repos:
     -   id: readme-rmd-rendered
     -   id: use-tidy-description
 
-# Python (src/ and tests/ only; the R oracle harness under migration/ is not linted here).
+# Python (src/ and tests/ only).
 -   repo: https://github.com/astral-sh/ruff-pre-commit
     rev: a56c0b927e6465d37cae3e97d35d4d18ab2b96cd  # frozen: v0.16.9
     hooks:

@@ -2,7 +2,7 @@
 
 `modelstats.Run` reads one REMIND or MAgPIE run folder the way `rs` (`R/getRunStatus.R`) reads it and
 presents the result with Python types, so that other repositories do not re-implement `getRunStatus.R`
-(`migration/06-user-requests.md` section 5, decision D-25). It sits on the same reading layer as the
+(decision D-25 of the migration record, see the README). It sits on the same reading layer as the
 parity record `rs` prints (`modelstats.facts.RunFacts`): every file is read at most once, lazily, and the
 R-compatible record is one method away.
 
@@ -74,7 +74,8 @@ argument is expanded (a run folder is itself, a model main folder contributes th
 
 ## `RunState`: from the R `RunStatus` text and the queue
 
-`run.status_detail` is the R `RunStatus` string (`migration/03-migration-plan.md` 3.1) with one change:
+`run.status_detail` is the R `RunStatus` string (the behavioural contract, `03` 3.1 of the migration
+record) with one change:
 when `full.log` holds several `*** Status:` lines, the last one wins (R leaves `"NA"`, BUG-036).
 `run.status` maps that text as follows (`modelstats.run.state_of_detail`), then lets the queue refine it
 (`modelstats.run.run_state`): every job of the run pending means `PENDING`, and a listed job turns
@@ -121,7 +122,7 @@ and `50 or more` (BUG-029), the `overview.rds` rule (BUG-010), the unexpanded `c
 ## Evidence
 
 - `uv run pytest -q -m golden tests/golden/test_run.py` (`708 passed` on 2026-10-11): for every row of
-  `migration/cases/status.tsv`, in both modes and both detail levels, `Run(dir).to_status_record(detailed)`
+  the `status` case list of the migration record, in both modes and both detail levels, `Run(dir).to_status_record(detailed)`
   equals the R golden exactly as `tests/golden/test_status.py` demands (key order, type, value, or the exact
   R error); on every passing row the clean view is read too, agrees with the record where the vocabulary
   allows, and reading both views again streams no file and runs no `squeue` a second time.

@@ -7,14 +7,15 @@ Tiers (``pyproject.toml`` ``[tool.pytest.ini_options]``):
   reads a run also needs the fixture snapshot or the synthetic layer below ``migration/``;
 * ``-m sandbox`` runs commands inside ``migration/harness/sandbox.sh``.
 
-The paths mirror ``migration/harness/lib.sh``: ``MODELSTATS_FIXTURES`` overrides the canonical
-fixture snapshot, ``MODELSTATS_SYNTHETIC`` the synthetic layer and ``MODELSTATS_GOLDENS`` the
-R reference outputs; the case lists live in ``migration/cases``. A golden test is skipped only
-when a tree it requests through its fixtures (``fixtures_dir``, ``synthetic_dir``) is absent:
-those two trees are gitignored (``migration/01-test-data-inventory.md``), whereas the cases and
-the goldens are tracked in git, so a fixture-free family (the sort family in phase 0) runs on every
-checkout, CI included. A golden test that *runs* is never skipped or relaxed
-(``migration/03-migration-plan.md`` section 4.6).
+``migration/`` is the migration record (the plan, the R goldens, the case lists, the fixture snapshot of
+PIK-internal runs, the synthetic layer and the sandbox harness). It is kept outside the repository
+(gitignored), so the golden and sandbox tiers run on a checkout that has it and skip as a whole where
+it is absent (CI included); the unit tier never touches it. The paths mirror
+``migration/harness/lib.sh``: ``MODELSTATS_FIXTURES`` overrides the canonical fixture snapshot,
+``MODELSTATS_SYNTHETIC`` the synthetic layer and ``MODELSTATS_GOLDENS`` the R reference outputs; the
+case lists live in ``migration/cases``. A golden test is skipped only when a tree it requests through
+its fixtures (``cases_dir``, ``goldens_dir``, ``fixtures_dir``, ``synthetic_dir``) is absent; a golden
+test that *runs* is never skipped or relaxed (the migration plan, ``03`` section 4.6).
 
 Golden cases (phase 1): ``golden_cases(family, mode)`` reads ``migration/cases/<family>.tsv`` the way
 ``migration/harness/make_goldens.R`` does and resolves the sandbox-level settings of
@@ -146,15 +147,15 @@ class GoldenCase:
 def case_list(family: str) -> Path:
     """``migration/cases/<family>.tsv``, read at collection time by the golden modules.
 
-    The case lists are tracked in git, so in a checkout they always exist; the unpacked sdist ships
-    neither ``migration/`` nor its goldens (``pyproject.toml`` ``[tool.hatch.build.targets.sdist]``),
-    and there the golden module is skipped as a whole instead of failing the collection of the unit
-    tier (pytest imports every module before it applies the marker deselection).
+    Without the migration record (a checkout that lacks it, CI, the unpacked sdist) the golden module
+    is skipped as a whole instead of failing the collection of the unit tier (pytest imports every
+    module before it applies the marker deselection).
     """
     path = CASES / f"{family}.tsv"
     if not path.is_file():
         pytest.skip(
-            f"case list absent: {path} (migration/ is not shipped in the sdist)", allow_module_level=True
+            f"case list absent: {path} (the migration record is not in the repository)",
+            allow_module_level=True,
         )
     return path
 
@@ -222,13 +223,17 @@ def synthetic_dir() -> Path:
 
 @pytest.fixture(scope="session")
 def goldens_dir() -> Path:
-    """The R reference outputs; tracked in git, so their absence is an error, never a skip."""
+    """The R reference outputs; skips the test when the migration record is absent."""
+    if not GOLDENS.is_dir():
+        pytest.skip(f"R goldens absent: {GOLDENS} (the migration record is not in the repository)")
     return GOLDENS
 
 
 @pytest.fixture(scope="session")
 def cases_dir() -> Path:
-    """The case lists the goldens were made from; tracked in git, so never a reason to skip."""
+    """The case lists the goldens were made from; skips the test when the record is absent."""
+    if not CASES.is_dir():
+        pytest.skip(f"case lists absent: {CASES} (the migration record is not in the repository)")
     return CASES
 
 
