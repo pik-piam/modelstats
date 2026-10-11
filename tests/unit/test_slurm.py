@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from modelstats.env import CannedSlurm, FakeEffects
+from modelstats.runfolders import r_dirname
 from modelstats.slurm import (
     INVALID_REGEX,
     MYRUNS_CALL,
@@ -30,7 +31,6 @@ from modelstats.slurm import (
     match_squeue,
     parse_elapsed,
     parse_squeue,
-    r_dirname,
     r_grepl,
     r_strsplit_space,
     run_folders_of,

@@ -98,7 +98,9 @@ from modelstats.amt.evaluate import (
     TESTTHAT_MISSING,
     EvaluateError,
     Evaluation,
+    Publication,
     archive_old_runs,
+    archive_testthat_log,
     compare_scenarios_argv,
     comparison_pending,
     cycle_to_evaluate,
@@ -119,8 +121,9 @@ from modelstats.amt.evaluate import (
     started_runs,
     wait_for_runs,
 )
+from modelstats.amt.evaluate import TestthatVerdict as Verdict  # aliased: pytest would collect the name
 from modelstats.amt.evaluate import tested_commit as commit_tested
-from modelstats.amt.evaluate import testthat_result as make_test_full_sentence
+from modelstats.amt.evaluate import testthat_result as make_test_full_verdict
 from modelstats.amt.logs import cycle_log
 from modelstats.amt.notify import MATTERMOST_URL_VARIABLE, NEXT_STEPS, SANITY_HEADER, Delivery
 from modelstats.amt.previous import ARCHIVE_DIR
@@ -140,9 +143,12 @@ from modelstats.env import (
     CannedAmt,
     CannedSlurm,
     ClusterPaths,
+    CommandFailedError,
     EffectCall,
+    HttpResponse,
     LineCallback,
     PathLike,
+    PostRecord,
     RecordingEffects,
     RunResult,
     Stream,
@@ -764,7 +770,9 @@ def test_testthat_result_without_the_log(
     logger, _ = log_stream
     tree = make_checkout(tmp_path)
     effects = recording(tree)
-    assert make_test_full_sentence(effects, logger, tree.checkout) == TESTTHAT_MISSING
+    verdict = make_test_full_verdict(effects, tree.checkout)
+    assert verdict == Verdict(TESTTHAT_MISSING)
+    archive_testthat_log(effects, logger, verdict)
     assert not [call for call in effects.calls if call.name in ("rename", "mkdir")]
 
 
@@ -793,7 +801,10 @@ def test_testthat_result_reads_the_last_fail_line_and_renames_the_log(
     set_mtime(log, datetime(2026, 9, 29, 16, 0, tzinfo=SANDBOX_TZ))
     effects = recording(tree)
     kept = tree.checkout / TESTS_DIR / "test-full-2026-09-29.log"
-    assert make_test_full_sentence(effects, logger, tree.checkout) == expected.format(kept=kept)
+    verdict = make_test_full_verdict(effects, tree.checkout)
+    assert verdict == Verdict(expected.format(kept=kept), log, kept)
+    assert log.exists() and not kept.exists()  # a pure read: the file moves at the end of the evaluation
+    archive_testthat_log(effects, logger, verdict)
     assert not log.exists() and kept.read_text() == content
 
 
@@ -866,8 +877,8 @@ def test_publish_readme_runs_r_s_git_sequence_in_the_report_repository(
     tree = make_checkout(tmp_path)
     readme = tree.root / "README-draft.md"
     readme.write_text("```\nreport\n```\n")
-    effects = recording(tree, amt=CannedAmt({"git-push.exit": "1"}))
-    publish_readme(effects, logger, tree.report_repo, readme)
+    effects = recording(tree)
+    assert publish_readme(effects, logger, tree.report_repo, readme) is Publication.COMMITTED
     repo = str(tree.report_repo)
     assert runs_of(effects, "git") == [
         (["reset", "--hard", "origin/master"], repo),
@@ -877,6 +888,38 @@ def test_publish_readme_runs_r_s_git_sequence_in_the_report_repository(
         (["push"], repo),
     ]
     assert (tree.report_repo / "README.md").read_text() == "```\nreport\n```\n"
+
+
+def test_publish_readme_leaves_an_unchanged_readme_alone(
+    tmp_path: Path, log_stream: tuple[logging.Logger, io.StringIO]
+) -> None:
+    """A repository already holding the new text after ``git pull``: no add, commit or push."""
+    logger, stream = log_stream
+    tree = make_checkout(tmp_path)
+    readme = tree.root / "README-draft.md"
+    readme.write_text("```\nreport\n```\n")
+    (tree.report_repo / "README.md").write_text("```\nreport\n```\n")
+    effects = recording(tree)
+    assert publish_readme(effects, logger, tree.report_repo, readme) is Publication.UNCHANGED
+    assert [argv[0] for argv, _ in runs_of(effects, "git")] == ["reset", "pull"]
+    assert [call for call in effects.calls if call.name == "copy"] == []
+    assert f"README.md unchanged in {tree.report_repo}: nothing to commit or push" in stream.getvalue()
+
+
+@pytest.mark.parametrize("step", ["reset", "pull"])
+def test_publish_readme_stops_before_the_copy_when_the_repository_cannot_be_updated(
+    tmp_path: Path, log_stream: tuple[logging.Logger, io.StringIO], step: str
+) -> None:
+    """D-24 (the evaluate counterpart of BUG-075): a failed ``git reset`` or ``git pull`` raises."""
+    logger, _ = log_stream
+    tree = make_checkout(tmp_path)
+    readme = tree.root / "README-draft.md"
+    readme.write_text("```\nreport\n```\n")
+    effects = recording(tree, amt=CannedAmt({f"git-{step}.exit": "1"}))
+    with pytest.raises(CommandFailedError, match=f"git {step}.* exited with status 1"):
+        publish_readme(effects, logger, tree.report_repo, readme)
+    assert [argv[0] for argv, _ in runs_of(effects, "git")][-1] == step
+    assert not (tree.report_repo / "README.md").exists()
 
 
 # ---------------------------------------------------------------------------------------------
@@ -975,7 +1018,10 @@ def test_evaluate_cycle_runs_every_step_and_completes_the_cycle(
     # the file effects
     assert moved(effects) == [(str(tree.output / "default-AMT_2026-05-01_00.00.00"), str(tree.archive))]
     assert (tree.archive / "default-AMT_2026-05-01_00.00.00" / "full.log").read_text() == "old"
-    assert (tree.checkout / TESTS_DIR / "test-full-2026-09-29.log").exists()
+    assert result.testthat_log == tree.checkout / TESTS_DIR / "test-full-2026-09-29.log"
+    assert result.testthat_log.exists() and not (tree.checkout / TEST_FULL_LOG).exists()
+    names = [call.name for call in effects.calls]
+    assert names.index("rename") > names.index("post_json")  # the log moves last, after the message
     assert result.readme_path == tree.log_dir / "amt-2026-09-30-README.md"
     assert result.readme_path.read_text() == result.readme
     assert (tree.report_repo / "README.md").read_text() == result.readme
@@ -989,6 +1035,7 @@ def test_evaluate_cycle_runs_every_step_and_completes_the_cycle(
     ]
     # the notification and the state
     assert result.delivery is Delivery.SENT and result.published
+    assert result.publication is Publication.COMMITTED
     (post,) = effects.posts
     text = post.to_json()["payload_json"]
     assert isinstance(text, dict)
@@ -1132,6 +1179,124 @@ def test_a_failed_cycle_can_be_evaluated_again(
     assert (
         result.state.last_completed is not None and result.state.last_completed.tested_commit == TESTED_COMMIT
     )
+
+
+def test_a_failed_push_leaves_the_cycle_failed_and_a_retry_publishes(
+    tmp_path: Path, log_stream: tuple[logging.Logger, io.StringIO]
+) -> None:
+    """D-24 (Codex review 2026-10-11, finding 3): ``git push`` exit 1 is a failure of the cycle, not idle.
+
+    R's ``system()`` ignored the status (``R/modeltests.R:444``) and saved ``lastcommit.rds`` as if the
+    README had been published. Here the cycle is kept, a failure is posted, and ``evaluate`` retries it
+    once the repository is reachable; the fake ``git`` does not reset the working tree, so the retry
+    sees the README of the failed attempt restored to the origin's text by hand.
+    """
+    logger, _ = log_stream
+    tree, _, _ = full_checkout(tmp_path)
+    (tree.report_repo / "README.md").write_text("the origin's README\n")
+    effects = recording(tree, amt=CannedAmt({"git-push.exit": "1"}))
+    ctx = context(tree, effects, logger)
+    with pytest.raises(CycleFailedError, match="git push exited with status 1") as raised:
+        evaluate_cycle(ctx)
+    assert isinstance(raised.value.__cause__, CommandFailedError)
+    saved = ctx.store.load()
+    assert saved is not None and saved.phase is Phase.FAILED and saved.cycle == ctx.state.cycle
+    assert saved.last_error is not None and saved.last_error.message == "git push exited with status 1"
+    assert [argv[0] for argv, _ in runs_of(effects, "git")][2:] == ["reset", "pull", "add", "commit", "push"]
+    assert (tree.report_repo / "README.md").read_text() != "the origin's README\n"  # copied before the push
+    (post,) = effects.posts
+    body = post.to_json()["payload_json"]
+    assert isinstance(body, dict) and "`modeltests evaluate` stopped with an error" in body["text"]
+    assert (tree.checkout / TEST_FULL_LOG).exists()  # the verdict's log is still there for the retry
+    # the retry: git reset --hard origin/master would restore the origin's README; the fake does not
+    (tree.report_repo / "README.md").write_text("the origin's README\n")
+    retry = recording(tree)
+    result = evaluate_cycle(context(tree, retry, logger, state=saved))
+    assert result.state.phase is Phase.IDLE and result.publication is Publication.COMMITTED
+    assert result.state.last_completed is not None and result.state.last_completed.id == "2026-09-30"
+    assert [argv[0] for argv, _ in runs_of(retry, "git")][2:] == ["reset", "pull", "add", "commit", "push"]
+    assert (tree.report_repo / "README.md").read_text() == result.readme
+
+
+def test_a_retry_after_a_successful_push_does_not_commit_the_same_readme_again(
+    tmp_path: Path, log_stream: tuple[logging.Logger, io.StringIO]
+) -> None:
+    """A crash after the push (here: the notification) leaves ``failed``; the retry finds the README equal."""
+
+    class CrashingPost(RecordingEffects):
+        """The status post raises; the failure post that follows goes through."""
+
+        def post_json(self, url: str, payload: object) -> HttpResponse:
+            if not self.posts:
+                self.posts.append(PostRecord(url, payload))
+                raise RuntimeError("webhook exploded")
+            return super().post_json(url, payload)
+
+    logger, _ = log_stream
+    tree, _, _ = full_checkout(tmp_path)
+    crashing = CrashingPost(
+        now=NOW,
+        user=USER,
+        on_cluster=True,
+        cwd=tree.root,
+        environ={"TZ": "Europe/Berlin", "USER": USER, MATTERMOST_URL_VARIABLE: URL},
+        cluster_paths=tree.cluster_paths(),
+    )
+    ctx = context(tree, crashing, logger)
+    with pytest.raises(CycleFailedError, match="webhook exploded"):
+        evaluate_cycle(ctx)
+    saved = ctx.store.load()
+    assert saved is not None and saved.phase is Phase.FAILED
+    assert [argv[0] for argv, _ in runs_of(crashing, "git")][2:] == ["reset", "pull", "add", "commit", "push"]
+    retry = recording(tree)
+    result = evaluate_cycle(context(tree, retry, logger, state=saved))
+    assert result.state.phase is Phase.IDLE
+    assert result.publication is Publication.UNCHANGED and not result.published
+    assert [argv[0] for argv, _ in runs_of(retry, "git")][2:] == ["reset", "pull"]
+    assert result.delivery is Delivery.SENT
+
+
+def test_a_retry_after_a_failed_publication_keeps_the_test_full_verdict(
+    tmp_path: Path, log_stream: tuple[logging.Logger, io.StringIO]
+) -> None:
+    """Codex review 2026-10-11, finding 4: the log is renamed last, so the retry reads the same verdict."""
+
+    class CopyRefused(RecordingEffects):
+        def copy(self, src: PathLike, dst: PathLike) -> None:
+            raise PermissionError(13, "Permission denied", os.fspath(dst))
+
+    logger, stream = log_stream
+    tree, _, _ = full_checkout(tmp_path)
+    log = tree.checkout / TEST_FULL_LOG
+    log.write_text("[ FAIL 5 | WARN 0 | SKIP 0 | PASS 10 ]\n")
+    set_mtime(log, datetime(2026, 9, 29, 16, 0, tzinfo=SANDBOX_TZ))
+    kept = tree.checkout / TESTS_DIR / "test-full-2026-09-29.log"
+    verdict = (
+        f"Not all tests pass in `make test-full`: [ FAIL 5 | WARN 0 | SKIP 0 | PASS 10 ]. Check `{kept}`"
+    )
+    refusing = CopyRefused(
+        now=NOW,
+        user=USER,
+        on_cluster=True,
+        cwd=tree.root,
+        environ={"TZ": "Europe/Berlin", "USER": USER, MATTERMOST_URL_VARIABLE: URL},
+        cluster_paths=tree.cluster_paths(),
+    )
+    ctx = context(tree, refusing, logger)
+    with pytest.raises(CycleFailedError, match="Permission denied"):
+        evaluate_cycle(ctx)
+    saved = ctx.store.load()
+    assert saved is not None and saved.phase is Phase.FAILED and saved.cycle == ctx.state.cycle
+    assert log.exists() and not kept.exists()  # not renamed: the failure came before the end
+    assert verdict in stream.getvalue()
+    retry = recording(tree)
+    result = evaluate_cycle(context(tree, retry, logger, state=saved))
+    assert result.state.phase is Phase.IDLE
+    assert result.testthat_result == verdict and result.testthat_log == kept
+    assert not log.exists() and kept.read_text() == "[ FAIL 5 | WARN 0 | SKIP 0 | PASS 10 ]\n"
+    (post,) = retry.posts
+    body = post.to_json()["payload_json"]
+    assert isinstance(body, dict) and body["text"].splitlines()[2] == verdict
 
 
 def test_an_unreadable_started_run_fails_the_cycle(

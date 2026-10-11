@@ -14,14 +14,18 @@ names the R lines it reads.
 Every look at the environment goes through :class:`modelstats.env.Effects` (listings, existence, ``stat``,
 ``glob``, streams for the text scanners, the clock, ``squeue``). Libraries that open files themselves (the
 GDX library, ``rdata``, the CSV counters) receive the physical file behind a logical path
-(:func:`physical_path`): the same path in production, the overlay's answer under the ``FakeEffects`` of
-the golden harness.
+(``Effects.physical_path``, :meth:`RunFiles.physical`): the same path in production, the overlay's answer
+under the ``FakeEffects`` of the golden harness.
 
 Errors: what R raises outside ``try()`` aborts ``getRunStatus()`` as a whole (``03`` 3.1, "Errors"), and
 so does a damaged GDX, which kills the R process instead of raising (BUG-037, decision D-20). Both become a
 :class:`RunReadError` (the package's, from ``modelstats.errors``, re-exported here), raised from the fact that
-reads the file, with R's condition message where R has one; the views let it propagate. A result R's
-``try()`` or ``react = "silent"`` turns into ``NULL`` is ``None`` or an empty list, never an exception.
+reads the file, with R's condition message where R has one; the views let it propagate. A file that exists
+but cannot be opened by a library reader (permissions, or gone between ``file.exists`` and the read) is R's
+``cannot open the connection`` under the connection call that failed (``file(file, "rt")``, ``gzfile(file,
+"rb")``, ``readChar(con, 5L, useBytes = TRUE)``), never a bare ``OSError``: nothing escapes the package's
+error boundary. A result R's ``try()`` or ``react = "silent"`` turns into ``NULL`` is ``None`` or an empty
+list, never an exception.
 A log that exists but cannot be opened is what ``system(..., intern = TRUE)`` makes of a grep, tac or tail
 that cannot read it: ``character(0)`` and no error, so every text fact takes its no-match value
 (:meth:`RunFacts._scan`); the one exception is the ``awk`` line of ``R/getRunStatus.R:189``, whose empty
@@ -31,19 +35,25 @@ result ``:190`` compares outside ``try()`` (:attr:`RunFacts.last_logtxt_line` ra
 from __future__ import annotations
 
 import io
-import os
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import cached_property
-from pathlib import Path, PurePosixPath
-from typing import Any, BinaryIO, Final, Protocol, runtime_checkable
+from pathlib import Path
+from typing import Any, BinaryIO, Final
 
 import pandas as pd
 
 from modelstats import textscan
 from modelstats.config import ConfigError, RunConfig, load_config
-from modelstats.env import Effects, FileInfo, OverlayPaths, PathLike
-from modelstats.errors import DeferredWarning, RunReadError
+from modelstats.env import Effects, FileInfo
+from modelstats.errors import (
+    ARGUMENT_OF_LENGTH_ZERO,
+    CONDITION_LENGTH_ABOVE_ONE,
+    MISSING_VALUE_IN_IF,
+    DeferredWarning,
+    RunReadError,
+)
 from modelstats.gdx import (
     ITERATION_SYMBOL,
     MODELSTAT_SYMBOLS,
@@ -68,18 +78,22 @@ __all__ = [
     "ARGUMENT_OF_LENGTH_ZERO",
     "CONDITION_LENGTH_ABOVE_ONE",
     "INVALID_DESCRIPTION",
-    "MISSING_VALUE",
+    "MISSING_VALUE_IN_IF",
     "NO_LINES_IN_INPUT",
     "ABSENT_SYMBOL_WARNING",
     "ABSENT_TYPED_SYMBOL_WARNING",
+    "CANNOT_OPEN_CONNECTION",
     "CONVERGENCE_READ_CALL",
     "EXPAND_PATTERN_CALL",
+    "FILE_RT_CALL",
     "GZFILE_CALL",
+    "GZFILE_RB_CALL",
     "ITERATION_READ_CALL",
     "LAST_LINE_CALL",
     "LOAD_CONFIG_CALL",
     "LOAD_STATISTICS_CALL",
     "LOAD_YAML_CALL",
+    "READCHAR_CALL",
     "READ_CSV_CALL",
     "READ_RDS_CALL",
     "REPY_READ_CALL",
@@ -87,24 +101,13 @@ __all__ = [
     "ABORT_TRACK_SYMBOL",
     "CONVERGENCE_SYMBOL",
     "REPY_SYMBOL",
-    "OverlayEffects",
     "RunFacts",
     "RunFiles",
     "RunReadError",
-    "physical_path",
 ]
-
-ARGUMENT_OF_LENGTH_ZERO: Final = "argument is of length zero"
-"""R's message for ``if (logical(0))``: ``R/getRunStatus.R:91, 108`` with a ``NULL`` model name, ``:282``."""
-
-MISSING_VALUE: Final = "missing value where TRUE/FALSE needed"
-"""R's message for ``if (NA)``: ``R/getRunStatus.R:284`` without ``o_iterationNumber`` (BUG-038)."""
 
 INVALID_DESCRIPTION: Final = "invalid 'description' argument"
 """R's message for ``load()`` on a vector of paths: ``R/getRunStatus.R:72`` with two matches (BUG-003)."""
-
-CONDITION_LENGTH_ABOVE_ONE: Final = "the condition has length > 1"
-"""R's message for ``if (c(TRUE, TRUE))``: ``R/colRunType.R:18`` after two ``yml`` matches (BUG-003)."""
 
 # The R calls the errors above are reported under, as ``deparse(conditionCall(e), nlines = 1L)`` prints them
 # (what ``try()`` puts after ``Error in``, ``R/loopRuns.R:57``); each is cited at its raise site.
@@ -122,6 +125,15 @@ READ_CSV_CALL: Final = "read.table(file = file, header = header, sep = sep, quot
 """``read.csv2()`` fails inside ``read.table()``; the first ``deparse`` line of that call ends in a blank."""
 READ_RDS_CALL: Final = "readRDS(projectSumFile)"
 """``R/getRunStatus.R:353``."""
+FILE_RT_CALL: Final = 'file(file, "rt")'
+"""The connection ``read.table()`` opens (``R/getRunStatus.R:327, 336, 345``): an unopenable CSV fails here.
+"""
+GZFILE_RB_CALL: Final = 'gzfile(file, "rb")'
+"""The connection ``readRDS()`` opens (``R/getRunStatus.R:353``): an unopenable ``.rds`` fails here."""
+READCHAR_CALL: Final = "readChar(con, 5L, useBytes = TRUE)"
+"""Where ``load()`` fails on an unopenable file (``R/getRunStatus.R:78``, the magic-number read)."""
+CANNOT_OPEN_CONNECTION: Final = "cannot open the connection"
+"""R's message when a file connection cannot be opened (permissions, a file gone since ``file.exists``)."""
 
 # The readGDX() calls whose absent symbol R only warns about (react defaults to "warning"), deparsed, and
 # the warning texts of gdx2 0.6.2 (verified 2026-10-01): the plain-name reads of ``:280`` and ``:288`` warn
@@ -175,47 +187,9 @@ _MAGPIE_ITERATION: Final = "-mag-"
 _HOURS: Final = 3600.0
 
 
-# ---------------------------------------------------------------------------------------------
-# Logical and physical paths
-# ---------------------------------------------------------------------------------------------
-
-
-@runtime_checkable
-class OverlayEffects(Protocol):
-    """An ``Effects`` whose paths are logical: it exposes the overlay that maps them onto real files.
-
-    ``modelstats.env.FakeEffects`` is the one implementation (its ``paths`` property); production effects
-    have no overlay and their paths are physical already.
-    """
-
-    @property
-    def paths(self) -> OverlayPaths | None:
-        """The overlay mapping, if any."""
-        ...
-
-    @property
-    def cwd(self) -> str:
-        """The directory relative paths resolve against."""
-        ...
-
-
-def physical_path(path: PathLike, effects: Effects) -> Path:
-    """The real file behind ``path`` for a library that opens files by name (GDX, R data, CSV).
-
-    In production the path is returned as given (relative to the process's working directory, as R
-    resolves it). Under an :class:`OverlayEffects` a relative path is first resolved against its logical
-    working directory and the overlay, when there is one, answers with the physical entry it shows; a path
-    the overlay does not show maps to itself, so that the caller's existence test or open fails the way
-    R's would.
-    """
-    text = os.fspath(path)
-    if not isinstance(effects, OverlayEffects):
-        return Path(text)
-    logical = PurePosixPath(effects.cwd) / text
-    if effects.paths is None:
-        return Path(logical)
-    found = effects.paths.first_existing(logical)
-    return found if found is not None else Path(logical)
+def _reason(error: OSError) -> str:
+    """The ``<reason>`` of R's ``cannot open file`` warnings: the C library's text (``Permission denied``)."""
+    return error.strerror or str(error)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -361,8 +335,8 @@ class RunFiles:
         return self.effects.stat(path)
 
     def physical(self, path: str) -> Path:
-        """The real file behind ``path`` (:func:`physical_path`)."""
-        return physical_path(path, self.effects)
+        """The real file behind ``path`` for a library opening files by name (``Effects.physical_path``)."""
+        return self.effects.physical_path(path)
 
     def read_bytes(self, path: str) -> bytes | None:
         """The whole of an existing ``path``; ``None`` when it cannot be opened.
@@ -410,6 +384,21 @@ class RunFacts:
     def __repr__(self) -> str:
         """``RunFacts('/path/to/run')``."""
         return f"RunFacts({self.files.directory!r})"
+
+    @contextmanager
+    def attaching_warnings(self) -> Iterator[None]:
+        """Attach the warnings deferred so far to a :class:`RunReadError` raised inside the block.
+
+        R prints them after the error that ends the call (``try()``'s ``In addition:`` block,
+        ``R/loopRuns.R:57``, or the top level of ``Rscript``), so the two views wrap their reads in this
+        block (``run_status.run_status_record``, ``Run``) and the error leaves it with ``warnings`` set;
+        the error itself is re-raised unchanged.
+        """
+        try:
+            yield
+        except RunReadError as error:
+            error.warnings = tuple(self.deferred_warnings)
+            raise
 
     @cached_property
     def now(self) -> float:
@@ -470,11 +459,19 @@ class RunFacts:
 
     @cached_property
     def statistics(self) -> RunStatistics | None:
-        """The ``stats`` list of ``runstatistics.rda`` (``:76-79``); ``None`` when the file is absent."""
+        """The ``stats`` list of ``runstatistics.rda`` (``:76-79``); ``None`` when the file is absent.
+
+        A file that cannot be opened (permissions, or gone since ``file.exists``) is R's ``cannot open
+        the connection`` from ``load()``'s ``readChar(con, 5L, useBytes = TRUE)``; the ``cannot open
+        compressed file`` warning is not deferred because ``:78`` wraps the ``load()`` in
+        ``suppressWarnings()``. Damaged content is the library's message under the ``load()`` call.
+        """
         if not self.files.exists(self.files.statistics):
             return None
         try:
             return read_run_statistics(self.files.physical(self.files.statistics))
+        except OSError as error:
+            raise RunReadError(CANNOT_OPEN_CONNECTION, call=READCHAR_CALL) from error
         except RDataError as error:
             raise RunReadError(str(error), call=LOAD_STATISTICS_CALL) from error
 
@@ -813,21 +810,41 @@ class RunFacts:
         return self._csv_count(self.files.fix_on_ref_csv, fix_error_count)
 
     def _csv_count(self, path: str, count: Callable[[Path], int]) -> int:
-        """One ``read.csv2`` count, read once per file; an empty file is ``no lines available in input``."""
+        """One ``read.csv2`` count, read once per file.
+
+        An empty file is R's ``no lines available in input`` (``read.table``); a file that cannot be
+        opened (permissions, or gone since ``file.exists``) is ``cannot open the connection`` from the
+        ``file(file, "rt")`` connection, with R's ``cannot open file '<path>': <reason>`` warning deferred
+        (``path`` is the pasted ``ii/<name>`` string R prints). Both abort the call as in R.
+        """
         if path not in self._csv_counts:
             try:
                 self._csv_counts[path] = count(self.files.physical(path))
             except EmptyCsvError as error:
                 raise RunReadError(NO_LINES_IN_INPUT, call=READ_CSV_CALL) from error
+            except OSError as error:
+                self._warn(FILE_RT_CALL, f"cannot open file '{path}': {_reason(error)}")
+                raise RunReadError(CANNOT_OPEN_CONNECTION, call=FILE_RT_CALL) from error
         return self._csv_counts[path]
 
     @cached_property
     def project_summations(self) -> Mapping[str, Any] | None:
-        """``readRDS(projectSummations.rds)`` (``:352-353``) as a mapping; ``None`` without the file."""
-        if not self.files.exists(self.files.project_summations_rds):
+        """``readRDS(projectSummations.rds)`` (``:352-353``) as a mapping; ``None`` without the file.
+
+        A file that cannot be opened (permissions, or gone since ``file.exists``) is R's ``cannot open
+        the connection`` from ``gzfile(file, "rb")``, with the ``cannot open compressed file '<path>',
+        probable reason '<reason>'`` warning deferred; damaged content is the library's message under
+        ``readRDS(projectSumFile)``.
+        """
+        path = self.files.project_summations_rds
+        if not self.files.exists(path):
             return None
         try:
-            value = read_rds(self.files.physical(self.files.project_summations_rds))
+            value = read_rds(self.files.physical(path))
+        except OSError as error:
+            reason = _reason(error)
+            self._warn(GZFILE_RB_CALL, f"cannot open compressed file '{path}', probable reason '{reason}'")
+            raise RunReadError(CANNOT_OPEN_CONNECTION, call=GZFILE_RB_CALL) from error
         except RDataError as error:
             raise RunReadError(str(error), call=READ_RDS_CALL) from error
         return value if isinstance(value, Mapping) else {}

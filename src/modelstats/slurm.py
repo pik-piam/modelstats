@@ -50,6 +50,7 @@ from datetime import date, timedelta
 from typing import Final
 
 from modelstats.env import Effects, PathLike, RunResult, sort_like_r
+from modelstats.errors import SUBSCRIPT_OUT_OF_BOUNDS, ModelstatsError
 from modelstats.runfolders import r_basename, r_dirname
 from modelstats.textscan import intern_lines
 
@@ -76,7 +77,6 @@ __all__ = [
     "parse_elapsed",
     "parse_squeue",
     "query_squeue",
-    "r_dirname",
     "r_grepl",
     "r_strsplit_space",
     "run_folders_of",
@@ -96,10 +96,6 @@ PENDING_SUFFIX: Final = " pending"
 
 STARTUP_SUFFIX: Final = " startup"
 """``R/foundInSlurm.R:33``."""
-
-SUBSCRIPT_OUT_OF_BOUNDS: Final = "subscript out of bounds"
-"""R's message for ``x[[i]]`` past the end: ``R/foundInSlurm.R:29`` on a short line,
-``R/commandLineInterface.R:165`` when the ``%Z`` and ``%j`` answers differ in length (BUG-028)."""
 
 INVALID_REGEX: Final = "invalid regular expression '{pattern}', reason '{reason}'"
 """R's message for a pattern TRE rejects (``R/commandLineInterface.R:165``, BUG-008)."""
@@ -134,7 +130,7 @@ _TRE_REASONS: Final[dict[str, str]] = {
 """``re.error`` messages and the TRE reason R prints for the same pattern (verified in R 4.6.1)."""
 
 
-class SlurmError(RuntimeError):
+class SlurmError(ModelstatsError):
     """An R error of ``foundInSlurm()`` or ``rs -C``; ``str(error)`` is the R condition message.
 
     ``call`` is the failing R call as ``deparse(conditionCall(e), nlines = 1L)`` prints it, what ``try()``

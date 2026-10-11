@@ -32,6 +32,7 @@ from typing import Final, Protocol
 
 from modelstats.config import load_config
 from modelstats.env import Effects, PathLike
+from modelstats.errors import ARGUMENT_OF_LENGTH_ZERO, CONDITION_LENGTH_ABOVE_ONE, ModelstatsError
 from modelstats.rdata_io import RScalar, r_as_character
 
 __all__ = [
@@ -53,12 +54,6 @@ __all__ = [
 CONFIG_FILE_PATTERN: Final = "config.Rdata|config.yml"
 """``R/colRunType.R:14``: ``grep("config.Rdata|config.yml", dir(mydir))``, unanchored, ``.`` any character."""
 
-ARGUMENT_OF_LENGTH_ZERO: Final = "argument is of length zero"
-"""R's message for ``if (logical(0))``: ``R/colRunType.R:20`` with ``cfg = NULL`` (BUG-004)."""
-
-CONDITION_LENGTH_ABOVE_ONE: Final = "the condition has length > 1"
-"""R's message for ``if (c(TRUE, TRUE))``: ``R/colRunType.R:18`` with two matching names (BUG-003)."""
-
 NO_RUN_TYPE: Final = "NA"
 """``R/colRunType.R:17``: the value for a path that is not a directory."""
 
@@ -66,7 +61,7 @@ _MAGPIE: Final = "MAgPIE"
 _ONE_REGION_PREFIX: Final = "testOneRegi"
 
 
-class RunTypeError(RuntimeError):
+class RunTypeError(ModelstatsError):
     """An R error of ``colRunType()``; ``str(error)`` is the R condition message (the golden ``error``).
 
     ``call`` is the failing R statement as ``deparse(conditionCall(e), nlines = 1L)`` prints it (the

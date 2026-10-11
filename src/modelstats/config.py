@@ -2,133 +2,30 @@
 
 R reference: ``R/getRunStatus.R:41,72`` and ``R/colRunType.R:14,19`` find the file with the
 *unanchored* regular expression ``config.Rdata|config.yml`` over ``dir(run)`` (register BUG-003,
-decision D-01: parity) and load it with ``load()`` (object ``cfg``) or ``gms::loadConfig()``
+decision D-01: parity; the listing is ``Effects.listdir_like_r`` with ``run_type.CONFIG_FILE_PATTERN``,
+in R's collation order) and load it with ``load()`` (object ``cfg``) or ``gms::loadConfig()``
 (``yaml::read_yaml`` with the ``namedVector`` and ``character`` handlers,
-``migration/02-python-libraries.md`` section 4.3). Every field the R package reads from the resulting
-``cfg`` list is an attribute of :class:`RunConfig`; the whole list stays in ``RunConfig.raw``.
-
-``dir()`` order matters for the first match: R sorts file names with ICU's root collation
-(``icuGetCollate()`` is ``"root"`` under the sandbox and cluster locale ``LC_ALL=C.utf8``), not by
-code point; :func:`r_dir` reproduces that order for ASCII names and Latin letters with accents.
+``migration/02-python-libraries.md`` section 4.3). This module is the loading half: every field the R
+package reads from the resulting ``cfg`` list is an attribute of :class:`RunConfig`; the whole list
+stays in ``RunConfig.raw``.
 """
 
 from __future__ import annotations
 
 import enum
-import os
-import re
-import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final
+from typing import Any
 
 import yaml
 
+from modelstats.errors import ModelstatsError
 from modelstats.rdata_io import RDataError, RScalar, r_as_character, read_rda, vector
 
-CONFIG_FILE_REGEX: Final = re.compile(r"config.Rdata|config.yml")
-"""``R/getRunStatus.R:41``, ``R/colRunType.R:14``: unanchored, ``.`` matches any character (BUG-003)."""
 
-_ICU_PUNCTUATION: Final = " _-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$"
-"""ASCII whitespace, punctuation, symbols and currency in CLDR root order (R ``sort()`` under ICU)."""
-
-_PUNCTUATION_INDEX: Final = {char: index for index, char in enumerate(_ICU_PUNCTUATION)}
-_WHITESPACE, _PUNCTUATION, _DIGIT, _LETTER, _OTHER = range(5)
-
-type CollationKey = tuple[tuple[tuple[int, int], ...], tuple[tuple[int, ...], ...], tuple[int, ...], str]
-"""Primary weights, secondary (accent) weights, tertiary (case) weights, then the name itself."""
-
-
-class ConfigError(Exception):
+class ConfigError(ModelstatsError):
     """A configuration file is missing, ambiguous or does not hold what the R code expects."""
-
-
-# ---------------------------------------------------------------------------------------------
-# R dir()
-# ---------------------------------------------------------------------------------------------
-
-
-def r_collation_key(name: str) -> CollationKey:
-    """Sort key reproducing ICU root collation as R's ``sort()``/``dir()`` apply it.
-
-    Three levels, each compared over the whole string before the next (ICU default strength
-    tertiary): primary weights (whitespace < punctuation and symbols in CLDR order < digits <
-    letters, case-insensitive), secondary weights (accents: ``a < A < ä``), tertiary weights
-    (lower case before upper case: ``aB < Ab``). Letters without a Latin base and ``ß`` fall after
-    ``z`` by code point, a documented deviation in the spirit of decision D-14.
-    """
-    primary: list[tuple[int, int]] = []
-    secondary: list[tuple[int, ...]] = []
-    tertiary: list[int] = []
-    for char in unicodedata.normalize("NFD", name):
-        if unicodedata.combining(char) and secondary:
-            secondary[-1] = (*secondary[-1], ord(char))
-            continue
-        primary.append(_primary_weight(char))
-        secondary.append(())
-        tertiary.append(1 if char.isupper() else 0)
-    return tuple(primary), tuple(secondary), tuple(tertiary), name
-
-
-def _primary_weight(char: str) -> tuple[int, int]:
-    if char.isspace():
-        return (_WHITESPACE, ord(char))
-    if char in _PUNCTUATION_INDEX:
-        return (_PUNCTUATION, _PUNCTUATION_INDEX[char])
-    if "0" <= char <= "9":
-        return (_DIGIT, ord(char))
-    lowered = char.lower()
-    if "a" <= lowered <= "z":
-        return (_LETTER, ord(lowered))
-    return (_OTHER, ord(char))
-
-
-def r_dir(directory: str | os.PathLike[str]) -> list[str]:
-    """R ``dir(path)``: the non-hidden entries of a directory in R's collation order.
-
-    ``dir()`` skips names starting with a dot (``all.files = FALSE``) and returns ``character(0)``
-    for a path that does not exist or is not a directory.
-    """
-    try:
-        names = [entry.name for entry in Path(directory).iterdir() if not entry.name.startswith(".")]
-    except NotADirectoryError, FileNotFoundError:
-        return []
-    return sorted(names, key=r_collation_key)
-
-
-# ---------------------------------------------------------------------------------------------
-# Finding the configuration file
-# ---------------------------------------------------------------------------------------------
-
-
-@dataclass(frozen=True, slots=True)
-class ConfigMatches:
-    """Every entry of ``dir(run)`` matching :data:`CONFIG_FILE_REGEX`, in ``dir()`` order.
-
-    ``getRunStatus`` and ``colRunType`` use the vector as a whole: one match is the file to load,
-    none means ``RunType`` ``"NA"``, and two or more make ``load()``/``loadConfig()`` fail on a
-    vector path (BUG-003) - callers reproduce that from ``names``.
-    """
-
-    directory: Path
-    names: tuple[str, ...]
-
-    @property
-    def path(self) -> Path | None:
-        """The first match (what a caller loads when there is exactly one), or ``None``."""
-        return self.directory / self.names[0] if self.names else None
-
-    @property
-    def paths(self) -> tuple[Path, ...]:
-        """Every match as a path."""
-        return tuple(self.directory / name for name in self.names)
-
-
-def find_config_file(directory: str | os.PathLike[str]) -> ConfigMatches:
-    """``grep("config.Rdata|config.yml", dir(mydir), value = TRUE)`` (``R/getRunStatus.R:41``)."""
-    path = Path(directory)
-    return ConfigMatches(path, tuple(name for name in r_dir(path) if CONFIG_FILE_REGEX.search(name)))
 
 
 class ConfigKind(enum.Enum):

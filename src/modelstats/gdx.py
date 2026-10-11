@@ -50,7 +50,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from itertools import product
 from pathlib import Path
@@ -61,6 +61,7 @@ import gamspy_base
 import pandas as pd
 from gams.core.gdx import gdxcc
 
+from modelstats.errors import ModelstatsError
 from modelstats.rdata_io import r_as_character
 
 VALUE: Final = "value"
@@ -90,7 +91,7 @@ _REGIOSPATIAL: Final = re.compile(r"^[A-Z]+[._][0-9]+$")
 _TEMPORAL: Final = re.compile(r"^[a-z]?[0-9]{4}$")
 
 
-class GdxReadError(Exception):
+class GdxReadError(ModelstatsError):
     """A GDX file could not be read: not a GDX, truncated, missing, or a symbol of the wrong kind.
 
     R aborts in these cases (BUG-037) or errors outside ``try()``; the port raises (D-20).
@@ -187,7 +188,7 @@ def read_symbol_table(path: Path) -> dict[str, SymbolInfo]:
     table: dict[str, SymbolInfo] = {}
     for info, user_info in rows:
         parent = names.get(user_info) if info.kind is SymbolKind.ALIAS else None
-        table[info.name] = SymbolInfo(**{**info.__dict__, "alias_of": parent})
+        table[info.name] = replace(info, alias_of=parent)
     return table
 
 

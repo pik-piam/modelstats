@@ -44,6 +44,9 @@ from rdata.conversion.to_r import DEFAULT_CLASS_MAP as DEFAULT_WRITE_CLASS_MAP
 from rdata.conversion.to_r import build_r_object
 from rdata.parser import RData, RObject, RObjectType
 
+from modelstats.errors import ModelstatsError
+from modelstats.formatting import r_as_character as r_paste0
+
 if TYPE_CHECKING:
     from rdata.conversion.to_r import Converter
 
@@ -61,11 +64,9 @@ _DIFFTIME_SECONDS: Final[Mapping[str, float]] = {
     "weeks": 604800,
 }
 _ARRAY_TYPES: Final = frozenset({RObjectType.LGL, RObjectType.INT, RObjectType.REAL, RObjectType.CPLX})
-_R_DIGITS: Final = 15
-"""Significant digits of ``as.character(<double>)``: R's ``formatReal`` with ``digits = 15``."""
 
 
-class RDataError(Exception):
+class RDataError(ModelstatsError):
     """An R data file could not be read or written with the semantics this module promises."""
 
 
@@ -199,7 +200,7 @@ def _parse(path: Path) -> Any:
     with _quiet_rdata():
         try:
             parsed = rdata.parser.parse_file(path)
-        except FileNotFoundError:
+        except OSError:  # a missing or unopenable file is the caller's R error (gzfile/readChar)
             raise
         except Exception as error:  # rdata raises ValueError, NotImplementedError, struct.error, ...
             raise RDataError(f"cannot read R data file {path}: {error}") from error
@@ -209,8 +210,9 @@ def _parse(path: Path) -> Any:
 def read_rda(path: Path) -> dict[str, Any]:
     """R ``load(path)``: the objects of an ``.Rdata``/``.rda`` file by name.
 
-    ``config.Rdata`` holds ``cfg`` (gzip), ``runstatistics.rda`` holds ``stats`` (XZ). A missing file
-    raises ``FileNotFoundError`` as R's ``load()`` errors; unreadable content raises :class:`RDataError`.
+    ``config.Rdata`` holds ``cfg`` (gzip), ``runstatistics.rda`` holds ``stats`` (XZ). A missing or
+    unopenable file raises the ``OSError`` (``FileNotFoundError``, ``PermissionError``) as R's ``load()``
+    errors with ``cannot open the connection``; unreadable content raises :class:`RDataError`.
     """
     objects = _parse(path)
     if not isinstance(objects, dict):
@@ -278,37 +280,21 @@ def scalar(value: Any) -> RScalar:
     return elements[0]
 
 
-def r_round(value: float) -> int:
-    """R ``round(x, 0)`` as an ``int``: half to even (``round(0.5)`` is 0, ``round(2.5)`` is 2)."""
-    return round(value)
+def whole_number(value: Any) -> int | None:
+    """A length-1 R vector holding a whole number, as an ``int``; ``NULL`` and ``NA`` are ``None``.
 
-
-def _format_double(value: float) -> str:
-    """``as.character(<double>)``: R's ``formatReal`` with 15 significant digits, ``scipen = 0``.
-
-    The shortest representation with at most 15 significant digits is found by rounding to 15
-    and dropping trailing zeros; fixed notation wins over scientific when it is not wider
-    (``1e+05`` beats ``100000``, ``10000`` and ``123456`` stay fixed, ``0.1 + 0.2`` is ``0.3``).
+    The counts of ``projectSummations.rds`` (``R/getRunStatus.R:354-356``) arrive as doubles or integers;
+    a logical counts as 0 or 1, as R's arithmetic takes it. A fraction, a string or any other length
+    raises :class:`RDataError`.
     """
-    if math.isnan(value):
-        return "NaN"
-    if math.isinf(value):
-        return "Inf" if value > 0 else "-Inf"
-    if value == 0:
-        return "0"
-    mantissa, exponent_text = f"{abs(value):.{_R_DIGITS - 1}e}".split("e")
-    exponent = int(exponent_text)
-    significant = len(mantissa.replace(".", "").rstrip("0"))
-    negative = value < 0
-    right_digits = max(0, significant - exponent - 1)
-    left_digits = exponent + 1 if exponent >= 0 else 1
-    fixed_width = negative + left_digits + (right_digits > 0) + right_digits
-    scientific_width = negative + significant + (significant > 1) + (4 if abs(exponent) < 100 else 5)
-    if fixed_width <= scientific_width:
-        return f"{value:.{right_digits}f}"
-    digits = f"{abs(value):.{significant - 1}e}".split("e")[0]
-    sign = "-" if negative else ""
-    return f"{sign}{digits}e{'-' if exponent < 0 else '+'}{abs(exponent):02d}"
+    element = scalar(value)
+    if element is None:
+        return None
+    if isinstance(element, bool | int):
+        return int(element)
+    if isinstance(element, float) and element.is_integer():
+        return int(element)
+    raise RDataError(f"not a whole number: {element!r}")
 
 
 def r_as_character(value: RScalar) -> str | None:
@@ -316,17 +302,10 @@ def r_as_character(value: RScalar) -> str | None:
 
     Doubles follow R's 15-significant-digit rule (``as.character(2)`` is ``"2"``, ``13`` is
     ``"13"``, ``1e5`` is ``"1e+05"``), which is what ``paste0(stats$modelstat, collapse = "")``
-    (``R/getRunStatus.R:92-94``) and the GDX value concatenation produce.
+    (``R/getRunStatus.R:92-94``) and the GDX value concatenation produce; the digits are
+    :func:`modelstats.formatting.r_format_number`'s, the one ``formatReal`` of the package.
     """
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return "TRUE" if value else "FALSE"
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, float):
-        return _format_double(value)
-    return value
+    return None if value is None else r_paste0(value)
 
 
 # ---------------------------------------------------------------------------------------------

@@ -8,7 +8,8 @@ import numpy as np
 import pytest
 import rdata
 
-from modelstats.rdata_io import RDataError, RTime, r_round
+from modelstats.rdata_io import RDataError, RTime
+from modelstats.run_status import whole_seconds
 from modelstats.runstats import RunStatistics, read_run_statistics, run_statistics_from
 
 
@@ -63,7 +64,7 @@ def test_name_tests_are_unanchored_regexes(remind: RunStatistics) -> None:
 def test_gams_wall_seconds_equals_r_difftime(remind: RunStatistics) -> None:
     secs = remind.gams_wall_seconds()
     assert secs == 62730.5  # R: difftime(timeGAMSEnd, timeGAMSStart, units = "secs")
-    assert r_round(secs) == 62730  # R: as.numeric(round(..., 0)) (R/getRunStatus.R:311)
+    assert whole_seconds(secs) == 62730  # R: as.numeric(round(..., 0)) (R/getRunStatus.R:311)
 
 
 def test_magpie_fields(magpie: RunStatistics) -> None:

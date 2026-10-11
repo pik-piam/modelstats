@@ -17,6 +17,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import shutil
 import subprocess
 from collections.abc import Iterator
@@ -27,9 +29,11 @@ from typing import Any
 import pandas as pd
 import pytest
 
-from modelstats.config import ConfigKind, find_config_file, load_config
-from modelstats.env import Mode
-from modelstats.rdata_io import RTime, r_round, read_rds, scalar, write_rds
+from modelstats.config import ConfigKind, load_config
+from modelstats.env import Mode, sort_like_r
+from modelstats.rdata_io import RTime, read_rds, scalar, write_rds
+from modelstats.run_status import whole_seconds
+from modelstats.run_type import CONFIG_FILE_PATTERN
 from modelstats.runstats import RunStatistics, read_run_statistics
 from tests.conftest import FIXTURES, GOLDENS, SYNTHETIC, GoldenCase, golden_cases
 
@@ -166,7 +170,7 @@ def expected_runtime(status: StatusRow, stats: RunStatistics | None) -> int | No
         secs = None if stats.time_prepare_start is None else now.elapsed_since(stats.time_prepare_start)
     else:
         return None
-    return None if secs is None else r_round(secs)
+    return None if secs is None else whole_seconds(secs)
 
 
 @pytest.mark.parametrize("status", STATUS_ROWS, ids=lambda status: status.id)
@@ -201,17 +205,23 @@ def test_project_summation_columns_equal_the_rds(status: StatusRow) -> None:
     assert [status.row[column] for column in columns] == [scalar(scenario_mip.get(key)) for key in keys]
 
 
+def config_matches(run_dir: Path) -> list[Path]:
+    """``grep("config.Rdata|config.yml", dir(ii), value = TRUE)`` (``R/getRunStatus.R:41``) on one layer."""
+    names = [n for n in os.listdir(run_dir) if not n.startswith(".") and re.search(CONFIG_FILE_PATTERN, n)]
+    return [run_dir / name for name in sort_like_r(names)]
+
+
 def expected_mif(status: StatusRow) -> str:
     """``R/getRunStatus.R:120-138``: the config title, the model of ``runstatistics.rda``, the files."""
     run_dir = overlay(status.run)
     assert run_dir is not None
-    matches = find_config_file(run_dir)
-    if len(matches.names) != 1:  # none: "NA"; two or more: the R call errors and has no golden row
+    matches = config_matches(run_dir)
+    if len(matches) != 1:  # none: "NA"; two or more: the R call errors and has no golden row
         return "NA"
     if is_magpie(statistics_of(status.run)):
         validation = overlay(Path(status.run) / "validation.mif")
         return "yes" if validation is not None and validation.stat().st_size > 99999 else "no"
-    cfg = load_config(matches.paths[0])
+    cfg = load_config(matches[0])
     if overlay(Path(status.run) / f"REMIND_generic_{cfg.title}.mif") is None:
         return "no"
     if overlay(Path(status.run) / f"REMIND_generic_{cfg.title}_summation_errors.csv") is not None:

@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 
 from modelstats.env import ClusterPaths, FakeEffects
-from modelstats.facts import ARGUMENT_OF_LENGTH_ZERO, MISSING_VALUE, RunReadError
+from modelstats.facts import ARGUMENT_OF_LENGTH_ZERO, MISSING_VALUE_IN_IF, RunReadError
 from modelstats.run_status import (
     INCORRECT_DIMENSIONS,
     REPLACEMENT_LENGTH_ZERO,
@@ -27,6 +27,7 @@ from modelstats.run_status import (
     merge_records,
     ordered_directories,
     to_dataframe,
+    whole_seconds,
 )
 from tests.unit.test_facts import (
     ME,
@@ -282,7 +283,7 @@ def test_modelstat_fallback_aborts_on_a_null_or_na_model_name(tmp_path: Path) ->
     with pytest.raises(RunReadError, match=ARGUMENT_OF_LENGTH_ZERO):
         one(tmp_path, null)
     na = remind_run(tmp_path, "na", stats={"config": {"model_name": np.array([None], dtype=object)}})
-    with pytest.raises(RunReadError, match=MISSING_VALUE):
+    with pytest.raises(RunReadError, match=MISSING_VALUE_IN_IF):
         one(tmp_path, na)
 
 
@@ -607,7 +608,7 @@ def test_conv_aborts_as_r_does(tmp_path: Path) -> None:
         one(tmp_path, no_flag)
     # BUG-038 / D-23: a selected GDX without o_iterationNumber and s80_bool == 0
     no_iteration = remind_run(tmp_path, "b", gdx={"o_modelstat": 2, "s80_bool": 0})
-    with pytest.raises(RunReadError, match=MISSING_VALUE):
+    with pytest.raises(RunReadError, match=MISSING_VALUE_IN_IF):
         one(tmp_path, no_iteration)
     no_maximum = remind_run(
         tmp_path,
@@ -615,7 +616,7 @@ def test_conv_aborts_as_r_does(tmp_path: Path) -> None:
         cfg=remind_cfg(iteration_max=None, autoconverge=None),
         gdx={"o_iterationNumber": 2, "s80_bool": 0},
     )
-    with pytest.raises(RunReadError, match=MISSING_VALUE):
+    with pytest.raises(RunReadError, match=MISSING_VALUE_IN_IF):
         one(tmp_path, no_maximum)
     no_report = remind_run(tmp_path, "d", gdx={"o_iterationNumber": 2, "o_modelstat": 2, "s80_bool": 0})
     with pytest.raises(RunReadError, match=INCORRECT_DIMENSIONS):
@@ -670,6 +671,11 @@ def test_runtime(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------------------------
 # Sanity block (R/getRunStatus.R:316-360)
 # ---------------------------------------------------------------------------------------------
+
+
+def test_whole_seconds_rounds_half_to_even() -> None:
+    """R 4.6.1: ``round(c(0.5, 1.5, 2.5, 62730.5, -0.5), 0)`` is ``0 2 2 62730 0`` (``:311``)."""
+    assert [whole_seconds(x) for x in (0.5, 1.5, 2.5, 62730.5, -0.5, 7.4, 7.6)] == [0, 2, 2, 62730, 0, 7, 8]
 
 
 def test_sanity_counts(tmp_path: Path) -> None:

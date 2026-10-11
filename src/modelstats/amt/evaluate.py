@@ -33,7 +33,9 @@ what changes under decision D-24). The steps, in R's order, with the lines they 
    and missed a scenario hidden by one started twice, BUG-024); a non-empty list is written to the README
    and added to the error list as :data:`SCENARIOS_NOT_STARTED`.
 7. :func:`testthat_result` (``:380-398``): ``<checkout>/test-full.log`` (R's ``../test-full.log`` from
-   ``output/``), the last ``[ FAIL`` line, renamed to ``<checkout>/tests/test-full-<mtime date>.log``.
+   ``output/``), the last ``[ FAIL`` line, as a :class:`TestthatVerdict`; the rename to
+   ``<checkout>/tests/test-full-<mtime date>.log`` (``:389``) is deferred to step 12
+   (:func:`archive_testthat_log`) so that a retried evaluation reads the same log.
 8. :func:`archive_old_runs` (``:400-418``): the ``*AMT*`` directories of ``output/`` whose folder date is
    older than 90 days are moved into ``output/archive/`` one by one through ``Effects.move``, the
    directory created when missing (D-24: BUG-016, BUG-033 gone).
@@ -41,16 +43,20 @@ what changes under decision D-24). The steps, in R's order, with the lines they 
    :mod:`modelstats.amt.readme`, written next to the cycle log (:func:`readme_path`; R used ``tempdir()``).
 10. :func:`publish_readme` (``:433-445``) unless ``--no-publish``: in the report repository ``git reset
     --hard origin/master``, ``git pull``, the copy as ``README.md``, ``git add README.md``, ``git commit -m
-    'Automated Test Results'``, ``git push``; a failing ``git`` is logged and tolerated as R's ``system()``
-    tolerated it.
+    'Automated Test Results'``, ``git push``, each ``git`` checked (D-24, the evaluate counterpart of
+    BUG-075: R's ``system()`` ignored every status, so a failed push left the README unpublished and
+    nobody told); a non-zero status fails the cycle, which keeps the cycle for a retry. A ``README.md``
+    already equal to the new one after the pull is not committed (:attr:`Publication.UNCHANGED`: the
+    retry of a cycle whose push succeeded before the state was saved).
 11. The Mattermost message (``:447-486``) through :mod:`modelstats.amt.notify`: the ``rs -A`` and sanity
     tables of the started runs, the summary, the testthat sentence, the git lines, the scenarios that
     did not start; composed and posted only when the webhook variable is set (``:449``: without a token
     R captured nothing either). The sanity table lists the cycle's started runs of the checkout's
     ``output/`` (D-24: ``getSanityChecks()`` read the hard-coded cluster path, a path-arithmetic
     artefact of the kind BUG-013 names).
-12. The transition ``started -> idle`` (``06`` 3.2): :func:`modelstats.amt.state.complete` with the tested
-    commit and the summary, saved through the store (R saved ``lastcommit.rds`` last, ``:489``).
+12. The ``test-full.log`` rename of step 7 (:func:`archive_testthat_log`), then the transition ``started
+    -> idle`` (``06`` 3.2): :func:`modelstats.amt.state.complete` with the tested commit and the summary,
+    saved through the store (R saved ``lastcommit.rds`` last, ``:489``).
 
 The command receives the :class:`modelstats.amt.context.AmtContext` that ``start`` receives too (``06``
 4.3). Any exception after the pre-checks (:func:`cycle_to_evaluate`, the report repository) goes through
@@ -75,6 +81,7 @@ import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
+from enum import Enum
 from pathlib import Path
 from typing import Final, Protocol
 
@@ -91,7 +98,14 @@ from modelstats.amt.notify import (
 )
 from modelstats.amt.previous import ARCHIVE_DIR, find_previous_run
 from modelstats.amt.readme import ReadmeReport, git_info_lines, render_readme, summary_line
-from modelstats.amt.state import AmtState, AmtStateError, Command, Cycle, StateStore, describe, target_phase
+from modelstats.amt.state import (
+    AmtState,
+    Command,
+    Cycle,
+    StateStore,
+    evaluable_cycle,
+    target_phase,
+)
 from modelstats.amt.state import complete as complete_state
 from modelstats.env import Effects, PathLike
 from modelstats.errors import ModelstatsError
@@ -124,8 +138,11 @@ __all__ = [
     "EvaluateContext",
     "EvaluateError",
     "Evaluation",
+    "Publication",
     "RunReview",
+    "TestthatVerdict",
     "archive_old_runs",
+    "archive_testthat_log",
     "compare_scenarios_argv",
     "comparison_pending",
     "cycle_to_evaluate",
@@ -349,6 +366,30 @@ class RunReview:
     rse_updated: bool = False
 
 
+class Publication(Enum):
+    """What :func:`publish_readme` did in the report repository."""
+
+    COMMITTED = "committed"
+    """``README.md`` differed from the repository's: copied, added, committed and pushed."""
+    UNCHANGED = "unchanged"
+    """``README.md`` already equal after ``git pull``: nothing to commit (a retry after a successful push)."""
+
+
+@dataclass(frozen=True)
+class TestthatVerdict:
+    """The ``make test-full`` result of ``R/modeltests.R:380-398`` before the log is archived.
+
+    ``sentence`` is the line of the Mattermost message; ``log`` the ``<checkout>/test-full.log`` that was
+    read (``None`` when there is none, :data:`TESTTHAT_MISSING`); ``kept`` where
+    :func:`archive_testthat_log` moves it (``tests/test-full-<mtime date>.log``, the path the sentence
+    names).
+    """
+
+    sentence: str
+    log: Path | None = None
+    kept: Path | None = None
+
+
 @dataclass(frozen=True)
 class Evaluation:
     """What one ``evaluate`` produced, for the command line and the tests."""
@@ -360,12 +401,13 @@ class Evaluation:
     reviews: tuple[RunReview, ...]
     runs_not_started: tuple[str, ...]
     testthat_result: str
+    testthat_log: Path | None
     archived: tuple[str, ...]
     errors: tuple[str, ...]
     summary: str
     readme: str
     readme_path: Path
-    published: bool
+    publication: Publication | None
     delivery: Delivery
     state: AmtState
 
@@ -373,6 +415,11 @@ class Evaluation:
     def runs_started(self) -> tuple[str, ...]:
         """The names of the started runs in README order."""
         return tuple(review.run.name for review in self.reviews)
+
+    @property
+    def published(self) -> bool:
+        """Whether a new ``README.md`` reached the report repository (``None``: ``--no-publish``)."""
+        return self.publication is Publication.COMMITTED
 
 
 # ---------------------------------------------------------------------------------------------
@@ -384,15 +431,10 @@ def cycle_to_evaluate(state: AmtState) -> Cycle:
     """The cycle ``evaluate`` works on, or :class:`AmtStateError` before anything happens (``06`` 3.2).
 
     ``started`` and ``failed`` may evaluate (:func:`modelstats.amt.state.target_phase`); a ``failed`` state
-    without a cycle has nothing to retry (the message points at ``reset``).
+    without a cycle has nothing to retry (:func:`modelstats.amt.state.evaluable_cycle` points at ``reset``).
     """
     target_phase(state, Command.EVALUATE)
-    if state.cycle is None:
-        raise AmtStateError(
-            f"cannot 'evaluate': {describe(state)}; no cycle is recorded to retry, run 'modeltests reset'"
-            " and then 'modeltests start'"
-        )
-    return state.cycle
+    return evaluable_cycle(state)
 
 
 def _report_repo(ctx: EvaluateContext) -> Path | None:
@@ -688,33 +730,61 @@ def scenarios_not_started(started: Iterable[str], expected: Iterable[str]) -> li
 # ---------------------------------------------------------------------------------------------
 
 
-def testthat_result(effects: Effects, logger: logging.Logger, checkout: Path) -> str:
-    """The ``make test-full`` sentence of the message, and the rename of the log (``R/modeltests.R:380-398``).
+def testthat_result(effects: Effects, checkout: Path) -> TestthatVerdict:
+    """The ``make test-full`` sentence of the message (``R/modeltests.R:380-398``), a pure read.
 
-    ``<checkout>/test-full.log`` is read, its last ``[ FAIL`` line is the status, and the file moves to
-    ``<checkout>/tests/test-full-<mtime date>.log`` (``tests/`` created when missing; R's ``file.rename``
-    silently failed without it). Without the file the sentence says so and nothing moves. R took the
-    last *six* ``[ FAIL`` lines (``tail()``) and ``isTRUE()`` of a vector, which is ``FALSE`` for two or
+    ``<checkout>/test-full.log`` is read and its last ``[ FAIL`` line is the status; the sentence names
+    ``<checkout>/tests/test-full-<mtime date>.log``, where :func:`archive_testthat_log` moves the file
+    at the end of the evaluation (R renamed it here, ``:389``, before the README, the publication and the
+    message: a crash in any of them made the retry of ``06`` 3.2 report ``test-full.log not found``, Codex
+    review 2026-10-11, finding 4). Without the file the sentence says so and nothing is to be moved. R took
+    the last *six* ``[ FAIL`` lines (``tail()``) and ``isTRUE()`` of a vector, which is ``FALSE`` for two or
     more: the rewrite reads the last line.
     """
     log_path = checkout / TEST_FULL_LOG
     info = effects.stat(log_path)
     if info is None:
-        return TESTTHAT_MISSING
+        return TestthatVerdict(TESTTHAT_MISSING)
     date_tag = info.mtime.strftime("%Y-%m-%d")
     lines = effects.read_text(log_path).splitlines()
     fails = [line for line in lines if FAIL_MARK in line]
     status = fails[-1] if fails else None
-    new_path = checkout / TESTS_DIR / f"test-full-{date_tag}.log"
-    effects.mkdir(new_path.parent)
-    effects.rename(log_path, new_path)
-    logger.info("renamed %s to %s", log_path, new_path)
-    kept = effects.normalize_path(new_path)
+    kept = _kept_log_path(effects, checkout, date_tag)
     if status is None:
-        return f"`make test-full` did not run properly. Check {kept}"
-    if not ("FAIL 0" in status and "WARN 0" in status):
-        return f"Not all tests pass in `make test-full`: {status}. Check `{kept}`"
-    return f"All tests pass in `make test-full`: {status}"
+        sentence = f"`make test-full` did not run properly. Check {kept}"
+    elif not ("FAIL 0" in status and "WARN 0" in status):
+        sentence = f"Not all tests pass in `make test-full`: {status}. Check `{kept}`"
+    else:
+        sentence = f"All tests pass in `make test-full`: {status}"
+    return TestthatVerdict(sentence, log_path, kept)
+
+
+def _kept_log_path(effects: Effects, checkout: Path, date_tag: str) -> Path:
+    """``normalizePath("../tests/test-full-<date>.log")`` (``R/modeltests.R:388-391``), before the move.
+
+    R normalised the moved file; the same real path is the canonical ``tests/`` directory plus the name
+    (``tests/`` of the checkout when it exists, else the canonical checkout plus ``tests``, which the
+    archive step creates).
+    """
+    name = f"test-full-{date_tag}.log"
+    tests_dir = checkout / TESTS_DIR
+    if effects.is_dir(tests_dir):
+        return Path(effects.normalize_path(tests_dir)) / name
+    return Path(effects.normalize_path(checkout)) / TESTS_DIR / name
+
+
+def archive_testthat_log(effects: Effects, logger: logging.Logger, verdict: TestthatVerdict) -> None:
+    """Move ``test-full.log`` to ``tests/test-full-<date>.log`` (``R/modeltests.R:389``), last of all.
+
+    ``tests/`` is created when missing (R's ``file.rename`` silently failed without it, BUG-079). Nothing
+    happens for a verdict without a log. Called right before the state is saved so that an evaluation
+    that fails after the sentence was composed leaves the log where a retry reads it again.
+    """
+    if verdict.log is None or verdict.kept is None:
+        return
+    effects.mkdir(verdict.kept.parent)
+    effects.rename(verdict.log, verdict.kept)
+    logger.info("renamed %s to %s", verdict.log, verdict.kept)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -789,18 +859,30 @@ def readme_path(log_dir: Path, cycle_id: str) -> Path:
     return log_dir / README_FILE_TEMPLATE.format(cycle_id=cycle_id)
 
 
-def publish_readme(effects: Effects, logger: logging.Logger, report_repo: PathLike, readme: PathLike) -> None:
+def publish_readme(
+    effects: Effects, logger: logging.Logger, report_repo: PathLike, readme: PathLike
+) -> Publication:
     """``R/modeltests.R:434-444`` in the report repository: reset, pull, copy, add, commit, push.
 
-    Each ``git`` runs through :func:`modelstats.amt.logs.run_logged`; a non-zero status is logged as a
-    warning and the sequence goes on, as R's ``system()`` calls went on.
+    Each ``git`` runs through :func:`modelstats.amt.logs.run_logged` with ``check=True``: a non-zero
+    status raises :class:`modelstats.env.CommandFailedError`, which ``evaluate_cycle`` records as the
+    ``failed`` state with the cycle kept, so that ``evaluate`` can retry once the repository is reachable
+    (D-24; R's ``system()`` calls went on and the README silently never reached ``testing_suite``, the
+    evaluate counterpart of BUG-075). After ``git pull`` a ``README.md`` equal to the new one is left
+    alone (:attr:`Publication.UNCHANGED`): that is the retry of a cycle whose push succeeded before the
+    state was saved, where ``git commit`` would exit 1 with ``nothing to commit``.
     """
-    run_logged(effects, logger, [GIT, "reset", "--hard", "origin/master"], cwd=report_repo)
-    run_logged(effects, logger, [GIT, "pull"], cwd=report_repo)
-    effects.copy(readme, f"{os.fspath(report_repo)}/{PUBLISHED_NAME}")
-    run_logged(effects, logger, [GIT, "add", PUBLISHED_NAME], cwd=report_repo)
-    run_logged(effects, logger, [GIT, "commit", "-m", COMMIT_MESSAGE], cwd=report_repo)
-    run_logged(effects, logger, [GIT, "push"], cwd=report_repo)
+    run_logged(effects, logger, [GIT, "reset", "--hard", "origin/master"], cwd=report_repo, check=True)
+    run_logged(effects, logger, [GIT, "pull"], cwd=report_repo, check=True)
+    target = f"{os.fspath(report_repo)}/{PUBLISHED_NAME}"
+    if effects.exists(target) and effects.read_text(target) == effects.read_text(readme):
+        logger.info("%s unchanged in %s: nothing to commit or push", PUBLISHED_NAME, os.fspath(report_repo))
+        return Publication.UNCHANGED
+    effects.copy(readme, target)
+    run_logged(effects, logger, [GIT, "add", PUBLISHED_NAME], cwd=report_repo, check=True)
+    run_logged(effects, logger, [GIT, "commit", "-m", COMMIT_MESSAGE], cwd=report_repo, check=True)
+    run_logged(effects, logger, [GIT, "push"], cwd=report_repo, check=True)
+    return Publication.COMMITTED
 
 
 # ---------------------------------------------------------------------------------------------
@@ -887,8 +969,8 @@ def _evaluate(ctx: EvaluateContext, cycle: Cycle, report_repo: Path | None) -> E
     if not_started:
         logger.info("These scenarios did not start at all: %s", ", ".join(not_started))
         errors.append(SCENARIOS_NOT_STARTED)
-    testthat = testthat_result(effects, logger, ctx.checkout)
-    logger.info("%s", testthat)
+    verdict = testthat_result(effects, ctx.checkout)
+    logger.info("%s", verdict.sentence)
     archived = archive_old_runs(effects, logger, output_dir, effects.now().date())
     if not started:
         errors.append(NO_RUNS_STARTED)
@@ -907,9 +989,11 @@ def _evaluate(ctx: EvaluateContext, cycle: Cycle, report_repo: Path | None) -> E
     effects.mkdir(ctx.log_dir)
     effects.write_text(readme_file, readme)
     logger.info("Finished compiling README.md (%s)", readme_file)
+    publication = None
     if report_repo is not None:
-        publish_readme(effects, logger, report_repo, readme_file)
-    delivery = _notify_status(ctx, report, testthat, started)
+        publication = publish_readme(effects, logger, report_repo, readme_file)
+    delivery = _notify_status(ctx, report, verdict.sentence, started)
+    archive_testthat_log(effects, logger, verdict)
     state = complete_state(ctx.state, evaluated_at=effects.now(), tested_commit=commit, summary=summary)
     ctx.store.save(state)
     logger.info("Evaluation of cycle %s finished: %s", cycle.id, summary)
@@ -920,13 +1004,14 @@ def _evaluate(ctx: EvaluateContext, cycle: Cycle, report_repo: Path | None) -> E
         merges=tuple(merges),
         reviews=tuple(reviews),
         runs_not_started=tuple(not_started),
-        testthat_result=testthat,
+        testthat_result=verdict.sentence,
+        testthat_log=verdict.kept,
         archived=tuple(archived),
         errors=tuple(errors),
         summary=summary,
         readme=readme,
         readme_path=readme_file,
-        published=report_repo is not None,
+        publication=publication,
         delivery=delivery,
         state=state,
     )

@@ -33,6 +33,8 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Protocol, runtime_checkable
 
+from modelstats.errors import ARGUMENT_OF_LENGTH_ZERO, ModelstatsError
+
 __all__ = [
     "ARGUMENT_OF_LENGTH_ZERO",
     "INVALID_TIMES_ARGUMENT",
@@ -92,9 +94,8 @@ LOCAL_COLUMNS: tuple[str, ...] = (
 UNDEFINED_COLUMNS = "undefined columns selected"
 #: R's message for ``rep(" ", len)`` with an ``NA`` or negative ``len`` (``R/printOutput.R:17-18``).
 INVALID_TIMES_ARGUMENT = "invalid 'times' argument"
-#: R's message for ``if (is.na(NULL))``: ``rownames()`` of the vector that ``string[, cols]`` becomes
-#: for a single column (``R/printOutput.R:38, 47``; see ``print_output``).
-ARGUMENT_OF_LENGTH_ZERO = "argument is of length zero"
+#: ``ARGUMENT_OF_LENGTH_ZERO`` (``modelstats.errors``) is raised for ``if (is.na(NULL))``: ``rownames()`` of
+#: the vector that ``string[, cols]`` becomes for a single column (``R/printOutput.R:38, 47``).
 
 #: Width of column ``i`` (counting from the last one) when no width is given (``R/printOutput.R:46``).
 _WIDTH_OFFSET = 12
@@ -129,7 +130,7 @@ _PENDING_SUFFIX = re.compile(r"pending$")
 _STARTUP_SUFFIX = re.compile(r"startup$")
 
 
-class PrintOutputError(RuntimeError):
+class PrintOutputError(ModelstatsError):
     """An R error of ``printOutput()``; ``str(error)`` is the R condition message."""
 
 

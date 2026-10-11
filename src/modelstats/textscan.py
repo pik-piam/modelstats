@@ -61,6 +61,8 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import BinaryIO, Final
 
+from modelstats.env import PathLike
+
 __all__ = [
     "CALIBRATION_LINE",
     "CHUNK_SIZE",
@@ -112,7 +114,6 @@ __all__ = [
     "tail_last_line",
 ]
 
-type PathLike = str | os.PathLike[str]
 type Source = PathLike | BinaryIO
 type Pattern = re.Pattern[bytes] | bytes
 """A compiled bytes regular expression, or a bytes literal matched as a fixed string."""

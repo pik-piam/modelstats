@@ -28,13 +28,14 @@ from modelstats.rdata_io import (
     RTime,
     element,
     r_as_character,
-    r_round,
     read_rda,
     read_rds,
     scalar,
     vector,
+    whole_number,
     write_rds,
 )
+from modelstats.run_status import whole_seconds
 
 BERLIN = ZoneInfo("Europe/Berlin")
 RSCRIPT = shutil.which("Rscript")
@@ -185,16 +186,25 @@ def test_posixct_is_an_rtime_with_epoch_and_tzone(stats: dict[str, Any], r_testd
 def test_gams_wall_time_and_whole_second_rounding(stats: dict[str, Any]) -> None:
     secs = stats["timeGAMSEnd"].elapsed_since(stats["timeGAMSStart"])
     assert secs == 62730.5  # R: difftime(timeGAMSEnd, timeGAMSStart, units = "secs")
-    assert r_round(secs) == 62730  # R: as.numeric(round(difftime, 0)) rounds half to even
+    assert whole_seconds(secs) == 62730  # R: as.numeric(round(difftime, 0)) rounds half to even
 
 
 def test_difftime_arrives_in_seconds(stats: dict[str, Any]) -> None:
     assert stats["runtime"] == 3.5 * 3600  # as.difftime(3.5, units = "hours")
 
 
-def test_r_round_is_half_to_even() -> None:
-    """R 4.6.1: ``round(c(0.5, 1.5, 2.5, 62730.5, -0.5), 0)`` is ``0 2 2 62730 0``."""
-    assert [r_round(x) for x in (0.5, 1.5, 2.5, 62730.5, -0.5, 7.4, 7.6)] == [0, 2, 2, 62730, 0, 7, 8]
+def test_whole_number_reads_the_counts_of_project_summations() -> None:
+    """``tmp[["ScenarioMIP"]][[name]]`` (``R/getRunStatus.R:354-356``): double, integer, logical, ``NA``."""
+    assert whole_number(np.array([3.0])) == 3
+    assert whole_number(np.array([7], dtype=np.int32)) == 7
+    assert whole_number(True) == 1 and whole_number(0) == 0
+    assert whole_number(None) is None and whole_number(np.array([np.nan])) is None
+    with pytest.raises(RDataError, match="not a whole number"):
+        whole_number(1.5)
+    with pytest.raises(RDataError, match="not a whole number"):
+        whole_number("3")
+    with pytest.raises(RDataError, match="length-1"):
+        whole_number(np.array([1.0, 2.0]))
 
 
 # R 4.6.1 under TZ=Europe/Berlin (the cluster's zone):
@@ -231,7 +241,7 @@ def test_elapsed_seconds_across_the_2026_dst_transitions(
         assert start.is_na or end.is_na
         assert (start.local() is None) == start.is_na
     else:
-        assert r_round(expected) == expected
+        assert expected == int(expected)
         # The trap of 02 section 4.2: two aware datetimes sharing one ZoneInfo subtract as wall-clock
         # values, and every pair here straddles a transition, so that difference is off by one hour.
         berlin_start = start.as_datetime().astimezone(BERLIN)  # type: ignore[union-attr]

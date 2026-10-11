@@ -487,7 +487,9 @@ def test_remind_start_and_toggle_cases_end_to_end(case_id: str, sandbox_runner: 
     assert golden_result(case_id) == case.r_status
     state = played.state
     assert state is not None and state.phase is case.phase
-    assert_r_files_untouched(played, runcode_rewritten=case_id == "remind-start")
+    # runcode.rds is written at the checkpoint before the first submission: a start that fails at make has
+    # rewritten it, one that fails at the first git reset has not (start.py, "Order")
+    assert_r_files_untouched(played, runcode_rewritten=case_id in ("remind-start", "remind-start-make-fail"))
     if case_id == "remind-nothing":
         assert state.cycle is not None and state.cycle.id == MIGRATED_CYCLE
         assert state.last_error is not None and "'next:foo'" in state.last_error.message

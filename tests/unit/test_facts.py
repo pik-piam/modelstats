@@ -33,15 +33,19 @@ from modelstats import facts as facts_module
 from modelstats import gdx as gdx_module
 from modelstats.config import load_config
 from modelstats.env import CannedSlurm, ClusterPaths, FakeEffects, OverlayPaths, ProductionEffects
+from modelstats.errors import DeferredWarning
 from modelstats.facts import (
     ARGUMENT_OF_LENGTH_ZERO,
+    CANNOT_OPEN_CONNECTION,
     CONDITION_LENGTH_ABOVE_ONE,
+    FILE_RT_CALL,
+    GZFILE_RB_CALL,
     INVALID_DESCRIPTION,
     NO_LINES_IN_INPUT,
+    READCHAR_CALL,
     RunFacts,
     RunFiles,
     RunReadError,
-    physical_path,
 )
 from modelstats.gdx import GdxFile
 from modelstats.rdata_io import RTime, read_rds, write_rds
@@ -313,6 +317,21 @@ def test_config_matches_are_the_unanchored_regex_in_r_order(tmp_path: Path) -> N
     assert files.config_matches == ("config.Rdata", "config.Rdata.bak", "zconfig.yml")
 
 
+def test_config_matches_follow_bug_003(tmp_path: Path) -> None:
+    """BUG-003 (D-01, parity): ``.`` is any character, ``grep`` is case-sensitive, dot names are unseen."""
+    names = {"config.Rdata", "config.Rdata.bak", "old_config.yml", "configXyml", "cfg.yml", ".config.yml"}
+    run = make_run(tmp_path, "run", dict.fromkeys(names, ""))
+    assert RunFiles(str(run), effects(tmp_path)).config_matches == (
+        "config.Rdata",
+        "config.Rdata.bak",
+        "configXyml",
+        "old_config.yml",
+    )
+    other = make_run(tmp_path, "other", dict.fromkeys(("config.yml", "Config.yml", "config.yml~"), ""))
+    assert RunFiles(str(other), effects(tmp_path)).config_matches == ("config.yml", "config.yml~")
+    assert RunFiles(str(tmp_path / "absent"), effects(tmp_path)).config_matches == ()
+
+
 def test_grid_logs_are_globbed(tmp_path: Path) -> None:
     run = make_run(
         tmp_path,
@@ -324,17 +343,18 @@ def test_grid_logs_are_globbed(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------------------------
-# physical_path
+# RunFiles.physical: the file a library opens (Effects.physical_path)
 # ---------------------------------------------------------------------------------------------
 
 
-def test_physical_path_is_identity_without_an_overlay(tmp_path: Path) -> None:
-    assert physical_path(f"{tmp_path}/a", effects(tmp_path)) == Path(f"{tmp_path}/a")
-    assert physical_path("relative/a", effects(tmp_path)) == tmp_path / "relative" / "a"  # the fake cwd
-    assert physical_path("relative/a", ProductionEffects()) == Path("relative/a")  # the process cwd
+def test_physical_is_the_path_itself_without_an_overlay(tmp_path: Path) -> None:
+    files = RunFiles(str(tmp_path), effects(tmp_path))
+    assert files.physical(f"{tmp_path}/a") == Path(f"{tmp_path}/a")
+    assert files.physical("relative/a") == tmp_path / "relative" / "a"  # the fake cwd
+    assert RunFiles(".", ProductionEffects()).physical("relative/a") == Path("relative/a")  # the process cwd
 
 
-def test_physical_path_maps_a_logical_path_through_the_overlay(tmp_path: Path) -> None:
+def test_physical_maps_a_logical_path_through_the_overlay(tmp_path: Path) -> None:
     layer = tmp_path / "layer"
     (layer / "projects" / "run").mkdir(parents=True)
     (layer / "projects" / "run" / "full.log").write_text("x")
@@ -345,9 +365,10 @@ def test_physical_path_maps_a_logical_path_through_the_overlay(tmp_path: Path) -
         paths=OverlayPaths(PurePosixPath("/p"), (layer,)),
         cwd="/p/projects",
     )
-    assert physical_path("/p/projects/run/full.log", env) == layer / "projects" / "run" / "full.log"
-    assert physical_path("run/full.log", env) == layer / "projects" / "run" / "full.log"
-    assert physical_path("/p/projects/run/missing", env) == Path("/p/projects/run/missing")
+    files = RunFiles("/p/projects/run", env)
+    assert files.physical("/p/projects/run/full.log") == layer / "projects" / "run" / "full.log"
+    assert files.physical("run/full.log") == layer / "projects" / "run" / "full.log"
+    assert files.physical("/p/projects/run/missing") == Path("/p/projects/run/missing")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -681,6 +702,77 @@ def test_empty_csv_aborts_like_read_csv2(tmp_path: Path) -> None:
     run = make_run(tmp_path, "run", {"log_fixOnRef.csv": ""})
     with pytest.raises(RunReadError, match=NO_LINES_IN_INPUT):
         _ = facts_of(run, effects(tmp_path)).fix_error_count
+
+
+@NOT_ROOT
+def test_unopenable_csv_aborts_like_read_csv2(tmp_path: Path) -> None:
+    """``file(file, "rt")`` cannot open the file: R's error, the ``cannot open file`` warning deferred.
+
+    ``read.csv2`` on a mode-000 file (R 4.6.1): ``Error in file(file, "rt") : cannot open the connection``
+    and ``In addition: Warning message: In file(file, "rt") : cannot open file '<path>': Permission
+    denied``; never a bare ``OSError`` (Codex review 2026-10-11, finding 6).
+    """
+    run = make_run(tmp_path, "run", {"log_fixOnRef.csv": "variable,region\nV1,EUR\n"})
+    facts = facts_of(run, effects(tmp_path))
+    assert facts.fix_errors_exist
+    with unreadable(run / "log_fixOnRef.csv"), pytest.raises(RunReadError, match=CANNOT_OPEN_CONNECTION) as e:
+        _ = facts.fix_error_count
+    assert e.value.call == FILE_RT_CALL
+    assert facts.deferred_warnings == [
+        DeferredWarning(FILE_RT_CALL, f"cannot open file '{run}/log_fixOnRef.csv': Permission denied")
+    ]
+
+
+def test_a_csv_gone_since_file_exists_aborts_like_read_csv2(tmp_path: Path) -> None:
+    """The race between ``file.exists`` (``:344``) and ``read.csv2`` (``:345``): the same R error."""
+    run = make_run(tmp_path, "run", {"REMIND_generic_t_summation_errors.csv": "model,variable\na,X\n"})
+    facts = facts_of(run, effects(tmp_path))
+    assert facts.summation_errors_exist("t")
+    (run / "REMIND_generic_t_summation_errors.csv").unlink()
+    with pytest.raises(RunReadError, match=CANNOT_OPEN_CONNECTION) as e:
+        _ = facts.summation_error_count("t")
+    assert e.value.call == FILE_RT_CALL
+    assert facts.deferred_warnings == [
+        DeferredWarning(
+            FILE_RT_CALL,
+            f"cannot open file '{run}/REMIND_generic_t_summation_errors.csv': No such file or directory",
+        )
+    ]
+
+
+@NOT_ROOT
+def test_unopenable_project_summations_aborts_like_read_rds(tmp_path: Path) -> None:
+    """``readRDS`` on a mode-000 file (R 4.6.1): ``gzfile(file, "rb")`` and the deferred warning."""
+    run = make_run(tmp_path, "run")
+    write_rds(run / "projectSummations.rds", {"ScenarioMIP": {"missingVars": 2}})
+    facts = facts_of(run, effects(tmp_path))
+    with (
+        unreadable(run / "projectSummations.rds"),
+        pytest.raises(RunReadError, match=CANNOT_OPEN_CONNECTION) as e,
+    ):
+        _ = facts.project_summations
+    assert e.value.call == GZFILE_RB_CALL
+    assert facts.deferred_warnings == [
+        DeferredWarning(
+            GZFILE_RB_CALL,
+            f"cannot open compressed file '{run}/projectSummations.rds', probable reason 'Permission denied'",
+        )
+    ]
+
+
+@NOT_ROOT
+def test_unopenable_runstatistics_aborts_like_load(tmp_path: Path) -> None:
+    """``load()`` on a mode-000 file (R 4.6.1): ``readChar(con, 5L, useBytes = TRUE)``, no warning (:78)."""
+    run = make_run(tmp_path, "run")
+    write_stats(run, remind_stats())
+    facts = facts_of(run, effects(tmp_path))
+    with (
+        unreadable(run / "runstatistics.rda"),
+        pytest.raises(RunReadError, match=CANNOT_OPEN_CONNECTION) as e,
+    ):
+        _ = facts.statistics
+    assert e.value.call == READCHAR_CALL
+    assert facts.deferred_warnings == []
 
 
 def test_project_summations_rds(tmp_path: Path) -> None:

@@ -19,8 +19,13 @@ import pytest
 
 from modelstats.env import FakeEffects
 from modelstats.errors import ModelstatsError, RunReadError
-from modelstats.facts import ARGUMENT_OF_LENGTH_ZERO, INVALID_DESCRIPTION, MISSING_VALUE
-from modelstats.facts import RunReadError as FactsReadError
+from modelstats.facts import (
+    ARGUMENT_OF_LENGTH_ZERO,
+    CANNOT_OPEN_CONNECTION,
+    FILE_RT_CALL,
+    INVALID_DESCRIPTION,
+    MISSING_VALUE_IN_IF,
+)
 from modelstats.rdata_io import write_rds
 from modelstats.run import (
     Convergence,
@@ -38,12 +43,14 @@ from modelstats.run_status import INCORRECT_DIMENSIONS, REPLACEMENT_LENGTH_ZERO,
 from modelstats.slurm import SlurmJob
 from tests.unit.test_facts import (
     ME,
+    NOT_ROOT,
     NOW_EPOCH,
     effects,
     library_reads,
     make_run,
     remind_cfg,
     remind_stats,
+    unreadable,
     write_config,
     write_gdx,
     write_stats,
@@ -195,6 +202,25 @@ def test_difference_run_type_of_a_magpie_config_without_optimization(tmp_path: P
     assert run.status is RunState.UNKNOWN and run.status_detail == "full.log missing"
 
 
+def test_difference_run_type_without_a_model_name_or_an_optimization(tmp_path: Path) -> None:
+    """``R/colRunType.R:20`` / ``:24`` abort on a ``NULL`` ``model_name`` / ``optimization`` (BUG-004).
+
+    The clean view degrades as for the other missing inputs (Codex review 2026-10-11, finding 7).
+    """
+    no_model = make_run(tmp_path, "no-model", {"config.yml": "title: t\ngms:\n  optimization: nash\n"})
+    run = Run(no_model, effects(tmp_path))
+    parity_error(run, ARGUMENT_OF_LENGTH_ZERO)
+    assert run.run_type is None and run.convergence is Convergence.UNKNOWN
+    assert run.to_dict()["run_type"] is None and run.title == "t" and run.model is None
+    no_optimization = make_run(
+        tmp_path, "no-opt", {"config.yml": "title: t\nmodel_name: REMIND\ngms:\n  foo: 1\n"}
+    )
+    run = Run(no_optimization, effects(tmp_path))
+    parity_error(run, ARGUMENT_OF_LENGTH_ZERO)
+    assert run.run_type is None and run.convergence is Convergence.UNKNOWN
+    assert run.to_dict()["run_type"] is None and run.title == "t" and run.model == "REMIND"
+
+
 def test_difference_runtime_is_a_timedelta_and_live_only_with_a_job(tmp_path: Path) -> None:
     finished = Run(remind_run(tmp_path, "done"), effects(tmp_path))
     assert record_of(finished).Runtime == 8304  # round(8304.5, 0)
@@ -243,7 +269,7 @@ def test_difference_convergence_degrades_where_r_aborts(tmp_path: Path) -> None:
     parity_error(no_flag, ARGUMENT_OF_LENGTH_ZERO)
     assert no_flag.convergence is Convergence.UNKNOWN
     no_iteration = Run(remind_run(tmp_path, "b", gdx={"o_modelstat": 2, "s80_bool": 0}), effects(tmp_path))
-    parity_error(no_iteration, MISSING_VALUE)
+    parity_error(no_iteration, MISSING_VALUE_IN_IF)
     assert no_iteration.convergence is Convergence.NOT_CONVERGED
     no_report = remind_run(tmp_path, "c", gdx={"o_iterationNumber": 2, "o_modelstat": 2, "s80_bool": 0})
     parity_error(Run(no_report, effects(tmp_path)), INCORRECT_DIMENSIONS)
@@ -439,6 +465,31 @@ def test_construction_reads_nothing_and_the_views_share_one_reading(
     assert run.facts.config is run.config and run.facts.files is run.files
 
 
+def test_the_coupled_magpie_status_is_computed_once_for_both_views(tmp_path: Path) -> None:
+    """``mag-<i>`` (``R/getRunStatus.R:188-196``) builds the MAgPIE child's facts and runs its ``squeue``.
+
+    Both views share the cached ``RunStatus``: the child is read once per ``Run``, and a child that
+    advances afterwards does not make the two views disagree (Codex diff review 2026-10-11).
+    """
+    magpie = tmp_path / "magpie"
+    child = make_run(magpie / "output", "C_x-mag-3", {"full.log": "--- LOOPS = y2050\n"})
+    cfg = remind_cfg(path_magpie=str(magpie), results_folder="output/C_x-mag-3")
+    run_dir = remind_run(tmp_path, cfg=cfg, full_log=LOOPS, log_txt="x\nStarting MAgPIE...\n\n")
+    env = effects(tmp_path, on_cluster=True, slurm=running_job(run_dir))
+    run = Run(run_dir, env)
+    assert run.status_detail == "mag-3 y2050" and run.status is RunState.RUNNING
+    assert run.to_status_record(False).RunStatus == "mag-3 y2050"
+    assert run.to_status_record(True).RunStatus == "mag-3 y2050"
+    counts = Counter(args[0] for args in reads(env))
+    assert counts["squeue"] == 2  # the run's own lookup (:38) and the child's, once each
+    assert [path for path, count in counts.items() if count > 1] == ["squeue"]  # every stream once
+    assert sum(count for path, count in counts.items() if path.endswith("C_x-mag-3/full.log")) == 1
+    (child / "full.log").write_text("--- LOOPS = y2060\n")
+    assert run.to_status_record(False).RunStatus == run.status_detail == "mag-3 y2050"
+    assert run.to_status_record(True).RunStatus == "mag-3 y2050"
+    assert Counter(args[0] for args in reads(env)) == counts  # cached: no second pass over the child
+
+
 def test_to_status_record_equals_get_run_status(tmp_path: Path) -> None:
     run_dir = remind_run(tmp_path, gdx=CONVERGED, log_txt=WARNINGS_27)
     for detailed in (True, False):
@@ -467,7 +518,6 @@ def test_errors_are_run_read_errors_of_the_package(tmp_path: Path) -> None:
     with pytest.raises(RunReadError, match=INVALID_DESCRIPTION) as excinfo:
         _ = run.config
     assert isinstance(excinfo.value, ModelstatsError)
-    assert isinstance(excinfo.value.__cause__, FactsReadError)
     with pytest.raises(RunReadError, match=INVALID_DESCRIPTION):
         _ = run.title
     with pytest.raises(RunReadError, match=INVALID_DESCRIPTION):
@@ -476,6 +526,21 @@ def test_errors_are_run_read_errors_of_the_package(tmp_path: Path) -> None:
     with pytest.raises(RunReadError, match="fulldata.gdx"):  # BUG-037 / D-20: the port raises
         _ = broken.modelstat
     assert broken.status is RunState.UNKNOWN  # the properties that do not need the GDX still answer
+
+
+@NOT_ROOT
+def test_an_unopenable_csv_is_a_run_read_error_with_r_s_warning(tmp_path: Path) -> None:
+    """A mode-000 ``log_fixOnRef.csv``: ``RunReadError`` from the property, never a bare ``OSError``."""
+    run_dir = remind_run(tmp_path, extra={"log_fixOnRef.csv": "variable,region\nV1,EUR\n"})
+    run = Run(run_dir, effects(tmp_path))
+    with (
+        unreadable(run_dir / "log_fixOnRef.csv"),
+        pytest.raises(RunReadError, match=CANNOT_OPEN_CONNECTION) as e,
+    ):
+        _ = run.fix_errors
+    assert e.value.call == FILE_RT_CALL
+    assert [w.call for w in e.value.warnings] == [FILE_RT_CALL]
+    assert run.fix_errors == 1  # not cached: readable again, read again
 
 
 def test_slurm_errors_are_run_read_errors_of_the_package(tmp_path: Path) -> None:

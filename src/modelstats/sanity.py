@@ -37,7 +37,6 @@ from typing import Final, TextIO
 from modelstats.colors import Crayon
 from modelstats.env import Effects, PathLike, ProductionEffects
 from modelstats.errors import ModelstatsError
-from modelstats.facts import physical_path
 from modelstats.formatting import StatusRow, print_output
 from modelstats.rdata_io import read_rds, scalar
 from modelstats.run_status import get_run_status
@@ -129,7 +128,7 @@ def amt_runcode(effects: Effects) -> str:
     path = effects.cluster_paths.amt_runcode
     if not effects.exists(path):
         raise SanityError(CANNOT_OPEN_CONNECTION)
-    pattern = scalar(read_rds(physical_path(path, effects)))
+    pattern = scalar(read_rds(effects.physical_path(path)))
     if not isinstance(pattern, str):
         raise SanityError(INVALID_PATTERN)
     return pattern

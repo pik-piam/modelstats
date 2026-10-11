@@ -33,21 +33,16 @@ from __future__ import annotations
 import math
 import os
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Final
 
 import pandas as pd
 
 from modelstats.env import Effects, PathLike, ProductionEffects, r_collation_key
-from modelstats.facts import (
-    ARGUMENT_OF_LENGTH_ZERO,
-    MISSING_VALUE,
-    RunFacts,
-    RunFiles,
-    RunReadError,
-)
-from modelstats.formatting import niceround, r_round
+from modelstats.errors import ARGUMENT_OF_LENGTH_ZERO, MISSING_VALUE_IN_IF, RunReadError
+from modelstats.facts import RunFacts, RunFiles
+from modelstats.formatting import CellValue, niceround, r_round
 from modelstats.gdx import (
     VALUE,
     GdxReadError,
@@ -56,19 +51,21 @@ from modelstats.gdx import (
     modelstat_text,
     repy_modelstat_text,
 )
-from modelstats.rdata_io import RDataError, RScalar, r_as_character, scalar
-from modelstats.rdata_io import r_round as r_round_seconds
+from modelstats.rdata_io import RDataError, RScalar, r_as_character, whole_number
 from modelstats.runstats import MAGPIE, RunStatistics
 from modelstats.slurm import SlurmError
-from modelstats.tables import Cell
 from modelstats.tables import to_dataframe as _frame_of
 
 __all__ = [
     "APP_RESULTS_CALL",
+    "CALIBRATION_FILES_ABOVE",
+    "CALIBRATION_MARK",
     "FLAG_TEST_CALL",
     "INCORRECT_DIMENSIONS",
     "MODELSTAT_FALLBACK_CALL",
+    "NASH_RUN_TYPE",
     "NOT_CONVERGED_TEST_CALL",
+    "PROJECT_BLOCK",
     "REPLACEMENT_CALL",
     "REPY_SUBSET_CALL",
     "NA",
@@ -77,6 +74,7 @@ __all__ = [
     "REPLACEMENT_LENGTH_ZERO",
     "RunStatus",
     "SanityCounts",
+    "StatusRule",
     "calibration",
     "column_conv",
     "column_iter",
@@ -89,13 +87,19 @@ __all__ = [
     "column_runtime",
     "column_warnings",
     "get_run_status",
+    "is_calibrating",
     "iteration_maximum",
     "merge_records",
     "ordered_directories",
+    "pasted_modelstat",
+    "plausibility_counts",
+    "results_archive",
     "run_status_record",
     "sanity_counts",
     "status_overrides",
+    "status_record",
     "to_dataframe",
+    "whole_seconds",
 ]
 
 NA: Final = "NA"
@@ -131,8 +135,18 @@ NOT_CONVERGED_TEST_CALL: Final = "if (s80_bool == 0 && as.numeric(cm_iteration_m
 REPY_SUBSET_CALL: Final = 'p80_repy[, , "modelstat"]'
 """``R/getRunStatus.R:290``."""
 
-_NASH: Final = "nash"
-_CALIB: Final = "Calib"
+NASH_RUN_TYPE: Final = "nash"
+"""``grepl("nash", RunType)`` (``R/getRunStatus.R:142, 279``): the run types with a Nash iteration count."""
+
+CALIBRATION_MARK: Final = "Calib"
+"""``grepl("Calib", RunType)`` (``R/getRunStatus.R:298``): a calibrating run by its type."""
+
+CALIBRATION_FILES_ABOVE: Final = 10
+"""``R/getRunStatus.R:302-303``: more than ten ``fulldata_*.gdx`` or ``input_*.gdx`` (BUG-001, D-09)."""
+
+PROJECT_BLOCK: Final = "ScenarioMIP"
+"""``tmp[["ScenarioMIP"]]`` of ``projectSummations.rds`` (``R/getRunStatus.R:354-356``)."""
+
 _CALIBRATE: Final = "calibrate"
 _NORMAL_COMPLETION: Final = "Normal completion"
 _EXECUTION_ERROR: Final = "Execution error"
@@ -150,12 +164,10 @@ _CONVERGED: Final = "converged"
 _CONVERGED_INFES: Final = "converged (had INFES)"
 _NOT_CONVERGED: Final = "not_converged"
 _CALIBRATION_CONVERGED: Final = "Clb_converged"
-_CALIBRATION_FILES_ABOVE: Final = 10
 _CONOPT_DELAY_OFFSET: Final = 0.049
 _CONOPT_DELAY_HOURS: Final = 0.1
 _GDX_DELAY_HOURS: Final = 0.25
 _MIF_SIZE_ABOVE: Final = 99999
-_PROJECT_BLOCK: Final = "ScenarioMIP"
 _COUPLING_ITERATION: Final = re.compile(r".*-mag-([0-9]{1,2})$")
 """``gsub(".*-mag-([0-9]{1,2})$", "\\\\1", cfg$cfg_mag$results_folder)`` (``R/getRunStatus.R:194``)."""
 
@@ -189,7 +201,7 @@ class SanityCounts:
     projSummationErrors: int | None  # noqa: N815 - the R column name
     projSummationErrorsRegional: int | None  # noqa: N815 - the R column name
 
-    def to_row(self) -> dict[str, Cell]:
+    def to_row(self) -> dict[str, CellValue]:
         """The six cells by their R names, in R's order."""
         return {
             "summationErrors": self.summationErrors,
@@ -229,9 +241,9 @@ class RunStatus:
     Runtime: int | None = None
     sanity: SanityCounts | None = None
 
-    def to_row(self) -> dict[str, Cell]:
+    def to_row(self) -> dict[str, CellValue]:
         """The cells R assigned, by column name and in R's order; a column R never assigned is absent."""
-        row: dict[str, Cell] = {
+        row: dict[str, CellValue] = {
             "jobInSLURM": self.jobInSLURM,
             "RunType": self.RunType,
             "modelstat": self.modelstat,
@@ -251,8 +263,8 @@ class RunStatus:
         return row
 
     @property
-    def cells(self) -> Mapping[str, Cell]:
-        """:meth:`to_row`, under the name the presentation layer (``formatting.StatusRow``) reads."""
+    def cells(self) -> Mapping[str, CellValue]:
+        """:meth:`to_row` under the name of ``formatting.StatusRow``: what the table and the frame read."""
         return self.to_row()
 
 
@@ -341,37 +353,49 @@ def _na_row_name(index: int) -> str:
 
 
 def run_status_record(directory: str, user: str, detailed: bool, env: Effects) -> RunStatus:
-    """One iteration of the directory loop (``R/getRunStatus.R:34-361``), the columns in R's order.
+    """One iteration of the directory loop (``R/getRunStatus.R:34-361``): the facts of ``directory`` read.
+
+    The row is :func:`status_record` over fresh facts; an abort carries the R warnings deferred during the
+    iteration (``RunFacts.attaching_warnings``), which ``try()`` prints after it (``R/loopRuns.R:57``,
+    :func:`modelstats.loop_runs.try_error_message`).
+    """
+    facts = RunFacts(RunFiles(directory, env), env, user)
+    with facts.attaching_warnings():
+        return status_record(facts, directory, detailed)
+
+
+StatusRule = Callable[[RunFacts, str], str]
+"""``column_run_status``'s shape: the ``RunStatus`` text of the facts and the ``jobInSLURM`` string."""
+
+
+def status_record(
+    facts: RunFacts, path: str, detailed: bool, *, run_status: StatusRule | None = None
+) -> RunStatus:
+    """The columns of one row over ``facts``, in R's read order (``R/getRunStatus.R:34-361``).
 
     The facts are forced in the order R reads the files, so that when two reads would abort the call,
     the error R reports first is the one raised: ``squeue`` (``:38``), the GDX selection (``:54-64``),
-    the configuration (``:69-74``), ``runstatistics.rda`` (``:76-79``), then the columns. The error carries
-    the R warnings deferred during the iteration (``RunFacts.deferred_warnings``), which ``try()`` prints
-    after it (``R/loopRuns.R:57``, :func:`modelstats.loop_runs.try_error_message`).
+    the configuration (``:69-74``), ``runstatistics.rda`` (``:76-79``), then the columns. ``path`` is the
+    record's ``path``; the row name is the run name. The one definition of the parity row, shared by
+    :func:`get_run_status` and ``Run.to_status_record`` (``06`` 5.2: the clean view sits on the same facts).
+    ``run_status`` computes the ``RunStatus`` column at its place in R's order (``:152-243``):
+    :func:`column_run_status` here, the ``Run`` object's cached value from ``Run.to_status_record``, so that
+    the coupled ``mag-<i>`` branch (``:188-196``, a recursive ``getRunStatus()`` on the MAgPIE child with
+    its own ``squeue``) runs once per ``Run`` for both views.
     """
-    facts = RunFacts(RunFiles(directory, env), env, user)
-    try:
-        return _record_of(facts, directory, detailed, env)
-    except RunReadError as error:
-        error.warnings = tuple(facts.deferred_warnings)
-        raise
-
-
-def _record_of(facts: RunFacts, directory: str, detailed: bool, env: Effects) -> RunStatus:
-    """The columns of :func:`run_status_record` over ``facts``, in R's read order."""
     job = column_job_in_slurm(facts)
     facts.selected_gdx  # noqa: B018 - forced here: R reads the GDX selection (:54-64) before the configuration
     run_type = column_run_type(facts)
     facts.statistics  # noqa: B018 - forced here: R loads runstatistics.rda (:76-79) before the modelstat column
     modelstat = column_modelstat(facts)
-    in_app_results = column_run_in_app_results(facts) if env.on_cluster else None
+    in_app_results = column_run_in_app_results(facts) if facts.effects.on_cluster else None
     mif = column_mif(facts)
     maximum = iteration_maximum(facts, run_type)
     iteration = column_iter(facts, maximum)
-    status = column_run_status(facts, job)
+    status = (run_status if run_status is not None else column_run_status)(facts, job)
     record = RunStatus(
         run=facts.files.name,
-        path=directory,
+        path=path,
         jobInSLURM=job,
         RunType=run_type,
         modelstat=modelstat,
@@ -450,19 +474,29 @@ def column_modelstat(facts: RunFacts) -> str | None:
 def _modelstat_from_statistics(facts: RunFacts) -> str | None:
     """``R/getRunStatus.R:89-97``: the ``stats$modelstat`` fallback, by model.
 
-    MAgPIE pastes ``as.character(stats$modelstat)`` into one string (``NA`` elements as ``"NA"``); REMIND
-    assigns the value inside ``try()``, which only succeeds for a length-1 value, so a vector or ``NULL``
-    leaves ``"NA"`` and a real ``NA`` becomes the cell's ``NA`` (``None``). The model test of ``:91`` is the
-    strict ``==``: a ``NULL`` or ``NA`` model name aborts the call.
+    Nothing without a ``stats`` name matching ``config`` (``:90``); the model test of ``:91`` is the strict
+    ``==``, so a ``NULL`` or ``NA`` model name aborts the call; the text is :func:`pasted_modelstat`.
     """
     stats = facts.statistics
     if stats is None or not stats.has_name("config"):
         return NA
-    if _is_magpie_strict(stats, MODELSTAT_FALLBACK_CALL):
-        if stats.has_name("modelstat"):
-            return "".join(r_as_character(value) or NA for value in stats.modelstat)
+    return pasted_modelstat(stats, magpie=_is_magpie_strict(stats, MODELSTAT_FALLBACK_CALL))
+
+
+def pasted_modelstat(stats: RunStatistics, *, magpie: bool) -> str | None:
+    """``stats$modelstat`` as ``R/getRunStatus.R:92-94`` assign it; ``"NA"`` where R leaves the cell.
+
+    MAgPIE (``:92``) pastes ``as.character(stats$modelstat)`` into one string (``NA`` elements as ``"NA"``);
+    REMIND (``:94``) assigns the value inside ``try()``, which only succeeds for a length-1 value, so a
+    vector leaves ``"NA"`` and a real ``NA`` becomes the cell's ``NA`` (``None``). Both need a ``stats`` name
+    matching ``modelstat``. The clean view (``Run.modelstat``) pastes the same way, the model taken from
+    ``isTRUE(model_name == "MAgPIE")`` where the parity view aborts (D-25).
+    """
+    if not stats.has_name("modelstat"):
         return NA
-    if stats.has_name("modelstat") and len(stats.modelstat) == 1:
+    if magpie:
+        return "".join(r_as_character(value) or NA for value in stats.modelstat)
+    if len(stats.modelstat) == 1:
         return r_as_character(stats.modelstat[0])
     return NA
 
@@ -477,7 +511,7 @@ def _is_magpie_strict(stats: RunStatistics, call: str) -> bool:
     if config is None or config.get("model_name") is None:
         raise RunReadError(ARGUMENT_OF_LENGTH_ZERO, call=call)
     if stats.model_name is None:
-        raise RunReadError(MISSING_VALUE, call=call)
+        raise RunReadError(MISSING_VALUE_IN_IF, call=call)
     return stats.model_name == MAGPIE
 
 
@@ -492,11 +526,19 @@ def column_run_in_app_results(facts: RunFacts) -> str:
     stats = facts.statistics
     if stats is None or not stats.has_name("id"):
         return "no"
-    if stats.has_name("config") and _is_magpie_strict(stats, APP_RESULTS_CALL):
-        archive = f"{facts.effects.magpie_results_archive}/"
-    else:
-        archive = facts.effects.cluster_paths.remind_results_archive
-    return "yes" if facts.archived_result_is_current(archive) else "no"
+    magpie = stats.has_name("config") and _is_magpie_strict(stats, APP_RESULTS_CALL)
+    return "yes" if facts.archived_result_is_current(results_archive(facts, magpie=magpie)) else "no"
+
+
+def results_archive(facts: RunFacts, *, magpie: bool) -> str:
+    """``ovdir`` of ``R/getRunStatus.R:109-111``: the directory the ``<stats$id>.rds`` is looked up in.
+
+    ``paste0(Sys.getenv("MAGPIE_RESULTS_ARCHIVE_PATH"), "/")`` for a MAgPIE run, the hard-coded REMIND
+    results archive (``ClusterPaths.remind_results_archive``, trailing slash included) otherwise.
+    """
+    if magpie:
+        return f"{facts.effects.magpie_results_archive}/"
+    return facts.effects.cluster_paths.remind_results_archive
 
 
 def column_mif(facts: RunFacts) -> str:
@@ -531,7 +573,7 @@ def iteration_maximum(facts: RunFacts, run_type: str) -> str | None:
     if config is None:
         return None
     maximum = r_as_character(config.cm_iteration_max)
-    autoconverging = _is_true_positive(config.cm_nash_autoconverge) and _NASH in run_type
+    autoconverging = _is_true_positive(config.cm_nash_autoconverge) and NASH_RUN_TYPE in run_type
     if autoconverging and facts.files.exists(facts.files.full_gms):
         lines = facts.iteration_max_lines
         maximum = lines[0] if lines else None
@@ -777,20 +819,20 @@ def column_conv(facts: RunFacts, run_type: str, maximum: str | None) -> str:
     test (``missing value where TRUE/FALSE needed``, BUG-038, D-23), a missing ``p80_repy``
     (``incorrect number of dimensions``). ``"NA"`` otherwise.
     """
-    if _NASH not in run_type or facts.selected_gdx is None:
+    if NASH_RUN_TYPE not in run_type or facts.selected_gdx is None:
         return NA
     iteration = facts.iteration_number
     flag = facts.convergence_flag
     if flag is None:
         raise RunReadError(ARGUMENT_OF_LENGTH_ZERO, call=FLAG_TEST_CALL)
     if math.isnan(flag):
-        raise RunReadError(MISSING_VALUE, call=FLAG_TEST_CALL)
+        raise RunReadError(MISSING_VALUE_IN_IF, call=FLAG_TEST_CALL)
     if flag == 1:
         return _CONVERGED_INFES if facts.files.exists(facts.files.non_optimal_gdx) else _CONVERGED
     if flag == 0:
         limit = _as_numeric(maximum)
         if limit is None or iteration is None or math.isnan(limit) or math.isnan(iteration):
-            raise RunReadError(MISSING_VALUE, call=NOT_CONVERGED_TEST_CALL)
+            raise RunReadError(MISSING_VALUE_IN_IF, call=NOT_CONVERGED_TEST_CALL)
         if limit == iteration:
             return _NOT_CONVERGED
     report = facts.solve_report
@@ -810,22 +852,26 @@ def calibration(facts: RunFacts, run_type: str, iteration: str, conv: str) -> tu
     run with more than ten ``fulldata_*.gdx`` or ``input_*.gdx`` files becomes ``"Clb_converged"`` (exactly
     ten today, BUG-001, D-09).
     """
-    config = facts.config
-    calibrating = _CALIB in run_type or (
-        config is not None and r_as_character(config.CES_parameters) == _CALIBRATE
-    )
-    if not (calibrating and facts.files.exists(facts.files.log_txt)):
+    if not (is_calibrating(facts, run_type) and facts.files.exists(facts.files.log_txt)):
         return iteration, conv
     digits = facts.calibration_iteration
     number = _as_numeric(digits[0]) if digits else None
     if number is not None and number > 0:
         iteration = f"{iteration} Clb: {digits[0]}"
     if conv in (_CONVERGED, _CONVERGED_INFES) and (
-        facts.fulldata_iteration_count > _CALIBRATION_FILES_ABOVE
-        or facts.input_iteration_count > _CALIBRATION_FILES_ABOVE
+        facts.fulldata_iteration_count > CALIBRATION_FILES_ABOVE
+        or facts.input_iteration_count > CALIBRATION_FILES_ABOVE
     ):
         conv = _CALIBRATION_CONVERGED
     return iteration, conv
+
+
+def is_calibrating(facts: RunFacts, run_type: str) -> bool:
+    """``isTRUE(grepl("Calib", RunType)) || isTRUE(cfg$gms$CES_parameters == "calibrate")`` (``:298``)."""
+    config = facts.config
+    return CALIBRATION_MARK in run_type or (
+        config is not None and r_as_character(config.CES_parameters) == _CALIBRATE
+    )
 
 
 def column_runtime(facts: RunFacts, job: str) -> int | None:
@@ -844,7 +890,16 @@ def column_runtime(facts: RunFacts, job: str) -> int | None:
         seconds = facts.seconds_since_prepare_start
     else:
         seconds = None
-    return None if seconds is None else r_round_seconds(seconds)
+    return None if seconds is None else whole_seconds(seconds)
+
+
+def whole_seconds(seconds: float) -> int:
+    """``as.numeric(round(difftime, 0))`` (``R/getRunStatus.R:311, 313``): half to even, as an ``int``.
+
+    R's ``round(x, 0)`` is ``nearbyint``, which Python's ``round`` reproduces (``round(0.5)`` is 0,
+    ``round(2.5)`` is 2, ``round(62730.5)`` is 62730; checked in R 4.6.1).
+    """
+    return round(seconds)
 
 
 def sanity_counts(facts: RunFacts) -> SanityCounts | None:
@@ -861,13 +916,11 @@ def sanity_counts(facts: RunFacts) -> SanityCounts | None:
     title = config.title
     if not facts.remind_mif_exists(title):
         return None
-    summation = facts.summation_error_count(title) if facts.summation_errors_exist(title) else 0
-    ranges = facts.range_error_count(title) if facts.range_errors_exist(title) else 0
-    fixes = facts.fix_error_count if facts.fix_errors_exist else 0
+    summation, ranges, fixes = plausibility_counts(facts, title)
     project = facts.project_summations
     if project is None:
         return SanityCounts(summation, ranges, fixes, None, None, None)
-    block = project.get(_PROJECT_BLOCK)
+    block = project.get(PROJECT_BLOCK)
     return SanityCounts(
         summation,
         ranges,
@@ -878,26 +931,34 @@ def sanity_counts(facts: RunFacts) -> SanityCounts | None:
     )
 
 
+def plausibility_counts(facts: RunFacts, title: str | None) -> tuple[int, int, int]:
+    """The three file counts of ``R/getRunStatus.R:326-348`` for the mif of ``title``.
+
+    ``summationErrors``, ``rangeErrors`` and ``fixErrors`` in that order, each 0 without its file; the
+    caller has checked the mif rule of ``:321``. Shared by :func:`sanity_counts` and the clean view
+    (``Run.summation_errors`` and its siblings).
+    """
+    return (
+        facts.summation_error_count(title) if facts.summation_errors_exist(title) else 0,
+        facts.range_error_count(title) if facts.range_errors_exist(title) else 0,
+        facts.fix_error_count if facts.fix_errors_exist else 0,
+    )
+
+
 def _project_count(block: Any, name: str) -> int | None:
     """``tmp[["ScenarioMIP"]][[name]]`` (``R/getRunStatus.R:355-357``) assigned to one cell.
 
-    ``NULL`` (no block, no element) fails the assignment; a vector of another length fails it too; ``NA``
-    is ``None``; a whole number is the count.
+    ``NULL`` (no block, no element) fails the assignment with ``replacement has length zero``; ``NA`` is
+    ``None``; a whole number is the count (``rdata_io.whole_number``); a vector of another length or a
+    value that is not a count is reported as the port's own error.
     """
     value = block.get(name) if isinstance(block, Mapping) else None
     if value is None:
         raise RunReadError(REPLACEMENT_LENGTH_ZERO, call=REPLACEMENT_CALL)
     try:
-        element = scalar(value)
+        return whole_number(value)
     except RDataError as error:
         raise RunReadError(f"projectSummations.rds: ScenarioMIP${name}: {error}") from error
-    if element is None:
-        return None
-    if isinstance(element, bool | int):
-        return int(element)
-    if isinstance(element, float) and element.is_integer():
-        return int(element)
-    raise RunReadError(f"projectSummations.rds: ScenarioMIP${name} is not a count: {element!r}")
 
 
 # ---------------------------------------------------------------------------------------------

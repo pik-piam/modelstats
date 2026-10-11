@@ -6,21 +6,22 @@ The behaviour kept from the R version (``migration/06-user-requests.md`` section
 1. ``git reset --hard origin/develop && git pull`` in the checkout (``:98``): :func:`update_checkout`;
 2. the ``selectScenarios()`` bridge (``:127-137``): :func:`modelstats.amt.bridges.select_scenarios`, run
    here before the first run is submitted (see "Order" below);
-3. ``cfg$force_download <- TRUE`` in ``config/default.cfg`` (``:100``, the ``sed -i`` as a file edit through
+3. the transition ``idle -> started`` (``06`` 3.2) with the complete cycle record (the id and the runcode
+   pattern of ``:92-96``, the start time and the tested commit, the selected scenario names with the
+   ``-AMT`` suffix of ``:137``, the cycle log) and ``runcode.rds`` (``:164``, ``06`` 3.4), both through
+   ``modelstats.amt.state.StateStore.save_started``, persisted *before* anything is submitted (see
+   "Order");
+4. ``cfg$force_download <- TRUE`` in ``config/default.cfg`` (``:100``, the ``sed -i`` as a file edit through
    ``Effects.replace_in_file``): :func:`set_force_download`;
-4. the empty realization folders (``deleteEmptyRealizationFolders``, ``:71-86``, called at ``:104``):
+5. the empty realization folders (``deleteEmptyRealizationFolders``, ``:71-86``, called at ``:104``):
    :func:`delete_empty_realization_folders`;
-5. ``Rscript start.R --testOneRegi titletag=AMT slurmConfig="--qos=priority --nodes=1 --tasks-per-node=1
+6. ``Rscript start.R --testOneRegi titletag=AMT slurmConfig="--qos=priority --nodes=1 --tasks-per-node=1
    --wait --time=2:00:00"`` (``:111-113``): :func:`start_test_one_regi`;
-6. ``cfg$force_download <- FALSE`` (``:117``) and ``Rscript start.R startgroup=AMT titletag=AMT
+7. ``cfg$force_download <- FALSE`` (``:117``) and ``Rscript start.R startgroup=AMT titletag=AMT
    slurmConfig="--qos=standby --nodes=1 --tasks-per-node=12 --time=36:00:00" config/scenario_config.csv``
    (``:115-123``): :func:`start_bundle`;
-7. ``magpie/``: ``git reset --hard origin/develop && git pull`` (``:142-144``, ``06`` section 2);
-8. ``make test-full-slurm`` (``:146``): :func:`run_test_full`;
-9. the transition ``idle -> started`` (``06`` 3.2) with the cycle record (the id and the runcode pattern of
-   ``:92-96``, the start time and the tested commit, the selected scenario names with the ``-AMT`` suffix of
-   ``:137``, the cycle log) and ``runcode.rds`` (``:164``, ``06`` 3.4), both through
-   ``modelstats.amt.state.StateStore.save_started``.
+8. ``magpie/``: ``git reset --hard origin/develop && git pull`` (``:142-144``, ``06`` section 2);
+9. ``make test-full-slurm`` (``:146``): :func:`run_test_full`.
 
 ``runsToStart.rds`` (``:138``) and ``../.testsstatus`` (``:42``) are not written any more (``06`` 3.4); the
 state file carries both. Every subprocess goes through :func:`modelstats.amt.logs.run_logged`: announced,
@@ -33,24 +34,35 @@ child), nothing else is added to the environment.
 and the tests ran on a stale checkout (golden ``amt/remind-start-git-fail``), a failed ``make`` went
 unnoticed until the evaluation (``amt/remind-start-make-fail``). Here the infrastructure commands are
 checked: a non-zero ``git`` (checkout or ``magpie/``) or ``make`` status, a failed bridge, or any other
-error inside the steps leaves the state ``failed`` with ``last_error`` and the half-built cycle, sends the
-failure notification and raises :class:`modelstats.amt.context.CycleFailedError`
-(:func:`modelstats.amt.context.record_failure`). The persist step (9) is covered too: a failed write of
-``amt-state.json`` leaves the previous document in place (the write is atomic) and the ``failed`` state is
-written instead, with the cycle kept, so that ``evaluate`` still finds the runs that were submitted and a
-plain ``start`` is refused (no second submission); a failed write of ``runcode.rds`` leaves the JSON
-rewritten as ``failed`` with the cycle, while ``rs-r -A`` may read a stale pattern until the next
-successful start. ``Rscript start.R`` keeps R's tolerance on purpose: its status is reported as a warning
-and the start goes on, because the runs it submits are the test itself (``--wait`` on the ``testOneRegi``
-call makes ``start.R`` answer for a run that failed, and a run that failed is a result for ``evaluate`` to
-report, not an infrastructure failure). The refused transitions (``started`` without ``--force``,
-``failed``) are checked before any effect (``modelstats.amt.state.target_phase``) and change nothing.
+error inside the steps leaves the state ``failed`` with ``last_error`` and the cycle, sends the failure
+notification and raises :class:`modelstats.amt.context.CycleFailedError`
+(:func:`modelstats.amt.context.record_failure`). The persist step (3) is covered too, and it runs before
+the first submission: a failed write of ``amt-state.json`` leaves the previous document in place (the
+write is atomic) and the ``failed`` state is written instead with the cycle, nothing has been submitted,
+and a plain ``start`` is refused until a human looks (``evaluate`` would report every scenario as missing,
+``reset`` drops the cycle); a failed write of ``runcode.rds`` leaves the JSON rewritten as ``failed`` with
+the cycle, likewise with nothing submitted, while ``rs-r -A`` may read a stale pattern until the next
+successful start. A failure *after* the checkpoint (steps 4-9) leaves ``failed`` with the full cycle, so
+``evaluate`` finds whatever was submitted. ``Rscript start.R`` keeps R's tolerance on purpose: its status
+is reported as a warning and the start goes on, because the runs it submits are the test itself
+(``--wait`` on the ``testOneRegi`` call makes ``start.R`` answer for a run that failed, and a run that
+failed is a result for ``evaluate`` to report, not an infrastructure failure). The refused transitions
+(``started`` without ``--force``, ``failed``) are checked before any effect
+(``modelstats.amt.state.target_phase``) and change nothing.
 
 **Order.** R selected the scenarios after both ``Rscript start.R`` calls (``:111-138``); the selection is a
 pure read of ``config/scenario_config.csv``, so it is made right after ``git pull`` and before the first
 run is submitted: a bridge failure then aborts before anything runs (``03`` 2.3, "no partial state"). The
-R goldens record the bridge's ``git log -1`` and ``Rscript select_scenarios.R`` nowhere at start (R read the
-commit at evaluate, ``:198``): both are additions on the allowed-difference list of ``06`` 4.4 item 3.
+cycle is persisted right after the selection, before the first ``Rscript start.R``, because the
+submissions and ``make`` take hours (``--wait`` on the ``testOneRegi`` call) and a process killed in
+between (SIGTERM, a node reboot, Ctrl-C) runs no handler: R set ``.testsstatus`` to ``next:evaluate``
+only after ``startRuns`` returned (``:42``), so a killed start was repeated by the next cron invocation
+and the day's runcode matched both submissions (Codex review 2026-10-11, finding 1). Here a termination
+before the checkpoint has submitted nothing and a rerun is harmless; one after it leaves ``started`` with
+the full cycle, which ``run`` evaluates (``No runs started`` and the missing scenarios when nothing ran)
+or a human abandons with ``start --force``; never a second submission. The R goldens record the bridge's
+``git log -1`` and ``Rscript select_scenarios.R`` nowhere at start (R read the commit at evaluate,
+``:198``): both are additions on the allowed-difference list of ``06`` 4.4 item 3.
 Under ``--dry-run`` the bridge is not run: the script sources the checkout's ``scripts/start/*.R`` after
 R read its ``.Rprofile``, which is REMIND code, not a read of the configuration (a fresh clone's
 ``.Rprofile`` bootstraps ``renv``, with downloads and writes). :class:`modelstats.env.DryRunEffects`
@@ -174,7 +186,8 @@ def start_cycle(ctx: AmtContext) -> AmtState:
     nothing changed), then the steps of the module docstring run; a failure among them is recorded as the
     ``failed`` state and raised as :class:`modelstats.amt.context.CycleFailedError`. The cycle's log path
     is :meth:`AmtContext.cycle_log_path` of the cycle id (the start date), the file the CLI opened for this
-    command.
+    command. The ``started`` state is on disk before the first ``Rscript start.R`` (module docstring,
+    "Order"), so an interruption during the submissions never leads to a second one.
     """
     current = ctx.state
     force = ctx.options.force
@@ -196,14 +209,20 @@ def start_cycle(ctx: AmtContext) -> AmtState:
                 " scripts/start/*.R); the cycle records no scenario names"
             )
         cycle = replace(cycle, started_commit=selection.commit, runs_to_start=selection.names)
+        started = start(current, cycle, force=force)
+        ctx.store.save_started(started)
+        ctx.logger.info(
+            "cycle %s recorded as 'started' in %s (pattern in %s) before the first submission",
+            cycle.id,
+            ctx.state_path,
+            ctx.store.runcode_path,
+        )
         set_force_download(ctx, enabled=True)
         delete_empty_realization_folders(ctx)
         start_test_one_regi(ctx)
         start_bundle(ctx)
         update_checkout(ctx, ctx.dir / MAGPIE_DIR)
         run_test_full(ctx)
-        started = start(current, cycle, force=force)
-        ctx.store.save_started(started)
     except Exception as error:
         raise record_failure(ctx, Command.START, error, cycle=cycle) from error
     ctx.logger.info(

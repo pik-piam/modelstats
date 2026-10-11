@@ -182,7 +182,7 @@ def _split_lines(text: str) -> list[str]:
     return lines
 
 
-class CommandFailedError(RuntimeError):
+class CommandFailedError(ModelstatsError):
     """A subprocess run with ``check=True`` exited with a non-zero status."""
 
     def __init__(self, result: RunResult) -> None:
@@ -399,6 +399,16 @@ class Effects(Protocol):
 
     def normalize_path(self, path: PathLike) -> str:
         """``normalizePath(path)``: the real absolute path when it exists, the input unchanged otherwise."""
+        ...
+
+    def physical_path(self, path: PathLike) -> Path:
+        """The real file behind ``path`` for a library that opens files by name (GDX, R data, CSV).
+
+        Production returns the path as given (relative to the process's working directory, as R resolves
+        it); a double resolves a relative path against its own working directory and, with an overlay,
+        answers with the physical entry the overlay shows, a path it does not show mapping to itself so
+        that the library's open fails the way R's would. No existence test happens here.
+        """
         ...
 
     def read_text(self, path: PathLike, *, encoding: str = "utf-8", errors: str = "surrogateescape") -> str:
@@ -930,6 +940,10 @@ class ProductionEffects:
         text = os.fspath(path)
         return os.path.realpath(text) if os.path.exists(text) else text
 
+    def physical_path(self, path: PathLike) -> Path:
+        """The path as given: the process's working directory is R's."""
+        return Path(os.fspath(path))
+
     def read_text(self, path: PathLike, *, encoding: str = "utf-8", errors: str = "surrogateescape") -> str:
         """The whole file as text."""
         return Path(path).read_text(encoding=encoding, errors=errors)
@@ -1401,7 +1415,80 @@ def _same_request(tool: str, have: Sequence[str], want: Sequence[str]) -> bool:
 _CANNED_TOOLS = frozenset({"squeue", "sacct"})
 
 
-class FakeEffects:
+class _InjectedEnvironment:
+    """What both test doubles inject and record: the clock, the identity, the variables, the call log.
+
+    ``now`` is the frozen clock (an aware datetime, its zone being the session's), ``user`` the
+    ``Sys.info()[["user"]]``, ``on_cluster`` the ``file.exists("/p")`` probe, ``environ`` the variables
+    behind ``getenv`` and ``cluster_paths`` the locations (a test points ``amt_dir`` at its checkout).
+    ``calls`` receives one :class:`EffectCall` per call the subclass logs through ``_log``.
+    """
+
+    def __init__(
+        self,
+        *,
+        now: datetime,
+        user: str,
+        on_cluster: bool,
+        environ: Mapping[str, str] | None,
+        cluster_paths: ClusterPaths | None,
+    ) -> None:
+        if now.tzinfo is None:
+            raise ValueError(f"{type(self).__name__} needs an aware datetime for now()")
+        self._now = now
+        self._user = user
+        self._on_cluster = on_cluster
+        self._environ: dict[str, str] = dict(environ or {})
+        self._cluster_paths = cluster_paths if cluster_paths is not None else ClusterPaths()
+        self.calls: list[EffectCall] = []
+
+    @property
+    def user(self) -> str:
+        """The injected ``Sys.info()[["user"]]``."""
+        self._log("user")
+        return self._user
+
+    @property
+    def on_cluster(self) -> bool:
+        """The injected ``file.exists("/p")``."""
+        self._log("on_cluster")
+        return self._on_cluster
+
+    @property
+    def cluster_paths(self) -> ClusterPaths:
+        """The injected cluster locations, or the hard-coded defaults (logical paths)."""
+        return self._cluster_paths
+
+    @property
+    def runs(self) -> list[EffectCall]:
+        """The logged ``run`` calls."""
+        return [c for c in self.calls if c.name == "run"]
+
+    def getenv(self, name: str) -> str:
+        """``Sys.getenv(name)`` on the injected variables."""
+        self._log("getenv", name)
+        return self._environ.get(name, "")
+
+    @property
+    def magpie_results_archive(self) -> str:
+        """The injected ``MAGPIE_RESULTS_ARCHIVE_PATH``."""
+        return self.getenv(MAGPIE_RESULTS_ARCHIVE_VARIABLE)
+
+    def now(self) -> datetime:
+        """The frozen clock."""
+        self._log("now")
+        return self._now
+
+    def _log(self, name: str, *args: PathLike) -> None:
+        self.calls.append(EffectCall(name, tuple(os.fspath(a) for a in args)))
+
+    def _zone(self) -> tzinfo:
+        zone = self._now.tzinfo
+        assert zone is not None  # checked in __init__
+        return zone
+
+
+class FakeEffects(_InjectedEnvironment):
     """The test double: overlay paths, canned scheduler, frozen clock, injected user and ``/p`` probe.
 
     ``paths`` maps the logical fixture root onto physical layers (``OverlayPaths.sandbox``); without it
@@ -1427,37 +1514,15 @@ class FakeEffects:
         cluster_paths: ClusterPaths | None = None,
     ) -> None:
         """Inject the frozen clock (aware), the user name, the cluster probe and the collaborators."""
-        if now.tzinfo is None:
-            raise ValueError("FakeEffects needs an aware datetime for now()")
-        self._now = now
-        self._user = user
-        self._on_cluster = on_cluster
+        super().__init__(
+            now=now, user=user, on_cluster=on_cluster, environ=environ, cluster_paths=cluster_paths
+        )
         self._paths = paths
         self._slurm = slurm if slurm is not None else CannedSlurm.empty()
         default_cwd = paths.logical_root if paths is not None else PurePosixPath(os.getcwd())
         self._cwd = PurePosixPath(os.fspath(cwd)) if cwd is not None else default_cwd
-        self._environ: dict[str, str] = dict(environ or {})
-        self._cluster_paths = cluster_paths if cluster_paths is not None else ClusterPaths()
-        self.calls: list[EffectCall] = []
 
-    # -- identity, clock, variables ------------------------------------------------------------
-
-    @property
-    def user(self) -> str:
-        """The injected ``Sys.info()[["user"]]``."""
-        self._log("user")
-        return self._user
-
-    @property
-    def on_cluster(self) -> bool:
-        """The injected ``file.exists("/p")``."""
-        self._log("on_cluster")
-        return self._on_cluster
-
-    @property
-    def cluster_paths(self) -> ClusterPaths:
-        """The hard-coded cluster locations (logical paths)."""
-        return self._cluster_paths
+    # -- the overlay ----------------------------------------------------------------------------
 
     @property
     def cwd(self) -> str:
@@ -1468,26 +1533,6 @@ class FakeEffects:
     def paths(self) -> OverlayPaths | None:
         """The overlay mapping, if any."""
         return self._paths
-
-    @property
-    def runs(self) -> list[EffectCall]:
-        """The logged ``run`` calls."""
-        return [c for c in self.calls if c.name == "run"]
-
-    def getenv(self, name: str) -> str:
-        """``Sys.getenv(name)`` on the injected variables."""
-        self._log("getenv", name)
-        return self._environ.get(name, "")
-
-    @property
-    def magpie_results_archive(self) -> str:
-        """The injected ``MAGPIE_RESULTS_ARCHIVE_PATH``."""
-        return self.getenv(MAGPIE_RESULTS_ARCHIVE_VARIABLE)
-
-    def now(self) -> datetime:
-        """The frozen clock."""
-        self._log("now")
-        return self._now
 
     # -- filesystem ------------------------------------------------------------------------------
 
@@ -1560,6 +1605,12 @@ class FakeEffects:
         real = Path(os.path.realpath(physical))
         mapped = self._paths.to_logical(real) if self._paths is not None else None
         return mapped if mapped is not None else str(real)
+
+    def physical_path(self, path: PathLike) -> Path:
+        """The entry the overlay shows for the logical path, else the logical path itself (no probe)."""
+        logical = self._absolute(path)
+        shown = self._paths.first_existing(logical) if self._paths is not None else None
+        return shown if shown is not None else Path(logical)
 
     def read_text(self, path: PathLike, *, encoding: str = "utf-8", errors: str = "surrogateescape") -> str:
         """The highest layer's file as text."""
@@ -1660,14 +1711,6 @@ class FakeEffects:
         return _flock(self._writable(path), wait)
 
     # -- internals -------------------------------------------------------------------------------
-
-    def _log(self, name: str, *args: PathLike) -> None:
-        self.calls.append(EffectCall(name, tuple(os.fspath(a) for a in args)))
-
-    def _zone(self) -> tzinfo:
-        zone = self._now.tzinfo
-        assert zone is not None  # checked in __init__
-        return zone
 
     def _absolute(self, path: PathLike) -> PurePosixPath:
         """Resolve a relative path against the logical cwd.
@@ -1845,7 +1888,7 @@ class CannedAmt:
 # ---------------------------------------------------------------------------------------------
 
 
-class RecordingEffects:
+class RecordingEffects(_InjectedEnvironment):
     """The AMT test double (``06`` 4.4): real filesystem, canned programs and webhook, recorded calls.
 
     Paths are real; relative ones resolve against the injected ``cwd`` (the process's directory by
@@ -1875,70 +1918,21 @@ class RecordingEffects:
         advance_on_sleep: bool = False,
     ) -> None:
         """Inject the frozen clock (aware), the identity, the canned answers and the working directory."""
-        if now.tzinfo is None:
-            raise ValueError("RecordingEffects needs an aware datetime for now()")
-        self._now = now
-        self._user = user
-        self._on_cluster = on_cluster
+        super().__init__(
+            now=now, user=user, on_cluster=on_cluster, environ=environ, cluster_paths=cluster_paths
+        )
         self._amt = amt if amt is not None else CannedAmt.empty()
         self._slurm = slurm if slurm is not None else CannedSlurm.empty()
         self._cwd = os.path.abspath(os.fspath(cwd)) if cwd is not None else os.getcwd()
-        self._environ: dict[str, str] = dict(environ or {})
-        self._cluster_paths = cluster_paths if cluster_paths is not None else ClusterPaths()
         self._fallback = fallback
         self._advance_on_sleep = advance_on_sleep
-        self.calls: list[EffectCall] = []
         self.trace: list[TraceRecord] = []
         self.posts: list[PostRecord] = []
-
-    # -- identity, clock, variables ------------------------------------------------------------
-
-    @property
-    def user(self) -> str:
-        """The injected ``Sys.info()[["user"]]``."""
-        self._log("user")
-        return self._user
-
-    @property
-    def on_cluster(self) -> bool:
-        """The injected ``file.exists("/p")``."""
-        self._log("on_cluster")
-        return self._on_cluster
-
-    @property
-    def cluster_paths(self) -> ClusterPaths:
-        """The injected cluster locations (a test points ``amt_dir`` at its checkout)."""
-        return self._cluster_paths
 
     @property
     def cwd(self) -> str:
         """The injected working directory (absolute)."""
         return self._cwd
-
-    @property
-    def paths(self) -> OverlayPaths | None:
-        """No overlay: paths are physical (``modelstats.facts.physical_path`` resolves against ``cwd``)."""
-        return None
-
-    @property
-    def runs(self) -> list[EffectCall]:
-        """The logged ``run`` calls."""
-        return [c for c in self.calls if c.name == "run"]
-
-    def getenv(self, name: str) -> str:
-        """``Sys.getenv(name)`` on the injected variables."""
-        self._log("getenv", name)
-        return self._environ.get(name, "")
-
-    @property
-    def magpie_results_archive(self) -> str:
-        """The injected ``MAGPIE_RESULTS_ARCHIVE_PATH``."""
-        return self.getenv(MAGPIE_RESULTS_ARCHIVE_VARIABLE)
-
-    def now(self) -> datetime:
-        """The frozen clock (advanced by ``sleep`` only with ``advance_on_sleep``)."""
-        self._log("now")
-        return self._now
 
     # -- reading ---------------------------------------------------------------------------------
 
@@ -1993,6 +1987,10 @@ class RecordingEffects:
         self._log("normalize_path", path)
         resolved = self._resolve(path)
         return os.path.realpath(resolved) if os.path.exists(resolved) else os.fspath(path)
+
+    def physical_path(self, path: PathLike) -> Path:
+        """No overlay: the path itself, a relative one under the injected working directory."""
+        return Path(self._cwd) / os.fspath(path)
 
     def read_text(self, path: PathLike, *, encoding: str = "utf-8", errors: str = "surrogateescape") -> str:
         """The whole file as text."""
@@ -2124,14 +2122,6 @@ class RecordingEffects:
 
     # -- internals -------------------------------------------------------------------------------
 
-    def _log(self, name: str, *args: PathLike) -> None:
-        self.calls.append(EffectCall(name, tuple(os.fspath(a) for a in args)))
-
-    def _zone(self) -> tzinfo:
-        zone = self._now.tzinfo
-        assert zone is not None  # checked in __init__
-        return zone
-
     def _resolve(self, path: PathLike) -> str:
         """A relative path against the injected cwd; ``""`` stays ``""`` (``file.exists("")`` is FALSE)."""
         text = os.fspath(path)
@@ -2247,12 +2237,6 @@ class DryRunEffects:
         """The wrapped effects' working directory."""
         return self._inner.cwd
 
-    @property
-    def paths(self) -> OverlayPaths | None:
-        """The wrapped effects' overlay, if it has one (so ``physical_path`` resolves as it would)."""
-        paths = getattr(self._inner, "paths", None)
-        return paths if isinstance(paths, OverlayPaths) else None
-
     def getenv(self, name: str) -> str:
         """The wrapped effects' variables."""
         return self._inner.getenv(name)
@@ -2301,6 +2285,10 @@ class DryRunEffects:
     def normalize_path(self, path: PathLike) -> str:
         """Delegated."""
         return self._inner.normalize_path(path)
+
+    def physical_path(self, path: PathLike) -> Path:
+        """Delegated (an overlay of the wrapped effects resolves as it would)."""
+        return self._inner.physical_path(path)
 
     def read_text(self, path: PathLike, *, encoding: str = "utf-8", errors: str = "surrogateescape") -> str:
         """Delegated."""

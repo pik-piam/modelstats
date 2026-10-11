@@ -32,8 +32,11 @@ affected: it prints the parity view.
 * ``modelstat`` fallback from ``runstatistics.rda`` whose ``stats$config`` has no ``model_name``. R says:
   the call aborts with ``argument is of length zero`` (``:91``, the BUG-005 input). Run says: the REMIND
   fallback (``stats$modelstat`` when it is one value). Why: a missing field is a missing input.
-* ``RunType`` of a MAgPIE configuration without ``cfg$gms$optimization``. R says: the call aborts with
-  ``replacement has length zero`` (``:73``, BUG-046, D-28). Run says: ``run_type`` is ``None``.
+* ``RunType`` of a configuration without ``cfg$model_name`` or (REMIND) without ``cfg$gms$optimization``.
+  R says: the call aborts with ``argument is of length zero`` (``R/colRunType.R:20`` / ``:24``, the BUG-004
+  mechanism); a MAgPIE configuration without optimization: ``replacement has length zero`` (``:73``,
+  BUG-046, D-28). Run says: ``run_type`` is ``None``, ``convergence`` :attr:`Convergence.UNKNOWN`. Why: a
+  missing field is a missing input.
 * ``Runtime``. R says: whole seconds; ``now - timePrepareStart`` whenever ``jobInSLURM`` is not ``"no"``,
   which off the cluster (``"NA"``) is every unfinished run (``:309-313``). Run says: a ``timedelta`` with
   its fraction; the live value only while a job of the run is listed by ``squeue``; ``None`` otherwise.
@@ -91,26 +94,25 @@ from modelstats.config import RunConfig
 from modelstats.env import Effects, PathLike, ProductionEffects
 from modelstats.errors import RunReadError
 from modelstats.facts import RunFacts, RunFiles
-from modelstats.facts import RunReadError as _FactsReadError
 from modelstats.gdx import MODELSTAT_EXPLANATIONS, modelstat_text
-from modelstats.rdata_io import RDataError, r_as_character, scalar
+from modelstats.rdata_io import RDataError, whole_number
 from modelstats.run_status import (
+    CALIBRATION_FILES_ABOVE,
     NA,
+    NASH_RUN_TYPE,
+    PROJECT_BLOCK,
     RunStatus,
-    calibration,
-    column_conv,
-    column_iter,
     column_job_in_slurm,
     column_mif,
-    column_modelstat,
-    column_run_in_app_results,
     column_run_status,
-    column_run_type,
-    column_runtime,
     column_warnings,
+    is_calibrating,
     iteration_maximum,
-    sanity_counts,
+    pasted_modelstat,
+    plausibility_counts,
+    results_archive,
     status_overrides,
+    status_record,
 )
 from modelstats.runfolders import is_main_folder, is_run_folder, natural_order
 from modelstats.runstats import RunStatistics
@@ -129,12 +131,6 @@ __all__ = [
     "state_of_detail",
 ]
 
-_NASH: Final = "nash"
-_CALIB: Final = "Calib"
-_CALIBRATE: Final = "calibrate"
-_PROJECT_BLOCK: Final = "ScenarioMIP"
-_CALIBRATION_FILES_ABOVE: Final = 10
-"""``R/getRunStatus.R:302-303``: more than ten ``fulldata_*.gdx`` or ``input_*.gdx`` (BUG-001, kept)."""
 _INTEGER: Final = re.compile(r"-?[0-9]+")
 
 
@@ -319,21 +315,17 @@ class ProjectSummation:
 
 
 def _lazy[T](method: Callable[[Run], T]) -> cached_property[T]:
-    """A cached property whose reading errors are the package's :class:`RunReadError`.
+    """A cached property whose :class:`RunReadError` carries the R warnings deferred so far.
 
-    The facts layer raises the same class (``modelstats.facts`` re-exports it from ``modelstats.errors``);
-    the re-raise here keeps the facts error as ``__cause__``, forwards its R call and attaches the R
-    warnings the facts have deferred so far (``RunFacts.deferred_warnings``), and goes in the quality pass
-    together with the ``_FactsReadError`` alias. An error is not cached: the next access reads again, as R
-    would on the next call.
+    The facts raise the package's error with R's message and call already; the wrapper only attaches the
+    warnings (``RunFacts.attaching_warnings``), as ``get_run_status`` does for its records. An error is not
+    cached: the next access reads again, as R would on the next call.
     """
 
     @wraps(method)
     def read(self: Run) -> T:
-        try:
+        with self._facts.attaching_warnings():
             return method(self)
-        except _FactsReadError as error:
-            raise RunReadError(str(error), call=error.call, warnings=self._facts.deferred_warnings) from error
 
     return cached_property(read)
 
@@ -420,9 +412,14 @@ class Run:
     def run_type(self) -> str | None:
         """``colRunType()`` (``R/colRunType.R``): ``"nash"``, ``"Calib_nash"``, ``"testOneRegi EUR"``, ...
 
-        ``None`` without a configuration file and for a MAgPIE configuration without
-        ``cfg$gms$optimization`` (BUG-046, where the parity view aborts).
+        ``None`` without a configuration file and when the configuration lacks an input the classifier
+        needs: ``cfg$model_name`` or ``cfg$gms$optimization`` (D-25, a missing field is a missing input;
+        the parity view aborts with ``argument is of length zero`` at ``R/colRunType.R:20`` / ``:24`` or,
+        for a MAgPIE configuration without optimization, ``replacement has length zero``, BUG-046).
         """
+        config = self.config
+        if config is None or config.model_name is None or config.optimization is None:
+            return None
         return self._facts.run_type
 
     # -- status (R/getRunStatus.R:38, 152-243) --------------------------------------------------------
@@ -543,19 +540,14 @@ class Run:
     def _plausibility(self) -> tuple[int, int, int] | None:
         """The three REMIND plausibility counts (``R/getRunStatus.R:316-348``); ``None`` where R has none.
 
-        A configuration file, a REMIND run (by ``runstatistics.rda``) and the mif are needed, as in R; each
-        count is 0 without its file.
+        A configuration file, a REMIND run (by ``runstatistics.rda``) and the mif are needed, as in R; the
+        counts are the parity view's (``run_status.plausibility_counts``), 0 without a file.
         """
         facts = self._facts
         config = self.config
         if config is None or facts.is_magpie or not facts.remind_mif_exists(config.title):
             return None
-        title = config.title
-        return (
-            facts.summation_error_count(title) if facts.summation_errors_exist(title) else 0,
-            facts.range_error_count(title) if facts.range_errors_exist(title) else 0,
-            facts.fix_error_count if facts.fix_errors_exist else 0,
-        )
+        return plausibility_counts(facts, config.title)
 
     @property
     def summation_errors(self) -> int | None:
@@ -581,7 +573,7 @@ class Run:
         project = self._facts.project_summations
         if project is None:
             return None
-        block = project.get(_PROJECT_BLOCK)
+        block = project.get(PROJECT_BLOCK)
         return ProjectSummation(
             _count_of(block, "missingVars"),
             _count_of(block, "checkSummations"),
@@ -598,61 +590,23 @@ class Run:
     def to_status_record(self, detailed: bool = True) -> RunStatus:
         """The R-compatible record of ``getRunStatus()`` for this run (``03`` section 5), on the same facts.
 
-        The columns are evaluated in R's read order (``R/getRunStatus.R:34-361``), so that where two reads
-        would abort, the error R reports first is the one raised, as :class:`RunReadError`. The row name
-        is the run name; the call-level rules of ``get_run_status`` (order, the ``"NA"`` row of a missing
-        path, the merge of repeated names, BUG-022) are not applied here.
+        The columns are ``run_status.status_record``'s, evaluated in R's read order
+        (``R/getRunStatus.R:34-361``) over this run's facts, so that where two reads would abort, the error
+        R reports first is the one raised, as :class:`RunReadError` with the deferred warnings. The
+        ``RunStatus`` column is :attr:`_parity_status`, the one the clean view reads too, supplied at the
+        point of R's read order where the column is computed: the coupled ``mag-<i>`` branch
+        (``R/getRunStatus.R:188-196``) builds the MAgPIE child's facts and runs its ``squeue``, which the
+        cache keeps to one pass for both views (``06`` 5.1). The row name is the run name; the call-level
+        rules of ``get_run_status`` (order, the ``"NA"`` row of a missing path, the merge of repeated names,
+        BUG-022) are not applied here.
         """
-        try:
-            return self._status_record(detailed)
-        except _FactsReadError as error:
-            raise RunReadError(str(error), call=error.call, warnings=self._facts.deferred_warnings) from error
-
-    def _status_record(self, detailed: bool) -> RunStatus:
-        """``run_status.run_status_record`` over this run's facts (one copy of its read order)."""
         facts = self._facts
-        job = self._job_text  # :38
-        facts.selected_gdx  # noqa: B018 - forced: R reads the GDX selection (:54-64) before the configuration
-        run_type = column_run_type(facts)  # :69-74
-        facts.statistics  # noqa: B018 - forced: R loads runstatistics.rda (:76-79) before the modelstat column
-        modelstat = column_modelstat(facts)
-        in_app_results = column_run_in_app_results(facts) if facts.effects.on_cluster else None
-        mif = column_mif(facts)
-        maximum = iteration_maximum(facts, run_type)
-        iteration = column_iter(facts, maximum)
-        status = self._parity_status
-        if not detailed:  # :248-250
-            return RunStatus(
-                run=facts.files.name,
-                path=facts.files.directory,
-                jobInSLURM=job,
-                RunType=run_type,
-                modelstat=modelstat,
-                runInAppResults=in_app_results,
-                Mif=mif,
-                Iter=iteration,
-                RunStatus=status,
-                detailed=False,
-            )
-        warnings = column_warnings(facts)
-        conv = column_conv(facts, run_type, maximum)
-        iteration, conv = calibration(facts, run_type, iteration, conv)
-        return RunStatus(
-            run=facts.files.name,
-            path=facts.files.directory,
-            jobInSLURM=job,
-            RunType=run_type,
-            modelstat=modelstat,
-            runInAppResults=in_app_results,
-            Mif=mif,
-            Iter=iteration,
-            RunStatus=status,
-            detailed=True,
-            Warnings=warnings,
-            Conv=conv,
-            Runtime=column_runtime(facts, job),
-            sanity=sanity_counts(facts),
-        )
+        with facts.attaching_warnings():
+            return status_record(facts, facts.files.directory, detailed, run_status=self._cached_status)
+
+    def _cached_status(self, _facts: RunFacts, _job: str) -> str:
+        """The ``run_status`` supplier of ``status_record``: the cached :attr:`_parity_status`."""
+        return self._parity_status
 
     def to_dict(self) -> dict[str, Any]:
         """A JSON-able snapshot of the properties: enums as their values, the runtime in seconds."""
@@ -727,19 +681,15 @@ def _modelstat_text(facts: RunFacts) -> str | None:
     """The unexplained ``modelstat`` text (``R/getRunStatus.R:84-97``) with missing fields degrading.
 
     The first-found ``o_modelstat``/``p80_modelstat`` of the selected GDX, pasted with ``0`` as ``.``;
-    without it the ``stats$modelstat`` of ``runstatistics.rda``: every value pasted for a MAgPIE run, the
-    one value of a REMIND run (R's ``try()`` fails on a vector). ``None`` when neither has it.
+    without it the ``stats$modelstat`` of ``runstatistics.rda`` pasted as the parity view pastes it
+    (``run_status.pasted_modelstat``), the model taken from ``isTRUE(model_name == "MAgPIE")`` where R's
+    strict test aborts. ``None`` when neither has it.
     """
     values = facts.modelstat_values
-    text = modelstat_text(values) if values is not None else NA
-    if text != NA:
-        return text
-    stats = facts.statistics
-    if stats is None or not stats.has_name("modelstat"):
-        return None
-    if stats.is_magpie:
-        return "".join(r_as_character(value) or NA for value in stats.modelstat)
-    return r_as_character(stats.modelstat[0]) if len(stats.modelstat) == 1 else None
+    text: str | None = modelstat_text(values) if values is not None else NA
+    if text == NA and facts.statistics is not None:
+        text = pasted_modelstat(facts.statistics, magpie=facts.is_magpie)
+    return None if text == NA else text
 
 
 def _convergence(facts: RunFacts, run_type: str | None, maximum: int | None) -> Convergence:
@@ -749,7 +699,7 @@ def _convergence(facts: RunFacts, run_type: str | None, maximum: int | None) -> 
     ``non_optimal.gdx``), 0 is not converged (R prints the ``p80_repy`` digits below the maximum); a
     converged calibration run with more than ten iteration files is ``Clb_converged`` (BUG-001 kept).
     """
-    if run_type is None or _NASH not in run_type or facts.selected_gdx is None:
+    if run_type is None or NASH_RUN_TYPE not in run_type or facts.selected_gdx is None:
         return Convergence.UNKNOWN
     flag = facts.convergence_flag
     if flag is None or math.isnan(flag):
@@ -758,19 +708,13 @@ def _convergence(facts: RunFacts, run_type: str | None, maximum: int | None) -> 
         return Convergence.NOT_CONVERGED
     if flag != 1:
         return Convergence.UNKNOWN
-    if _is_calibrating(facts, run_type) and facts.files.exists(facts.files.log_txt):  # :297-304
+    if is_calibrating(facts, run_type) and facts.files.exists(facts.files.log_txt):  # :297-304
         iteration_files = max(facts.fulldata_iteration_count, facts.input_iteration_count)
-        if iteration_files > _CALIBRATION_FILES_ABOVE:
+        if iteration_files > CALIBRATION_FILES_ABOVE:
             return Convergence.CALIBRATION_CONVERGED
     if facts.files.exists(facts.files.non_optimal_gdx):
         return Convergence.CONVERGED_HAD_INFES
     return Convergence.CONVERGED
-
-
-def _is_calibrating(facts: RunFacts, run_type: str) -> bool:
-    """``grepl("Calib", RunType) || isTRUE(cfg$gms$CES_parameters == "calibrate")`` (``:297``)."""
-    config = facts.config
-    return _CALIB in run_type or (config is not None and r_as_character(config.CES_parameters) == _CALIBRATE)
 
 
 def _calibration_iteration(facts: RunFacts, run_type: str) -> int | None:
@@ -778,7 +722,7 @@ def _calibration_iteration(facts: RunFacts, run_type: str) -> int | None:
 
     ``None`` for a run that does not calibrate, without ``log.txt``, or when the number is not positive.
     """
-    if not (_is_calibrating(facts, run_type) and facts.files.exists(facts.files.log_txt)):
+    if not (is_calibrating(facts, run_type) and facts.files.exists(facts.files.log_txt)):
         return None
     digits = facts.calibration_iteration
     number = _as_int(digits[0]) if digits else None
@@ -791,30 +735,22 @@ def _count_of(block: Any, name: str) -> int | None:
     if value is None:
         return None
     try:
-        element = scalar(value)
+        return whole_number(value)
     except RDataError:
         return None
-    if isinstance(element, bool | int):
-        return int(element)
-    if isinstance(element, float) and element.is_integer():
-        return int(element)
-    return None
 
 
 def _in_app_results(facts: RunFacts) -> bool | None:
     """``runInAppResults`` (``R/getRunStatus.R:105-116``) as a boolean, ``None`` off the cluster.
 
     ``<archive>/<stats$id>.rds`` exists and no ``overview.rds`` of the archive is older than ten minutes
-    before it (vacuously true without one, BUG-010); the archive is ``$MAGPIE_RESULTS_ARCHIVE_PATH/`` for
-    a MAgPIE run and the REMIND results archive otherwise. ``False`` without a ``stats$id``.
+    before it (vacuously true without one, BUG-010); the archive is the parity view's
+    (``run_status.results_archive``) for the model of ``isTRUE(model_name == "MAgPIE")``. ``False`` without
+    a ``stats$id``.
     """
-    env = facts.effects
-    if not env.on_cluster:
+    if not facts.effects.on_cluster:
         return None
     stats = facts.statistics
     if stats is None or stats.id is None:
         return False
-    archive = (
-        f"{env.magpie_results_archive}/" if facts.is_magpie else env.cluster_paths.remind_results_archive
-    )
-    return facts.archived_result_is_current(archive)
+    return facts.archived_result_is_current(results_archive(facts, magpie=facts.is_magpie))

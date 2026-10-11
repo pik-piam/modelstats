@@ -72,7 +72,6 @@ from rdata.unparser import unparse_fileobj
 
 from modelstats.env import Effects, LockHeldError, PathLike
 from modelstats.errors import ModelstatsError
-from modelstats.facts import physical_path
 from modelstats.rdata_io import WRITE_CLASS_MAP, RDataError, read_rds, vector
 from modelstats.sanity import AMT_STATE_FILE
 
@@ -100,6 +99,7 @@ __all__ = [
     "complete",
     "cycle_id",
     "describe",
+    "evaluable_cycle",
     "fail",
     "migrate_r_state",
     "next_command",
@@ -510,7 +510,7 @@ def complete(
     (``tested_commit``) and ``rs -A`` keeps its pattern while idle. ``last_error`` stays as history.
     """
     target_phase(state, Command.EVALUATE)
-    cycle = _evaluable_cycle(state)
+    cycle = evaluable_cycle(state)
     completed = Completed(
         id=cycle.id,
         evaluated_at=evaluated_at,
@@ -521,8 +521,12 @@ def complete(
     return replace(state, phase=Phase.IDLE, cycle=None, last_completed=completed)
 
 
-def _evaluable_cycle(state: AmtState) -> Cycle:
-    """The cycle ``evaluate`` works on; a ``failed`` state without one has nothing to retry."""
+def evaluable_cycle(state: AmtState) -> Cycle:
+    """The cycle ``evaluate`` works on; a ``failed`` state without one has nothing to retry.
+
+    The pre-check of ``modelstats.amt.evaluate.cycle_to_evaluate`` and the cycle :func:`complete` closes:
+    one message points at ``reset`` in both places.
+    """
     if state.cycle is None:
         raise AmtStateError(
             f"cannot 'evaluate': {describe(state)}; no cycle is recorded to retry, run 'modeltests reset'"
@@ -603,7 +607,7 @@ class _RFiles:
             self.notes.append(f"{name} is absent")
             return None
         try:
-            values = vector(read_rds(physical_path(path, self.effects)))
+            values = vector(read_rds(self.effects.physical_path(path)))
         except (RDataError, OSError) as error:
             self.notes.append(f"{name} could not be read ({error})")
             return None
@@ -619,7 +623,7 @@ class _RFiles:
             self.notes.append(f"{name} is absent")
             return None
         try:
-            frame = read_rds(physical_path(path, self.effects))
+            frame = read_rds(self.effects.physical_path(path))
         except (RDataError, OSError) as error:
             self.notes.append(f"{name} could not be read ({error})")
             return None

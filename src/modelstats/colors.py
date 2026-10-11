@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
+from modelstats.errors import MISSING_VALUE_IN_IF, SUBSCRIPT_OUT_OF_BOUNDS, ModelstatsError
 from modelstats.formatting import CellValue, is_na, r_as_character
 
 __all__ = [
@@ -52,11 +53,6 @@ __all__ = [
     "num_ansi_colours",
     "terminfo_colours",
 ]
-
-#: R's message for ``if (NA)``.
-MISSING_VALUE_IN_IF = "missing value where TRUE/FALSE needed"
-#: R's message for ``status[["name"]]`` on a vector without that name.
-SUBSCRIPT_OUT_OF_BOUNDS = "subscript out of bounds"
 
 _ESC = "\x1b["
 _CLOSE_COLOUR = f"{_ESC}39m"
@@ -312,7 +308,7 @@ def colour_legend(crayon: Crayon) -> str:
 # --- the decision trees -------------------------------------------------------------------------------
 
 
-class ColourRuleError(RuntimeError):
+class ColourRuleError(ModelstatsError):
     """An R error inside the colour decision; ``str(error)`` is the R condition message."""
 
 

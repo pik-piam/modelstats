@@ -172,6 +172,35 @@ def test_sort_like_r_levels() -> None:
     assert sort_like_r(["a2", "a10", "A1", "a1"]) == ["a1", "A1", "a10", "a2"]
 
 
+# R 4.6.1, LC_ALL=C.utf8 (icuGetCollate() == "root"): dir() of a directory holding these names (plus
+# ".hidden", which dir() omits) returned exactly this order; the configuration-file names are the ones
+# the unanchored regex of R/getRunStatus.R:41 sees (BUG-003).
+R_DIR_CONFIG_NAMES = [
+    "_x", "-a", "1", "10", "2", "a", "A", "ä", "a-b", "ab", "b", "B", "config.Rdata", "config.Rdata.bak",
+    "config.yml", "Config.yml", "config.yml~", "old_config.yml", "sub.dir",
+]  # fmt: skip
+# R 4.6.1, same locale: sort(c("a b", "a_b", "a-b", "a1b", "aab", "aAb", "a", "A", "ab", "aB", "Ab", "AB",
+#   "äb", "ab1", "ab10", "ab2", "abc", "ab-c", "ab.c"))
+R_SORT_SAMPLE = [
+    "a", "A", "a b", "a_b", "a-b", "a1b", "aab", "aAb", "ab", "aB", "Ab", "AB", "äb", "ab-c", "ab.c", "ab1",
+    "ab10", "ab2", "abc",
+]  # fmt: skip
+
+
+def test_listdir_like_r_reproduces_the_config_name_probe(tmp_path: Path) -> None:
+    for name in R_DIR_CONFIG_NAMES + [".hidden"]:
+        if name == "sub.dir":
+            (tmp_path / name).mkdir()
+        else:
+            (tmp_path / name).write_text("", encoding="utf-8")
+    assert ProductionEffects().listdir_like_r(tmp_path) == R_DIR_CONFIG_NAMES
+    assert ProductionEffects().listdir_like_r(str(tmp_path)) == R_DIR_CONFIG_NAMES
+
+
+def test_sort_like_r_reproduces_the_mixed_case_sample() -> None:
+    assert sort_like_r(reversed(R_SORT_SAMPLE)) == R_SORT_SAMPLE
+
+
 # ---------------------------------------------------------------------------------------------
 # ProductionEffects: the R semantics of the real calls
 # ---------------------------------------------------------------------------------------------
@@ -506,6 +535,16 @@ def test_local_mode_maps_the_fixtures_root(layers: Layers) -> None:
     )
     assert effects.paths is not None
     assert effects.paths.candidates(PurePosixPath("/p/projects/shared")) == (Path("/p/projects/shared"),)
+
+
+def test_physical_path_is_the_overlay_entry_or_the_logical_path(layers: Layers) -> None:
+    """What a library opens: the fixture layer's file, a relative path under the logical cwd, or the path."""
+    effects = make_fake(layers)
+    shown = layers.fixtures_p / "projects" / "shared" / "both.txt"
+    assert effects.physical_path("/p/projects/shared/both.txt") == shown
+    assert effects.physical_path("projects/shared/both.txt") == shown  # the logical cwd is /p
+    assert effects.physical_path("/p/projects/shared/absent") == Path("/p/projects/shared/absent")
+    assert effects.calls == []  # no probe is logged: the open that follows is the library's
 
 
 def test_paths_outside_the_root_pass_through(layers: Layers, tmp_path: Path) -> None:
@@ -1318,7 +1357,8 @@ def test_recording_mutations_are_real_and_relative_to_the_injected_cwd(tmp_path:
     ]  # fmt: skip
     assert effects.calls[0] == EffectCall("write_text", ("amt-state.json", '{"phase": "idle"}'))
     assert effects.calls[2] == EffectCall("replace_in_file", ("config/default.cfg", *SED_FORCE_DOWNLOAD))
-    assert effects.cwd == str(checkout) and effects.paths is None and effects.trace == []
+    assert effects.cwd == str(checkout) and effects.trace == []
+    assert effects.physical_path("runcode.rds") == checkout / "runcode.rds"  # no overlay: under the cwd
 
 
 def test_recording_run_streams_the_canned_answer_and_honours_check(
@@ -1491,7 +1531,7 @@ def test_dry_run_never_writes_runs_posts_or_locks(tmp_path: Path) -> None:
         "",
     )
     assert dry.magpie_results_archive == "" and dry.cluster_paths == ClusterPaths() and dry.inner is inner
-    assert dry.paths is None
+    assert dry.physical_path("runcode.rds") == inner.physical_path("runcode.rds") == checkout / "runcode.rds"
 
 
 def test_dry_run_redacts_an_unparseable_webhook_url_too() -> None:
@@ -1527,7 +1567,8 @@ def test_dry_run_wraps_production_by_default_and_passes_an_overlay_through(layer
     assert isinstance(DryRunEffects().inner, ProductionEffects)
     fake = make_fake(layers)
     dry = DryRunEffects(fake)
-    assert dry.paths is fake.paths and dry.on_cluster and dry.cwd == "/p"
+    shared = "/p/projects/shared/both.txt"
+    assert dry.physical_path(shared) == fake.physical_path(shared) and dry.on_cluster and dry.cwd == "/p"
     assert dry.read_text("/p/projects/shared/both.txt") == "fixture"
     with pytest.raises(ValueError, match="needs a program"):
         dry.run([])

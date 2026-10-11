@@ -28,6 +28,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Final, TextIO
 
+from modelstats.errors import ModelstatsError
+
 __all__ = [
     "ALL_ENTRY",
     "FIXED_ENTRY",
@@ -61,8 +63,11 @@ _LETTERS: Final = ("a", "p", "f")
 _LISTED_LIMIT: Final = 240
 
 
-class NoMoreInputError(EOFError):
-    """Standard input ended at a prompt that R would repeat forever (a search or its confirmation)."""
+class NoMoreInputError(ModelstatsError, EOFError):
+    """Standard input ended at a prompt that R would repeat forever (a search or its confirmation).
+
+    The package's error and, for a caller reading lines, the ``EOFError`` that an exhausted input is.
+    """
 
 
 @dataclass(frozen=True)

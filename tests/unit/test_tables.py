@@ -17,7 +17,8 @@ from pathlib import Path
 import pytest
 
 from modelstats import tables
-from modelstats.tables import TableRow, column_order, read_error_csv, to_dataframe
+from modelstats.formatting import CellValue, Row
+from modelstats.tables import column_order, read_error_csv, to_dataframe
 
 # --- column order --------------------------------------------------------------------------------
 
@@ -74,14 +75,14 @@ DETAILED = {
 
 
 def test_frame_has_run_names_as_index_and_r_column_order() -> None:
-    frame = to_dataframe([TableRow("b", DETAILED), TableRow("a", BRIEF | {"RunStatus": "NA"})])
+    frame = to_dataframe([Row("b", DETAILED), Row("a", BRIEF | {"RunStatus": "NA"})])
     assert frame.index.name == "run"
     assert list(frame.index) == ["b", "a"]
     assert list(frame.columns) == list(tables.COLUMN_ORDER[:3]) + list(tables.COLUMN_ORDER[4:])
 
 
 def test_frame_dtypes_follow_the_r_storage_modes() -> None:
-    frame = to_dataframe([TableRow("r", DETAILED)])
+    frame = to_dataframe([Row("r", DETAILED)])
     assert str(frame["RunType"].dtype) == "str"
     assert str(frame["Runtime"].dtype) == "Float64"
     assert str(frame["summationErrors"].dtype) == "Int64"
@@ -90,7 +91,7 @@ def test_frame_dtypes_follow_the_r_storage_modes() -> None:
 
 
 def test_the_string_na_stays_a_string_and_a_real_na_is_missing() -> None:
-    frame = to_dataframe([TableRow("r", DETAILED)])
+    frame = to_dataframe([Row("r", DETAILED)])
     assert frame.loc["r", "jobInSLURM"] == "NA"
     assert not frame["jobInSLURM"].isna().any()
     assert frame["missingProjVars"].isna().all()
@@ -98,7 +99,7 @@ def test_the_string_na_stays_a_string_and_a_real_na_is_missing() -> None:
 
 def test_a_column_one_run_lacks_is_na_in_that_row() -> None:
     magpie = {"jobInSLURM": "no", "RunType": "nlp_par", "modelstat": "222", "Mif": "yes", "Iter": "y2150"}
-    frame = to_dataframe([TableRow("mag", magpie), TableRow("rem", DETAILED)])
+    frame = to_dataframe([Row("mag", magpie), Row("rem", DETAILED)])
     assert list(frame.columns) == list(tables.COLUMN_ORDER[:3]) + list(tables.COLUMN_ORDER[4:])
     assert frame["summationErrors"].isna().tolist() == [True, False]
     assert frame["summationErrors"].tolist()[1] == 1
@@ -106,9 +107,9 @@ def test_a_column_one_run_lacks_is_na_in_that_row() -> None:
 
 
 def test_a_repeated_run_name_updates_the_earlier_row_in_place() -> None:
-    first = TableRow("same", {"jobInSLURM": "no", "RunType": "nash", "Mif": "yes"})
-    other = TableRow("other", {"jobInSLURM": "no", "RunType": "nash", "Mif": "no"})
-    second = TableRow("same", {"jobInSLURM": "NA", "RunType": "debug EUR"})
+    first = Row("same", {"jobInSLURM": "no", "RunType": "nash", "Mif": "yes"})
+    other = Row("other", {"jobInSLURM": "no", "RunType": "nash", "Mif": "no"})
+    second = Row("same", {"jobInSLURM": "NA", "RunType": "debug EUR"})
     frame = to_dataframe([first, other, second])
     assert list(frame.index) == ["same", "other"]
     assert frame.loc["same", "RunType"] == "debug EUR"
@@ -124,16 +125,17 @@ def test_no_rows_give_an_empty_frame() -> None:
 
 
 def test_unknown_columns_keep_their_objects() -> None:
-    frame = to_dataframe([TableRow("r", {"RunType": "nash", "note": "free text", "flag": True})])
+    frame = to_dataframe([Row("r", {"RunType": "nash", "note": "free text", "flag": True})])
     assert list(frame.columns) == ["RunType", "note", "flag"]
     assert frame.loc["r", "flag"] is True
 
 
-def test_any_object_with_run_and_to_row_is_accepted() -> None:
+def test_any_object_with_run_and_cells_is_accepted() -> None:
     class Record:
         run = "rec"
 
-        def to_row(self, detailed: bool = True) -> dict[str, tables.Cell]:
+        @property
+        def cells(self) -> dict[str, CellValue]:
             return {"RunType": "nash"}
 
     assert list(to_dataframe([Record()]).index) == ["rec"]

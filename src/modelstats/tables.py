@@ -6,13 +6,14 @@ section 5, ``tables.py``):
 * ``getRunStatus()`` returns a ``data.frame`` (``R/getRunStatus.R:28, 365``) whose rows are keyed by the
   run's basename and whose columns appear in the order of their first assignment inside the loop
   (``:38`` to ``:360``). The Python record list of phase 2 (``run_status.RunStatus``) is the primary
-  result; :func:`to_dataframe` builds the pandas equivalent of the R frame from any records exposing
-  ``run`` and ``to_row()`` (:class:`StatusRow`): run names as the index, the R column order
-  (:data:`STATUS_COLUMNS`), the R storage types (character, integer, double), the literal ``"NA"``
-  strings kept as strings and a real ``NA`` as a missing value. A column one run has and another
-  lacks (the sanity block of ``:325-361`` for a MAgPIE run in the same call) is ``NA`` in the
-  lacking row, as in R; a run name seen twice updates the earlier row in place, because
-  ``out[i, col] <- value`` on an existing row name overwrites (register BUG-022, decision D-13).
+  result; :func:`to_dataframe` builds the pandas equivalent of the R frame from any rows exposing
+  ``run`` and ``cells`` (``modelstats.formatting.StatusRow``, the one row shape of the presentation
+  layer): run names as the index, the R column order (:data:`STATUS_COLUMNS`), the R storage types
+  (character, integer, double), the literal ``"NA"`` strings kept as strings and a real ``NA`` as a
+  missing value. A column one run has and another lacks (the sanity block of ``:325-361`` for a
+  MAgPIE run in the same call) is ``NA`` in the lacking row, as in R; a run name seen twice updates
+  the earlier row in place, because ``out[i, col] <- value`` on an existing row name overwrites
+  (register BUG-022, decision D-13).
 * The sanity counts read three CSV-like files with ``read.csv2`` (``:327-328``, ``:336-337``,
   ``:345-346``) and only use ``length(unique(tmp$variable))`` and ``nrow(tmp)``. :func:`read_error_csv`
   streams the file with the ``csv`` module under the quoting rules of ``read.csv2`` (``quote = '"'``,
@@ -33,23 +34,24 @@ from __future__ import annotations
 import csv
 import os
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Final, Protocol, runtime_checkable
+from typing import Any, Final
 
 import pandas as pd
+
+from modelstats.env import PathLike
+from modelstats.errors import ModelstatsError
+from modelstats.formatting import CellValue, StatusRow
 
 __all__ = [
     "COLUMN_ORDER",
     "STATUS_COLUMNS",
-    "Cell",
-    "ColumnSpec",
     "EmptyCsvError",
     "ErrorCsv",
     "RType",
-    "StatusRow",
-    "TableRow",
+    "StatusColumn",
     "column_order",
     "dollar_column",
     "fix_error_count",
@@ -58,11 +60,6 @@ __all__ = [
     "summation_error_count",
     "to_dataframe",
 ]
-
-type Cell = str | int | float | bool | None
-"""One cell of the status table: an R string (``"NA"`` included), a number, or ``None`` for a real ``NA``."""
-
-type PathLike = str | os.PathLike[str]
 
 INDEX_NAME: Final = "run"
 """The index of the frame holds ``rownames(out)``, the run basenames (``R/getRunStatus.R:36``)."""
@@ -77,7 +74,7 @@ class RType(Enum):
 
 
 @dataclass(frozen=True, slots=True)
-class ColumnSpec:
+class StatusColumn:
     """One column of the R frame: its name, storage mode and the R lines that assign it."""
 
     name: str
@@ -85,59 +82,33 @@ class ColumnSpec:
     source: str
 
 
-STATUS_COLUMNS: Final[tuple[ColumnSpec, ...]] = (
-    ColumnSpec("jobInSLURM", RType.CHARACTER, "R/getRunStatus.R:38"),
-    ColumnSpec("RunType", RType.CHARACTER, "R/getRunStatus.R:70-73"),
-    ColumnSpec("modelstat", RType.CHARACTER, "R/getRunStatus.R:82-102"),
-    ColumnSpec("runInAppResults", RType.CHARACTER, "R/getRunStatus.R:106-115 (cluster only)"),
-    ColumnSpec("Mif", RType.CHARACTER, "R/getRunStatus.R:121-136"),
-    ColumnSpec("Iter", RType.CHARACTER, "R/getRunStatus.R:151-156, 300"),
-    ColumnSpec("RunStatus", RType.CHARACTER, "R/getRunStatus.R:152-243"),
-    ColumnSpec("Warnings", RType.CHARACTER, "R/getRunStatus.R:256-273 (detailed only)"),
-    ColumnSpec("Conv", RType.CHARACTER, "R/getRunStatus.R:278-304 (detailed only)"),
-    ColumnSpec("Runtime", RType.DOUBLE, "R/getRunStatus.R:309-313 (detailed only)"),
-    ColumnSpec("summationErrors", RType.INTEGER, "R/getRunStatus.R:326-331 (detailed, REMIND with mif)"),
-    ColumnSpec("rangeErrors", RType.INTEGER, "R/getRunStatus.R:334-340"),
-    ColumnSpec("fixErrors", RType.INTEGER, "R/getRunStatus.R:343-348"),
-    ColumnSpec("missingProjVars", RType.INTEGER, "R/getRunStatus.R:351-360"),
-    ColumnSpec("projSummationErrors", RType.INTEGER, "R/getRunStatus.R:351-360"),
-    ColumnSpec("projSummationErrorsRegional", RType.INTEGER, "R/getRunStatus.R:351-360"),
+STATUS_COLUMNS: Final[tuple[StatusColumn, ...]] = (
+    StatusColumn("jobInSLURM", RType.CHARACTER, "R/getRunStatus.R:38"),
+    StatusColumn("RunType", RType.CHARACTER, "R/getRunStatus.R:70-73"),
+    StatusColumn("modelstat", RType.CHARACTER, "R/getRunStatus.R:82-102"),
+    StatusColumn("runInAppResults", RType.CHARACTER, "R/getRunStatus.R:106-115 (cluster only)"),
+    StatusColumn("Mif", RType.CHARACTER, "R/getRunStatus.R:121-136"),
+    StatusColumn("Iter", RType.CHARACTER, "R/getRunStatus.R:151-156, 300"),
+    StatusColumn("RunStatus", RType.CHARACTER, "R/getRunStatus.R:152-243"),
+    StatusColumn("Warnings", RType.CHARACTER, "R/getRunStatus.R:256-273 (detailed only)"),
+    StatusColumn("Conv", RType.CHARACTER, "R/getRunStatus.R:278-304 (detailed only)"),
+    StatusColumn("Runtime", RType.DOUBLE, "R/getRunStatus.R:309-313 (detailed only)"),
+    StatusColumn("summationErrors", RType.INTEGER, "R/getRunStatus.R:326-331 (detailed, REMIND with mif)"),
+    StatusColumn("rangeErrors", RType.INTEGER, "R/getRunStatus.R:334-340"),
+    StatusColumn("fixErrors", RType.INTEGER, "R/getRunStatus.R:343-348"),
+    StatusColumn("missingProjVars", RType.INTEGER, "R/getRunStatus.R:351-360"),
+    StatusColumn("projSummationErrors", RType.INTEGER, "R/getRunStatus.R:351-360"),
+    StatusColumn("projSummationErrorsRegional", RType.INTEGER, "R/getRunStatus.R:351-360"),
 )
 """The columns of ``getRunStatus()`` in order of first assignment (``migration/03-migration-plan.md`` 3.1)."""
 
 COLUMN_ORDER: Final[tuple[str, ...]] = tuple(spec.name for spec in STATUS_COLUMNS)
-_SPEC_BY_NAME: Final[Mapping[str, ColumnSpec]] = {spec.name: spec for spec in STATUS_COLUMNS}
+_SPEC_BY_NAME: Final[Mapping[str, StatusColumn]] = {spec.name: spec for spec in STATUS_COLUMNS}
 _DTYPE_BY_RTYPE: Final[Mapping[RType, str]] = {
     RType.CHARACTER: "str",
     RType.INTEGER: "Int64",
     RType.DOUBLE: "Float64",
 }
-
-
-@runtime_checkable
-class StatusRow(Protocol):
-    """What :func:`to_dataframe` reads from a record: the row name and the assigned cells."""
-
-    @property
-    def run(self) -> str:
-        """``basename(dir)``, the R row name."""
-        ...
-
-    def to_row(self) -> Mapping[str, Cell]:
-        """The cells R assigned, by name; an unassigned column is absent, a real ``NA`` is ``None``."""
-        ...
-
-
-@dataclass(frozen=True, slots=True)
-class TableRow:
-    """A plain row for :func:`to_dataframe`: the run name and its cells."""
-
-    run: str
-    cells: Mapping[str, Cell] = field(default_factory=dict)
-
-    def to_row(self) -> Mapping[str, Cell]:
-        """The cells as given."""
-        return self.cells
 
 
 def column_order(names: Iterable[str]) -> list[str]:
@@ -153,15 +124,15 @@ def column_order(names: Iterable[str]) -> list[str]:
     return known + unknown
 
 
-def _merge_rows(rows: Iterable[StatusRow]) -> dict[str, dict[str, Cell]]:
+def _merge_rows(rows: Iterable[StatusRow]) -> dict[str, dict[str, CellValue]]:
     """Rows keyed by run name in first-seen order; a repeated name updates its row in place (D-13)."""
-    merged: dict[str, dict[str, Cell]] = {}
+    merged: dict[str, dict[str, CellValue]] = {}
     for row in rows:
-        merged.setdefault(row.run, {}).update(row.to_row())
+        merged.setdefault(row.run, {}).update(row.cells)
     return merged
 
 
-def _column(name: str, values: Sequence[Cell], index: pd.Index[Any]) -> pd.Series[Any]:
+def _column(name: str, values: Sequence[CellValue], index: pd.Index[Any]) -> pd.Series[Any]:
     """A pandas column with the dtype of the R storage mode; an unknown column keeps its objects."""
     spec = _SPEC_BY_NAME.get(name)
     dtype = "object" if spec is None else _DTYPE_BY_RTYPE[spec.rtype]
@@ -171,9 +142,11 @@ def _column(name: str, values: Sequence[Cell], index: pd.Index[Any]) -> pd.Serie
 def to_dataframe(rows: Iterable[StatusRow]) -> pd.DataFrame:
     """The ``data.frame`` ``getRunStatus()`` returns, as pandas (run names as the index, R column order).
 
-    Character columns use the ``str`` dtype (``"NA"`` stays the string ``"NA"``, a real ``NA`` is
-    missing), integer columns ``Int64`` and ``Runtime`` ``Float64`` (R stores whole seconds as a
-    double), both with ``pd.NA`` for ``NA``. No rows give the empty frame ``data.frame()``.
+    ``rows`` are the parity records (``run_status.RunStatus``) or any ``formatting.StatusRow`` (``run``
+    and ``cells``; a column R never assigned is absent from ``cells``). Character columns use the
+    ``str`` dtype (``"NA"`` stays the string ``"NA"``, a real ``NA`` is missing), integer columns
+    ``Int64`` and ``Runtime`` ``Float64`` (R stores whole seconds as a double), both with ``pd.NA`` for
+    ``NA``. No rows give the empty frame ``data.frame()``.
     """
     merged = _merge_rows(rows)
     index = pd.Index(list(merged), name=INDEX_NAME, dtype="str")
@@ -190,7 +163,7 @@ NA_STRING: Final = "NA"
 """``na.strings = "NA"``: the one field text ``read.table`` reads as a missing value."""
 
 
-class EmptyCsvError(ValueError):
+class EmptyCsvError(ModelstatsError):
     """``read.table``'s ``no lines available in input``: the file has no non-blank line."""
 
 

@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import io
 import math
+import operator
 import os
 import random
 import re
@@ -48,9 +49,9 @@ import typer
 from typer._click.exceptions import BadOptionUsage, NoSuchOption, UsageError
 
 from modelstats.choose import LineReader, NoMoreInputError, choose_from_list, read_stdin_line
-from modelstats.colors import MISSING_VALUE_IN_IF, ColourRuleError, Crayon
+from modelstats.colors import ColourRuleError, Crayon
 from modelstats.env import Effects, ProductionEffects, r_collation_key
-from modelstats.errors import DeferredWarning, ModelstatsError, RunReadError
+from modelstats.errors import MISSING_VALUE_IN_IF, DeferredWarning, ModelstatsError, RunReadError
 from modelstats.formatting import PrintOutputError
 from modelstats.loop_runs import (
     NO_RUNS_FOUND,
@@ -239,7 +240,7 @@ _NEGATIVE_NUMBER: Final = re.compile(r"^-[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$")
 """optparse's ``is_negative_number``: the only tokens starting with ``-`` that a flag takes as its value."""
 
 
-class OptparseError(Exception):
+class OptparseError(ModelstatsError):
     """A usage error as optparse raises it; ``str(error)`` is its message (``short flag "z" is invalid``)."""
 
 
@@ -443,19 +444,23 @@ class OptparseInteger:
         Raises:
             RError: ``if (NA > 0)`` is R's ``missing value where TRUE/FALSE needed``.
         """
-        if self.value is None:
-            raise RError(MISSING_VALUE_IN_IF, call=_DAYSBACK_IF_CALL, traceback=("commandLineInterface",))
-        if isinstance(self.value, str):
-            return r_collation_key(self.value) > r_collation_key(str(other))
-        return self.value > other
+        return self._compares(operator.gt, other)
 
     def less_than(self, other: int) -> bool:
         """``opt$daysback < other`` with the same rules as :meth:`greater_than`."""
+        return self._compares(operator.lt, other)
+
+    def _compares(self, relation: Callable[[Any, Any], bool], other: int) -> bool:
+        """``if (opt$daysback <relation> other)``: ``NA`` aborts the ``if``, a kept string compares as text.
+
+        ``relation`` is ``operator.gt`` or ``operator.lt``; a string optparse kept (``-d x``) compares under
+        R's collation with the digits of ``other`` (``"x" > "0"``), as R's ``>`` on character does.
+        """
         if self.value is None:
             raise RError(MISSING_VALUE_IN_IF, call=_DAYSBACK_IF_CALL, traceback=("commandLineInterface",))
         if isinstance(self.value, str):
-            return r_collation_key(self.value) < r_collation_key(str(other))
-        return self.value < other
+            return relation(r_collation_key(self.value), r_collation_key(str(other)))
+        return relation(self.value, other)
 
     @property
     def shown(self) -> str:
@@ -630,7 +635,7 @@ _NO_CALL_TRACEBACK: Final[tuple[str, ...]] = ()
 _TRE_REASON: Final = re.compile(r"reason '(.*)'$")
 
 
-class RError(Exception):
+class RError(ModelstatsError):
     """``commandLineInterface`` stopped with an R error: what ``Rscript`` prints and exit status 1.
 
     ``call`` is the error's call as ``deparse()`` prints it (``None`` for ``Error: <message>``), ``traceback``
@@ -974,7 +979,7 @@ def found_in_slurm_command(directory: str, session: Session) -> int:
     """Print ``foundInSlurm(directory)`` plus a newline, nothing else; on error the message on stderr, 1."""
     try:
         value = found_in_slurm(directory, session.effects)
-    except (ModelstatsError, SlurmError, OSError) as error:
+    except (ModelstatsError, OSError) as error:
         session.err.write(f"rs --found-in-slurm: {error}\n")
         return 1
     session.out.write(f"{value}\n")

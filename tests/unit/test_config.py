@@ -1,7 +1,8 @@
-"""``modelstats.config``: finding and loading ``config.Rdata`` / ``config.yml`` as the R code does.
+"""``modelstats.config``: loading ``config.Rdata`` / ``config.yml`` as the R code does.
 
-``dir()`` order is pinned against R 4.6.1 under the sandbox locale (``LC_ALL=C.utf8``, ICU root
-collation); the loaders read the R-written files of ``tests/data/r``.
+The loaders read the R-written files of ``tests/data/r``; finding the file (the unanchored regular
+expression over ``dir()`` in R's collation order, BUG-003) is ``RunFiles.config_matches`` on
+``Effects.listdir_like_r`` and is pinned in ``test_facts.py`` and ``test_env.py``.
 """
 
 from __future__ import annotations
@@ -12,149 +13,8 @@ import numpy as np
 import pytest
 import rdata
 
-from modelstats.config import (
-    CONFIG_FILE_REGEX,
-    ConfigError,
-    ConfigKind,
-    ConfigMatches,
-    RunConfig,
-    config_kind,
-    find_config_file,
-    load_config,
-    r_collation_key,
-    r_dir,
-)
+from modelstats.config import ConfigError, ConfigKind, RunConfig, config_kind, load_config
 from modelstats.rdata_io import vector
-
-# R 4.6.1, LC_ALL=C.utf8 (icuGetCollate() == "root"): dir() of a directory holding these names
-# (plus ".hidden", which dir() omits) returned exactly this order.
-R_DIR_ORDER = [
-    "_x",
-    "-a",
-    "1",
-    "10",
-    "2",
-    "a",
-    "A",
-    "ä",
-    "a-b",
-    "ab",
-    "b",
-    "B",
-    "config.Rdata",
-    "config.Rdata.bak",
-    "config.yml",
-    "Config.yml",
-    "config.yml~",
-    "old_config.yml",
-    "sub.dir",
-]
-# R 4.6.1, same locale: sort(c("a b", "a_b", "a-b", "a1b", "aab", "aAb", "a", "A", "ab", "aB", "Ab", "AB",
-#   "äb", "ab1", "ab10", "ab2", "abc", "ab-c", "ab.c"))
-R_SORT_SAMPLE = [
-    "a",
-    "A",
-    "a b",
-    "a_b",
-    "a-b",
-    "a1b",
-    "aab",
-    "aAb",
-    "ab",
-    "aB",
-    "Ab",
-    "AB",
-    "äb",
-    "ab-c",
-    "ab.c",
-    "ab1",
-    "ab10",
-    "ab2",
-    "abc",
-]
-
-
-def test_r_dir_reproduces_r_collation_and_skips_dot_files(tmp_path: Path) -> None:
-    for name in R_DIR_ORDER + [".hidden"]:
-        if name == "sub.dir":
-            (tmp_path / name).mkdir()
-        else:
-            (tmp_path / name).write_text("", encoding="utf-8")
-    assert r_dir(tmp_path) == R_DIR_ORDER
-    assert r_dir(str(tmp_path)) == R_DIR_ORDER
-
-
-def test_collation_key_reproduces_r_sort_sample() -> None:
-    assert sorted(reversed(R_SORT_SAMPLE), key=r_collation_key) == R_SORT_SAMPLE
-
-
-def test_collation_punctuation_table_matches_r() -> None:
-    """R 4.6.1: ``sort(paste0("a", p, "b"))`` for the ASCII punctuation is this order."""
-    punctuation = " _-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$"
-    names = [f"a{char}b" for char in punctuation]
-    assert sorted(reversed(names), key=r_collation_key) == names
-
-
-def test_r_dir_of_a_missing_path_or_a_file_is_empty(tmp_path: Path) -> None:
-    assert r_dir(tmp_path / "absent") == []
-    (tmp_path / "file").write_text("", encoding="utf-8")
-    assert r_dir(tmp_path / "file") == []
-
-
-# ---------------------------------------------------------------------------------------------
-# find_config_file
-# ---------------------------------------------------------------------------------------------
-
-
-def touch(directory: Path, *names: str) -> Path:
-    directory.mkdir(parents=True, exist_ok=True)
-    for name in names:
-        (directory / name).write_text("", encoding="utf-8")
-    return directory
-
-
-def test_no_config_file(tmp_path: Path) -> None:
-    run = touch(tmp_path / "run", "full.gms", "log.txt", "cfg.txt", ".config.yml")
-    matches = find_config_file(run)
-    assert matches == ConfigMatches(run, ())
-    assert matches.path is None and matches.paths == ()
-
-
-def test_one_config_file(tmp_path: Path) -> None:
-    run = touch(tmp_path / "run", "config.Rdata", "full.gms")
-    assert find_config_file(run).path == run / "config.Rdata"
-    run = touch(tmp_path / "mag", "config.yml", "full.gms")
-    assert find_config_file(str(run)).path == run / "config.yml"
-
-
-def test_unanchored_regex_matches_more_than_the_two_names(tmp_path: Path) -> None:
-    """BUG-003 (D-01, parity): ``config.Rdata.bak`` and ``old_config.yml`` match, ``.`` is any character."""
-    run = touch(
-        tmp_path / "run", "config.Rdata", "config.Rdata.bak", "old_config.yml", "configXyml", "cfg.yml"
-    )
-    matches = find_config_file(run)
-    assert matches.names == (
-        "config.Rdata",
-        "config.Rdata.bak",
-        "configXyml",
-        "old_config.yml",
-    )
-    assert matches.path == run / "config.Rdata"  # the first in dir() order
-    assert matches.paths == tuple(run / name for name in matches.names)
-    assert CONFIG_FILE_REGEX.search("my_config.Rdata~") and not CONFIG_FILE_REGEX.search("config.Rdat")
-
-
-def test_dir_order_decides_the_first_match(tmp_path: Path) -> None:
-    run = touch(tmp_path / "run", "config.yml", "Config.yml", "config.Rdata", "config.yml~")
-    assert find_config_file(run).names == (
-        "config.Rdata",
-        "config.yml",
-        "config.yml~",
-    )  # grep is case-sensitive
-
-
-def test_not_a_directory_has_no_matches(tmp_path: Path) -> None:
-    assert find_config_file(tmp_path / "absent").names == ()
 
 
 @pytest.mark.parametrize(

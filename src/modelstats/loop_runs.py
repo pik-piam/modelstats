@@ -56,7 +56,7 @@ from typing import Final, TextIO
 
 from modelstats.colors import Crayon, colour_for_row, colour_legend
 from modelstats.env import Effects, PathLike, ProductionEffects
-from modelstats.errors import DeferredWarning, ModelstatsError, RunReadError
+from modelstats.errors import SUBSCRIPT_OUT_OF_BOUNDS, DeferredWarning, ModelstatsError, RunReadError
 from modelstats.formatting import CellValue, Row, print_output, runtime_display
 from modelstats.run_status import NA, NO_JOB, RunStatus, get_run_status
 from modelstats.runfolders import r_basename
@@ -137,9 +137,6 @@ SKIPPED: Final = "skipped."
 
 SKIPPED_BECAUSE_OF_ERROR: Final = "skipped because of error"
 """``cat(basename(i), "skipped because of error\\n")`` (``R/loopRuns.R:63``)."""
-
-SUBSCRIPT_OUT_OF_BOUNDS: Final = "subscript out of bounds"
-"""R's message for ``status[["jobInSLURM"]]`` on a ``try-error`` (``R/loopRuns.R:58``, BUG-005)."""
 
 _CONFIG_OR_LOG: Final = re.compile(r"^config.*|^log.txt$")
 """``grep("^config.*|^log.txt$", dir(i), value = TRUE)`` (``R/loopRuns.R:58``)."""

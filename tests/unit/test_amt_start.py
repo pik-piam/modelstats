@@ -89,9 +89,11 @@ from modelstats.env import (
     CommandFailedError,
     DryRunEffects,
     Effects,
+    LineCallback,
     PathLike,
     ProductionEffects,
     RecordingEffects,
+    RunResult,
     TraceRecord,
 )
 from modelstats.rdata_io import read_rds, scalar
@@ -113,6 +115,8 @@ FAKE_CHECKOUT = SYNTHETIC / "p" / "projects" / "remind" / "modeltests" / "remind
 LOG_LINE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} start +([A-Z]+) +(.*)$")
 ALL_STEPS = ["git", "git", "git", "Rscript", "Rscript", "Rscript", "git", "git", "make"]
 """The subprocesses of a complete start: the bridge's two calls included, in order."""
+BRIDGE_STEPS = ALL_STEPS[:4]
+"""The subprocesses before the checkpoint: ``git reset``, ``git pull`` and the bridge's two calls."""
 
 needs_rscript = pytest.mark.skipif(shutil.which("Rscript") is None, reason="the bridge runs the real Rscript")
 needs_fake_checkout = pytest.mark.skipif(
@@ -531,6 +535,8 @@ def test_remind_start_log_tells_each_step(tmp_path: Path) -> None:
         f"running: git pull in {checkout}",
         f"[git] commit {FAKE_COMMIT}",
         'selectScenarios(startgroup = "AMT") selected 9 scenarios: ' + ", ".join(FAKE_NAMES),
+        f"cycle 2026-09-30 recorded as 'started' in {h.ctx.state_path} (pattern in"
+        f" {h.checkout / RUNCODE_FILE}) before the first submission",
         f"set '{FORCE_DOWNLOAD_TRUE}' in {h.checkout / DEFAULT_CFG} (1 line)",
         f"deleted {h.checkout / EMPTY_REALIZATION} (not a realization named in"
         f" {h.checkout / 'modules/01_macro/module.gms'})",
@@ -626,10 +632,8 @@ def test_git_fail_stops_at_the_reset_and_leaves_the_state_failed(tmp_path: Path)
 
 def test_make_fail_runs_every_step_and_leaves_the_state_failed_with_the_cycle(tmp_path: Path) -> None:
     """``Rscript start.R`` exits 1 twice (a warning each, as R tolerated it); ``make`` exits 2 and aborts."""
-    with harness(tmp_path, "remind-start-make-fail") as h:
-        runcode_before = (h.checkout / RUNCODE_FILE).read_bytes()
-        with pytest.raises(CycleFailedError) as raised:
-            start_cycle(h.ctx)
+    with harness(tmp_path, "remind-start-make-fail") as h, pytest.raises(CycleFailedError) as raised:
+        start_cycle(h.ctx)
     assert h.steps() == golden_steps("remind-start-make-fail", h.checkout)
     assert h.calls("replace_in_file") == golden_sed_edits("remind-start-make-fail", h.checkout)
     assert h.deleted() == golden_deleted("remind-start-make-fail", h.checkout)
@@ -645,7 +649,12 @@ def test_make_fail_runs_every_step_and_leaves_the_state_failed_with_the_cycle(tm
     assert state.last_error == LastError(
         command="start", message="make test-full-slurm exited with status 2", at=NOW, log=str(h.log_path)
     )
-    assert (h.checkout / RUNCODE_FILE).read_bytes() == runcode_before
+    # the checkpoint preceded the submissions: the pattern is on disk, the state went started -> failed
+    assert scalar(read_rds(h.checkout / RUNCODE_FILE)) == runcode_pattern(TODAY)
+    assert h.written() == [os.fspath(h.ctx.state_path)] * 2 + [
+        os.fspath(h.checkout / RUNCODE_FILE),
+        os.fspath(h.ctx.state_path),
+    ]  # the migration, started + runcode.rds, failed
     assert str(raised.value).startswith("'start' failed: make test-full-slurm exited with status 2")
     assert target_phase(state, Command.EVALUATE) is Phase.IDLE
     with pytest.raises(AmtStateError, match="cannot 'run'"):
@@ -778,17 +787,19 @@ def failing_writes(tmp_path: Path, **faults: Any) -> FailingWrites:
     )
 
 
-def assert_failed_after_submission(h: Harness, effects: FailingWrites, raised: CycleFailedError) -> AmtState:
-    """The persist step failed after every run was submitted: ``failed`` with the full cycle, notified."""
-    assert [t.tool for t in effects.trace] == ALL_STEPS
+def assert_failed_before_submission(h: Harness, effects: FailingWrites, raised: CycleFailedError) -> AmtState:
+    """The persist step failed before any run was submitted: ``failed`` with the full cycle, notified."""
+    assert [t.tool for t in effects.trace] == BRIDGE_STEPS  # nothing submitted, nothing edited
+    assert [c.args for c in effects.calls if c.name in ("replace_in_file", "delete_tree")] == []
+    assert (h.checkout / EMPTY_REALIZATION).is_dir()
     state = h.ctx.store.load()
     assert state is not None and state == raised.state
     assert state.phase is Phase.FAILED
-    assert state.cycle == expected_cycle(h)  # the submitted runs are known: evaluate can retry
+    assert state.cycle == expected_cycle(h)  # the selection is known; a human evaluates or resets
     assert state.last_error is not None and state.last_error.command == "start"
     assert state.last_error.at == NOW and state.last_error.log == str(h.log_path)
     with pytest.raises(AmtStateError, match="cannot 'start': the AMT state is 'failed'"):
-        target_phase(state, Command.START)  # no second submission on top of the running one
+        target_phase(state, Command.START)  # a human decides, as after any failure
     assert target_phase(state, Command.EVALUATE) is Phase.IDLE
     (post,) = effects.posts
     assert post.url == WEBHOOK
@@ -798,7 +809,7 @@ def assert_failed_after_submission(h: Harness, effects: FailingWrites, raised: C
     return state
 
 
-def test_a_failed_state_file_write_after_submission_leaves_the_state_failed(tmp_path: Path) -> None:
+def test_a_failed_state_file_write_before_submission_leaves_the_state_failed(tmp_path: Path) -> None:
     """A transient ``OSError`` of the ``amt-state.json`` write: ``failed``, not ``idle`` with a traceback."""
     effects = failing_writes(tmp_path, text_errors=[OSError(28, "No space left on device")])
     with harness(tmp_path, wrap=lambda _recorder: effects) as h:
@@ -806,7 +817,7 @@ def test_a_failed_state_file_write_after_submission_leaves_the_state_failed(tmp_
         with pytest.raises(CycleFailedError) as raised:
             start_cycle(h.ctx)
     assert isinstance(raised.value.__cause__, OSError) and raised.value.__cause__.errno == 28
-    state = assert_failed_after_submission(h, effects, raised.value)
+    state = assert_failed_before_submission(h, effects, raised.value)
     assert effects.refused == [os.fspath(h.ctx.state_path)]
     assert state.last_error is not None and state.last_error.message == "[Errno 28] No space left on device"
     assert str(raised.value).startswith("'start' failed: [Errno 28] No space left on device")
@@ -814,7 +825,10 @@ def test_a_failed_state_file_write_after_submission_leaves_the_state_failed(tmp_
 
 
 def test_a_failed_runcode_rds_write_leaves_the_state_failed_with_the_cycle(tmp_path: Path) -> None:
-    """The JSON was written as ``started``; the ``runcode.rds`` failure rewrites it as ``failed``."""
+    """The JSON was written as ``started``; the ``runcode.rds`` failure rewrites it as ``failed``.
+
+    Nothing was submitted: the checkpoint precedes the first ``Rscript start.R``.
+    """
     effects = failing_writes(tmp_path, bytes_errors=[PermissionError("runcode.rds: Permission denied")])
     with harness(tmp_path, wrap=lambda _recorder: effects) as h:
         runcode_before = (h.checkout / RUNCODE_FILE).read_bytes()
@@ -822,7 +836,7 @@ def test_a_failed_runcode_rds_write_leaves_the_state_failed_with_the_cycle(tmp_p
         with pytest.raises(CycleFailedError) as raised:
             start_cycle(h.ctx)
     assert isinstance(raised.value.__cause__, PermissionError)
-    state = assert_failed_after_submission(h, effects, raised.value)
+    state = assert_failed_before_submission(h, effects, raised.value)
     assert effects.refused == [os.fspath(h.checkout / RUNCODE_FILE)]
     assert state.last_error is not None and state.last_error.message == "runcode.rds: Permission denied"
     assert (h.checkout / RUNCODE_FILE).read_bytes() == runcode_before  # rs-r -A reads the stale pattern
@@ -837,7 +851,7 @@ def test_a_disk_that_refuses_every_state_write_still_notifies(tmp_path: Path) ->
         with pytest.raises(OSError, match="Read-only file system"):
             start_cycle(h.ctx)
         state = h.ctx.store.load()
-    assert [t.tool for t in effects.trace] == ALL_STEPS
+    assert [t.tool for t in effects.trace] == BRIDGE_STEPS  # nothing submitted
     assert effects.refused == [os.fspath(h.ctx.state_path)] * 2  # save_started, then the failed state
     assert state is not None and state.phase is Phase.IDLE  # the migrated state is what the disk kept
     (post,) = effects.posts
@@ -847,6 +861,92 @@ def test_a_disk_that_refuses_every_state_write_still_notifies(tmp_path: Path) ->
     errors = [m for lvl, m in h.log() if lvl == "ERROR"]
     assert errors[0] == "'start' failed: [Errno 30] Read-only file system"
     assert errors[1].startswith(f"cannot save the 'failed' state to {h.ctx.state_path}: ")
+
+
+# ---------------------------------------------------------------------------------------------
+# An interrupted start (Codex review 2026-10-11, finding 1): the checkpoint precedes the submissions
+# ---------------------------------------------------------------------------------------------
+
+
+class Interrupting(RecordingEffects):
+    """``run`` raises ``KeyboardInterrupt`` for the first argv containing ``marker`` (a kill mid-start)."""
+
+    def __init__(self, marker: str, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._marker = marker
+
+    def run(
+        self,
+        argv: Sequence[str],
+        *,
+        cwd: PathLike | None = None,
+        env: Mapping[str, str] | None = None,
+        check: bool = False,
+        capture: bool = True,
+        on_line: LineCallback | None = None,
+    ) -> RunResult:
+        if any(self._marker == arg or arg.endswith(self._marker) for arg in argv):
+            raise KeyboardInterrupt
+        return super().run(argv, cwd=cwd, env=env, check=check, capture=capture, on_line=on_line)
+
+
+def interrupting(tmp_path: Path, marker: str) -> Interrupting:
+    return Interrupting(
+        marker,
+        now=NOW,
+        user=USER,
+        on_cluster=False,
+        amt=canned_case("remind-start", **{"Rscript.txt": FAKE_PAYLOAD}),
+        cwd=tmp_path,
+        environ=case_environ("remind-start"),
+    )
+
+
+@pytest.mark.parametrize(
+    ("marker", "submissions"),
+    [("make", 2), ("--testOneRegi", 0)],
+    ids=["after-both-submissions", "at-the-first-submission"],
+)
+def test_a_start_killed_during_the_submissions_leaves_started_and_is_never_repeated(
+    tmp_path: Path, marker: str, submissions: int
+) -> None:
+    """``KeyboardInterrupt`` (no handler, like SIGTERM) after the checkpoint: ``started`` on disk.
+
+    R wrote ``.testsstatus`` only after ``startRuns`` returned (``R/modeltests.R:42``), so a killed start
+    was repeated by the next cron run with the same day's runcode. Here ``run`` evaluates the cycle
+    instead, and a plain ``start`` is refused until ``--force``.
+    """
+    effects = interrupting(tmp_path, marker)
+    with harness(tmp_path, wrap=lambda _recorder: effects) as h, pytest.raises(KeyboardInterrupt):
+        start_cycle(h.ctx)
+    started = [t for t in effects.trace if t.tool == "Rscript" and t.argv[:1] == ("start.R",)]
+    assert len(started) == submissions
+    state = h.state()
+    assert state.phase is Phase.STARTED
+    assert state.cycle == expected_cycle(h)
+    assert state.last_error is None
+    assert scalar(read_rds(h.checkout / RUNCODE_FILE)) == runcode_pattern(TODAY)
+    assert next_command(state) is Command.EVALUATE
+    assert target_phase(state, Command.EVALUATE) is Phase.IDLE
+    with pytest.raises(AmtStateError, match="cannot 'start': a cycle is 'started'"):
+        target_phase(state, Command.START)
+    assert target_phase(state, Command.START, force=True) is Phase.STARTED
+    assert effects.posts == []  # no handler ran: no failure notification either
+
+
+def test_a_start_killed_before_the_checkpoint_leaves_idle_with_nothing_submitted(tmp_path: Path) -> None:
+    """A kill inside the bridge: the migrated ``idle`` is what the disk holds; a rerun starts afresh."""
+    effects = interrupting(tmp_path, BRIDGE_SCRIPT)
+    with harness(tmp_path, wrap=lambda _recorder: effects) as h, pytest.raises(KeyboardInterrupt):
+        start_cycle(h.ctx)
+    assert [t.tool for t in effects.trace] == ["git", "git", "git"]  # reset, pull, the bridge's log -1
+    state = h.state()
+    assert state.phase is Phase.IDLE and state.cycle is None
+    assert next_command(state) is Command.START
+    assert [c.args[0] for c in effects.calls if c.name in ("write_text", "write_bytes")] == [
+        os.fspath(h.ctx.state_path)  # the migration only
+    ]
+    assert scalar(read_rds(h.checkout / RUNCODE_FILE)) == R_RUNCODE
 
 
 # ---------------------------------------------------------------------------------------------
@@ -963,6 +1063,8 @@ def test_dry_run_writes_nothing_and_announces_every_mutation(tmp_path: Path) -> 
         f"would run git pull in {checkout}",
         f"would run git log -1 in {checkout}",
         bridge_command(h.checkout),
+        f"would write {ctx.state_path}",  # the checkpoint: started, before the first submission
+        f"would write {h.checkout / RUNCODE_FILE}",
         f"would replace '{FORCE_DOWNLOAD_FALSE}' by '{FORCE_DOWNLOAD_TRUE}' in {h.checkout / DEFAULT_CFG}",
         f"would delete {h.checkout / EMPTY_REALIZATION}",
         f"would run Rscript start.R --testOneRegi titletag=AMT 'slurmConfig=--qos=priority --nodes=1"
@@ -973,8 +1075,6 @@ def test_dry_run_writes_nothing_and_announces_every_mutation(tmp_path: Path) -> 
         f"would run git reset --hard origin/develop in {h.checkout / 'magpie'}",
         f"would run git pull in {h.checkout / 'magpie'}",
         f"would run make test-full-slurm in {checkout}",
-        f"would write {ctx.state_path}",
-        f"would write {h.checkout / RUNCODE_FILE}",
     ]
     # no program ran, the bridge included: the dry run answers it with an empty selection
     assert h.effects.trace == []

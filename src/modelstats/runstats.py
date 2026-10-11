@@ -58,8 +58,8 @@ class RunStatistics:
     def gams_wall_seconds(self) -> float | None:
         """``as.numeric(difftime(timeGAMSEnd, timeGAMSStart, units = "secs"))`` (``R/getRunStatus.R:311``).
 
-        ``None`` when either instant is missing or NA; the caller rounds (``rdata_io.r_round``) and
-        decides, as R does by its name tests, whether the value applies.
+        ``None`` when either instant is missing or NA; the caller rounds (``run_status.whole_seconds``)
+        and decides, as R does by its name tests, whether the value applies.
         """
         if self.time_gams_end is None or self.time_gams_start is None:
             return None
