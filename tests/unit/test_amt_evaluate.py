@@ -162,6 +162,7 @@ from tests.conftest import (
     SANDBOX_ENVIRON,
     SANDBOX_FROZEN,
     SANDBOX_TZ,
+    record_path,
     resolve_frozen,
     slurm_case_dir,
 )
@@ -181,6 +182,18 @@ PASSING_LOG = "testthat results\n[ FAIL 0 | WARN 0 | SKIP 3 | PASS 120 ]\n"
 ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 AMT_CASES = CASES / "amt"
 AMT_GOLDENS = GOLDENS / "amt"
+
+
+def amt_case(case_id: str) -> Path:
+    """The case directory of the migration record (a skip when the record is absent)."""
+    return record_path(AMT_CASES, case_id)
+
+
+def amt_golden(case_id: str) -> Path:
+    """The R golden directory of the migration record (a skip when the record is absent)."""
+    return record_path(AMT_GOLDENS, case_id)
+
+
 BASELINE = "remind-evaluate"
 HOUR = 3600.0
 
@@ -715,7 +728,7 @@ def test_comparison_needs_both_mifs_and_no_pdf_yet(tmp_path: Path) -> None:
 
 
 def golden_sbatch_argv(case_id: str) -> list[str]:
-    trace = (AMT_GOLDENS / case_id / "trace.jsonl").read_text(encoding="utf-8")
+    trace = (amt_golden(case_id) / "trace.jsonl").read_text(encoding="utf-8")
     records = [json.loads(line) for line in trace.splitlines() if line.strip()]
     (argv,) = [["sbatch", *record["argv"]] for record in records if record["tool"] == "sbatch"]
     return argv
@@ -1446,6 +1459,7 @@ def evaluate_cases() -> list[str]:
 
 
 def test_every_remind_evaluate_case_has_an_expectation() -> None:
+    record_path(AMT_CASES)
     assert evaluate_cases() == sorted(EXPECTATIONS)
 
 
@@ -1611,23 +1625,23 @@ PREPARE: dict[str, Callable[[Clone], None]] = {
 
 
 def case_definition(case_id: str) -> dict[str, Any]:
-    data: dict[str, Any] = json.loads((AMT_CASES / case_id / "case.json").read_text(encoding="utf-8"))
+    data: dict[str, Any] = json.loads((amt_case(case_id) / "case.json").read_text(encoding="utf-8"))
     return data
 
 
 def golden_result(case_id: str) -> str:
-    status: str = json.loads((AMT_GOLDENS / case_id / "result.json").read_text(encoding="utf-8"))["status"]
+    status: str = json.loads((amt_golden(case_id) / "result.json").read_text(encoding="utf-8"))["status"]
     return status
 
 
 def golden_readme(case_id: str) -> list[str] | None:
-    path = AMT_GOLDENS / case_id / "README.md"
+    path = amt_golden(case_id) / "README.md"
     return path.read_text(encoding="utf-8").splitlines() if path.is_file() else None
 
 
 def golden_message(case_id: str) -> str | None:
     """The text R pasted into the ``curl`` body (BUG-015: not JSON), escape sequences removed."""
-    path = AMT_GOLDENS / case_id / "mattermost.json"
+    path = amt_golden(case_id) / "mattermost.json"
     if not path.is_file():
         return None
     body: str = json.loads(path.read_text(encoding="utf-8"))["payload"]
@@ -1637,13 +1651,13 @@ def golden_message(case_id: str) -> str | None:
 
 
 def golden_calls(case_id: str, tool: str) -> list[list[str]]:
-    trace = (AMT_GOLDENS / case_id / "trace.jsonl").read_text(encoding="utf-8")
+    trace = (amt_golden(case_id) / "trace.jsonl").read_text(encoding="utf-8")
     records = [json.loads(line) for line in trace.splitlines() if line.strip()]
     return [list(record["argv"]) for record in records if record["tool"] == tool]
 
 
 def golden_squeue_exits(case_id: str) -> list[int]:
-    trace = (AMT_GOLDENS / case_id / "trace.jsonl").read_text(encoding="utf-8")
+    trace = (amt_golden(case_id) / "trace.jsonl").read_text(encoding="utf-8")
     records = [json.loads(line) for line in trace.splitlines() if line.strip()]
     return [
         int(record["exit"])
@@ -1721,7 +1735,7 @@ def replay(case_id: str, tmp_path: Path, fixtures: Path, synthetic: Path) -> Rep
         now=resolve_frozen(case["frozen"] or SANDBOX_FROZEN),
         user=case["user"],
         on_cluster=True,
-        amt=CannedAmt.from_case_dir(AMT_CASES / case_id),
+        amt=CannedAmt.from_case_dir(amt_case(case_id)),
         slurm=CannedSlurm.from_case_dir(slurm_case_dir(case["slurm_case"])),
         cwd=clone.p,
         environ=environ,

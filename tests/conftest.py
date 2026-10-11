@@ -221,6 +221,17 @@ def synthetic_dir() -> Path:
     return SYNTHETIC
 
 
+def record_path(root: Path, *parts: str) -> Path:
+    """``root/parts`` inside the migration record, or a skip when that part of the record is absent.
+
+    For helpers of the unit tier that read a case directory or an R golden directly instead of
+    requesting ``cases_dir`` or ``goldens_dir``: the test skips like those fixtures do.
+    """
+    if not root.is_dir():
+        pytest.skip(f"migration record absent: {root} (the record is not in the repository)")
+    return root.joinpath(*parts)
+
+
 @pytest.fixture(scope="session")
 def goldens_dir() -> Path:
     """The R reference outputs; skips the test when the migration record is absent."""

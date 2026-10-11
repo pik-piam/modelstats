@@ -55,7 +55,7 @@ from modelstats.amt.notify import NEXT_STEPS
 from modelstats.amt.readme import NOT_STARTED_TITLE, summary_line
 from modelstats.amt.state import AmtState, Cycle, LastError, Phase, StateStore
 from modelstats.env import CannedSlurm, RecordingEffects
-from tests.conftest import MIGRATION, REPO, SANDBOX_TZ
+from tests.conftest import CASES, MIGRATION, REPO, SANDBOX_TZ, record_path
 from tests.unit.test_amt_bridges import golden_runs_to_start
 from tests.unit.test_amt_evaluate import (
     CHANGED,
@@ -134,7 +134,7 @@ ALL_CASES = sorted([*EXPECTATIONS, *START_CASES])
 
 
 def test_every_remind_case_is_run_end_to_end() -> None:
-    cases = sorted(p.name for p in (MIGRATION / "cases" / "amt").glob("remind-*") if p.is_dir())
+    cases = sorted(p.name for p in record_path(CASES, "amt").glob("remind-*") if p.is_dir())
     assert cases == ALL_CASES
 
 

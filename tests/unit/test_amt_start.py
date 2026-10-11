@@ -97,7 +97,7 @@ from modelstats.env import (
     TraceRecord,
 )
 from modelstats.rdata_io import read_rds, scalar
-from tests.conftest import CASES, GOLDENS, SYNTHETIC
+from tests.conftest import CASES, GOLDENS, SYNTHETIC, record_path
 from tests.unit.test_amt_bridges import FAKE_COMMIT, FAKE_NAMES, FAKE_PAYLOAD, golden_runs_to_start
 from tests.unit.test_amt_state import R_COMMIT, R_RUNCODE, write_r_files
 from tests.unit.test_env import tree_digest
@@ -209,7 +209,7 @@ def sha256(path: Path) -> str:
 
 
 def golden_dir(case: str) -> Path:
-    return GOLDENS / "amt" / case
+    return record_path(GOLDENS, "amt", case)
 
 
 def golden_trace(case: str) -> list[dict[str, Any]]:
@@ -286,7 +286,7 @@ def case_environ(case: str) -> dict[str, str]:
 
 def canned_case(case: str, **extra: str) -> CannedAmt:
     """The case directory's canned answers plus ``extra`` files (``Rscript.txt`` cans the bridge)."""
-    directory = CASES / "amt" / case
+    directory = record_path(CASES, "amt", case)
     files = {p.name: p.read_text(encoding="utf-8") for p in directory.iterdir() if p.is_file()}
     return CannedAmt({**files, **extra})
 

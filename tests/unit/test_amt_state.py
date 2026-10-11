@@ -71,7 +71,7 @@ from modelstats.env import (
 )
 from modelstats.rdata_io import read_rds, scalar, write_rds
 from modelstats.sanity import amt_runcode
-from tests.conftest import FIXTURES, GOLDENS, SYNTHETIC
+from tests.conftest import FIXTURES, GOLDENS, SYNTHETIC, record_path
 from tests.unit.test_rdata_io import r_identical, requires_r
 
 BERLIN = ZoneInfo("Europe/Berlin")
@@ -214,7 +214,7 @@ def test_runcode_pattern_is_today_or_tomorrow_as_r_pastes_it() -> None:
 
 def test_runcode_pattern_equals_the_r_golden_of_remind_start() -> None:
     """``saveRDS(runcode)`` of the R run frozen at 2026-09-30 (``goldens/amt/remind-start``)."""
-    golden = GOLDENS / "amt" / "remind-start" / "state" / "runcode_rds.json"
+    golden = record_path(GOLDENS, "amt", "remind-start", "state", "runcode_rds.json")
     recorded = json.loads(golden.read_text())
     assert recorded["value"] == [runcode_pattern(TODAY)]
 
@@ -899,7 +899,7 @@ def test_testsstatus_without_a_final_newline(tmp_path: Path) -> None:
 
 def golden_state(case: str, name: str) -> dict[str, Any]:
     """One ``state/<file>.json`` record of an R AMT golden (``migration/goldens/README.md``)."""
-    record: dict[str, Any] = json.loads((GOLDENS / "amt" / case / "state" / name).read_text())
+    record: dict[str, Any] = json.loads(record_path(GOLDENS, "amt", case, "state", name).read_text())
     return record
 
 

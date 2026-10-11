@@ -1,7 +1,8 @@
 """``modelstats.env``: R semantics of the real calls, the overlay and canned scheduler of ``FakeEffects``.
 
 The literal expectations come from R 4.6.1 under ``LC_ALL=C.utf8`` (probe of 2026-10-01; the R expression
-is quoted next to each). The tests on ``tmp_path`` trees and on ``migration/cases`` run everywhere; those
+is quoted next to each). The tests on ``tmp_path`` trees run everywhere, those on ``migration/cases`` where
+the migration record is present (it is not in the repository); those
 on the gitignored fixture snapshot and the synthetic layer skip where the trees are absent
 (``tests/conftest.py``). The mutating part (phase 5, ``06`` sections 3.2 and 4.4) is tested on temporary
 trees: atomic writes, ``sed -i``, the file operations, streamed subprocesses, a loopback webhook, the lock
@@ -70,6 +71,7 @@ from tests.conftest import (
     golden_cases,
     make_case_effects,
     read_case_rows,
+    record_path,
     resolve_frozen,
     slurm_case_dir,
 )
@@ -414,7 +416,7 @@ def make_fake(layers: Layers, mode: Mode = Mode.ONCLUSTER, cwd: str | None = Non
         user=SANDBOX_USER,
         on_cluster=mode.on_cluster,
         paths=OverlayPaths.sandbox(layers.fixtures_p, layers.synthetic_p, mode),
-        slurm=CannedSlurm.from_case_dir(CASES / "slurm" / "running-amt"),
+        slurm=CannedSlurm.from_case_dir(record_path(CASES, "slurm", "running-amt")),
         cwd=cwd,
     )
 
@@ -596,12 +598,12 @@ def test_every_call_is_logged(layers: Layers) -> None:
 
 
 # ---------------------------------------------------------------------------------------------
-# CannedSlurm: synthetic cases under migration/cases/slurm (tracked, always available)
+# CannedSlurm: synthetic cases under migration/cases/slurm (skipped without the migration record)
 # ---------------------------------------------------------------------------------------------
 
 
 def case(name: str) -> CannedSlurm:
-    return CannedSlurm.from_case_dir(CASES / "slurm" / name)
+    return CannedSlurm.from_case_dir(record_path(CASES, "slurm", name))
 
 
 def test_six_field_dump_is_the_all_users_file() -> None:
@@ -1256,11 +1258,11 @@ def test_canned_amt_defaults_are_the_fake_binaries_defaults() -> None:
 
 
 def test_canned_amt_reads_the_case_files_like_the_fakes() -> None:
-    git_fail = CASES / "amt" / "remind-evaluate-git-fail"
+    git_fail = record_path(CASES, "amt", "remind-evaluate-git-fail")
     assert CannedAmt.from_case_dir(git_fail).answer("git", ["log", "-1"]) == RunResult(
         ("git", "log", "-1"), 128, (git_fail / "git-log-1.txt").read_text(), ""
     )
-    make_fail = CASES / "amt" / "remind-start-make-fail"
+    make_fail = record_path(CASES, "amt", "remind-start-make-fail")
     amt = CannedAmt.from_case_dir(make_fail)
     assert amt.answer("make", ["test-full-slurm"]) == RunResult(
         ("make", "test-full-slurm"), 2, (make_fail / "make.txt").read_text(), ""
@@ -1268,7 +1270,7 @@ def test_canned_amt_reads_the_case_files_like_the_fakes() -> None:
     assert amt.answer("Rscript", ["start.R"]) == RunResult(
         ("Rscript", "start.R"), 1, "fake Rscript: start.R\n", ""
     )
-    curl_fail = CannedAmt.from_case_dir(CASES / "amt" / "remind-evaluate-curlfail")
+    curl_fail = CannedAmt.from_case_dir(record_path(CASES, "amt", "remind-evaluate-curlfail"))
     assert curl_fail.http_answer(WEBHOOK) == HttpResponse(WEBHOOK, 500, '{"message":"boom"}\n')
     assert curl_fail.exit_status("curl") == 22
     assert CannedAmt({"x.exit": " 7\n"}).exit_status("x") == 7
@@ -1283,7 +1285,7 @@ def test_canned_amt_reads_the_case_files_like_the_fakes() -> None:
         ("hostname",), 0, "login01\n", ""
     )
     with pytest.raises(FileNotFoundError, match="case directory not found"):
-        CannedAmt.from_case_dir(CASES / "amt" / "no-such-case")
+        CannedAmt.from_case_dir(record_path(CASES, "amt", "no-such-case"))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1300,7 +1302,7 @@ def recording(cwd: Path, case: str, slurm: CannedSlurm | None = None) -> Recordi
         now=NOW,
         user=SANDBOX_USER,
         on_cluster=True,
-        amt=CannedAmt.from_case_dir(CASES / "amt" / case),
+        amt=CannedAmt.from_case_dir(record_path(CASES, "amt", case)),
         slurm=slurm,
         cwd=cwd,
     )
