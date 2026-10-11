@@ -478,7 +478,12 @@ def test_wait_loop_recognises_the_checkout_under_an_alias(
     dotted = tree.root / ".." / tree.root.name / "remind"
     busy = squeue_answer(0, squeue_line(real_output / "x"))
     via_link = squeue_answer(0, squeue_line(link / "output" / "x"))
-    cases = [(dotted, busy), (link, busy), (tree.checkout, via_link), (f"{link}/", via_link)]
+    cases: list[tuple[str | Path, RunResult]] = [
+        (dotted, busy),
+        (link, busy),
+        (tree.checkout, via_link),
+        (f"{link}/", via_link),
+    ]
     for checkout, first in cases:
         effects = ScriptedSqueue(
             [first, squeue_answer(0)], now=NOW, user=USER, on_cluster=True, cwd=tree.root
