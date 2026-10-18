@@ -1,0 +1,104 @@
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14"]
+build-backend = "uv_build"
+
+[project]
+name = "modelstats"
+version = "0.31.0"
+description = "Run analysis tools for REMIND and MAgPIE: the rs status command and the automated model tests."
+readme = "README.md"
+requires-python = ">=3.14"
+license = "LGPL-3.0-only"
+authors = [
+  { name = "Anastasis Giannousakis", email = "giannou@pik-potsdam.de" },
+  { name = "Oliver Richters" },
+  { name = "Simon Krogmann" },
+]
+keywords = ["REMIND", "MAgPIE", "GAMS", "SLURM", "PIK"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Science/Research",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.14",
+  "Typing :: Typed",
+]
+# Library decisions: PORTING.md section 3.
+dependencies = [
+  "gamsapi[transfer]>=54.4,<55", # gams.transfer (GDX reading), pulls pandas + scipy
+  "gamspy_base>=54.4,<55",       # GAMS system directory for gams.transfer, no GAMS install needed
+  "rdata>=1.1,<2",               # .Rdata/.rda/.rds
+  "pyyaml>=6.0,<7",              # config.yml (MAgPIE)
+  "typer>=0.27,<1",              # rs, rs2 and modeltests CLIs; brings rich
+]
+
+[project.urls]
+Homepage = "https://github.com/pik-piam/modelstats"
+Repository = "https://github.com/pik-piam/modelstats"
+"Issue Tracker" = "https://github.com/pik-piam/modelstats/issues"
+
+[project.scripts]
+rs = "modelstats.cli:app"
+rs2 = "modelstats.prompt_and_run:main"
+modeltests = "modelstats.modeltests:app"
+
+[dependency-groups]
+dev = [
+  "ruff>=0.16,<1",
+  "ty",
+  "pytest>=9.1,<10",
+  "types-PyYAML>=6.0.12",
+  "pandas-stubs>=3.0",
+]
+
+[tool.uv.build-backend]
+# src/modelstats is the default module root; the sdist also carries the tests.
+source-include = ["tests/*.py"]
+
+# ---------------------------------------------------------------------------------------------
+# ruff: lint and format (PORTING.md section 6)
+# ---------------------------------------------------------------------------------------------
+[tool.ruff]
+line-length = 110
+target-version = "py314"
+src = ["src", "tests"]
+extend-exclude = ["R", "vignettes", "man"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "N", "D"]
+ignore = [
+  "D203", # one-blank-line-before-class: conflicts with D211 (google convention)
+  "D213", # multi-line-summary-second-line: conflicts with D212 (google convention)
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D101", "D102", "D103", "D104", "D105", "D106", "D107"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["modelstats"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# ---------------------------------------------------------------------------------------------
+# ty: type checking of the package and the tests (PORTING.md section 5)
+# ---------------------------------------------------------------------------------------------
+[tool.ty.environment]
+python-version = "3.14"
+
+[tool.ty.src]
+include = ["src", "tests"]
+
+# ---------------------------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config"
+xfail_strict = true
+filterwarnings = ["error::DeprecationWarning:modelstats"]
