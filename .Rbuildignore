@@ -16,3 +16,11 @@
 ^.*CITATION.cff$
 ^\.claude$
 ^_pkgdown\.yml$
+^src$
+^tests/conftest\.py$
+^tests/test_.*\.py$
+^pyproject\.toml$
+^uv\.lock$
+^\.python-version$
+^\.venv$
+^PORTING.*\.md$

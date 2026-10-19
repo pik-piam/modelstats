@@ -1,0 +1,19 @@
+# A MAgPIE config.yml as gms::saveConfig writes it: verbatim tags !<namedVector> / !<character>
+model_name: MAgPIE
+title: default
+results_folder: output/default_2026-10-18_10.00.00
+gms:
+  optimization: nlp_apr17
+  c_timesteps: 5
+  s_use_gdx: 2
+  policy_countries: !<character>
+  - DEU
+  - FRA
+  som_init: !<namedVector>
+    A: 0.5
+    B: 0.7
+  one_region: !<character> GLO
+  switch_on: on
+  switch_yes: yes
+files2export:
+  start: !<character> []
