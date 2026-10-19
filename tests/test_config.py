@@ -25,6 +25,8 @@ def test_find_config_exact_names_and_precedence(tmp_path: Path, data_dir: Path) 
     assert find_config(tmp_path) == tmp_path / "config.yml"
     shutil.copy(data_dir / "config_remind.Rdata", tmp_path / "config.Rdata")
     assert find_config(tmp_path) == tmp_path / "config.Rdata"
+    (tmp_path / "config.Rdata.bak").write_text("")  # BUG-001: a second match stopped R
+    assert find_config(tmp_path) == tmp_path / "config.Rdata"
 
 
 def test_load_config_rdata(data_dir: Path) -> None:

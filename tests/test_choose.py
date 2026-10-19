@@ -21,7 +21,8 @@ def test_lists_items_and_prompts() -> None:
     assert captured.lines[1:3] == ["Please choose folders:", ""]
     assert captured.lines[3:7] == [f"{i}: {item}" for i, item in enumerate(ITEMS, 1)]
     assert (
-        "Choose folders (numbers, ranges 1-3, comma lists, 'all', a regex; empty = none): " in captured.text
+        "Choose folders (numbers, ranges 1-3, comma lists, 'all'/'a', 'p'/'f' for a pattern prompt, a regex; "
+        "empty = none): " in captured.text
     )
     assert captured.lines[-1].endswith("Selected: ")
 
@@ -36,9 +37,44 @@ def test_single_number_range_and_comma_list() -> None:
 
 def test_all_and_regex() -> None:
     assert choose("all")[0] == ITEMS
+    assert choose("a")[0] == ITEMS  # R's "1,a: all" shortcut (BUG-076), not the pattern "a"
+    assert choose("2,a")[0] == ITEMS  # inside a list as well
+    assert choose("aa")[0] == []  # a pattern
+    for answer in ("9,a", "0,a", "a,3-9", "a,1 2", "a,1-"):  # out of range or malformed: asked again
+        chosen, captured = choose(answer, "2")
+        assert chosen == ["out/C_A-rem-2"] and "Try again, not all in list." in captured.text
+    # R's other ways to "all" or to the pattern prompt are regular expressions over the items (BUG-076)
+    assert choose("a:3", items=["out/a:3", "out/x"])[0] == ["out/a:3"]
+    assert choose("a-3")[0] == [] and choose("2-a")[0] == []
+    assert choose("2,p")[0] == [] and choose("a,p")[0] == [] and choose("p,f")[0] == []
+    assert choose("2,")[0] == ["out/C_A-rem-2"]  # an empty element is ignored (R: asked again)
+    assert choose("a,")[0] == ITEMS and choose(",a")[0] == ITEMS
     assert choose("SSP2")[0] == ITEMS[2:]
     assert choose("rem-[0-9]+$")[0] == ITEMS[:2]
     assert choose("nomatch")[0] == []
+
+
+def test_pattern_prompts() -> None:
+    chosen, captured = choose("p", "SSP2")  # BUG-076: R's "p" entry opened a second prompt
+    assert chosen == ITEMS[2:] and "Insert the regular expression: " in captured.text
+    chosen, captured = choose("f", "rem-")
+    assert chosen == ITEMS[:2] and "Insert the search pattern with fixed=TRUE: " in captured.text
+    assert choose("f", ".")[0] == []  # fixed: no metacharacters
+    chosen, captured = choose("p", "a(", "SSP2")  # an invalid expression asks for the pattern again (R too)
+    assert chosen == ITEMS[2:] and "Try again, not a valid regular expression" in captured.text
+    assert captured.text.count("Insert the regular expression") == 2
+    assert captured.text.count("Choose folders") == 1
+    assert choose("f", " rem")[0] == []  # blanks are part of the pattern
+    assert choose("p", "")[0] == [] and choose("f", "")[0] == []  # an empty pattern selects nothing
+    replies = iter(["p"])
+
+    def read(_prompt: str) -> str:  # end of input at the second prompt selects nothing as well
+        try:
+            return next(replies)
+        except StopIteration:
+            raise EOFError from None
+
+    assert choose_from_list(ITEMS, read=read, out=capture_console().console) == []
 
 
 def test_invalid_answers_reprompt() -> None:

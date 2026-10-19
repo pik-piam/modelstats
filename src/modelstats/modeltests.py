@@ -22,10 +22,12 @@ Deviations and fixes (details in PORTING-BUGS.md):
   ``max(character(0))`` and stopped at ``archive/NA``, BUG-069); an earlier run found in
   ``archive/`` keeps its name in the
   compareScenarios job (BUG-082); a run whose status cannot be read is skipped when the table of
-  known runs is extended, and gets a README line and a summary sentence when it is one of the
-  started runs; a table of the Mattermost message that fails on such a run becomes an ``Error:``
-  block (BUG-055, BUG-070); the table of known runs never shrinks, so archived runs stay
-  comparable (BUG-102); the runs are listed in the package's run order (BUG-054); the runcode and
+  known runs is refreshed, and gets a README line and a summary sentence when it is one of the
+  started runs, and a run or baseline whose runtime cannot be read gets no runtime check while
+  compareScenarios still runs; a table of the Mattermost message that fails on such a run becomes
+  an ``Error:`` block (BUG-055, BUG-070); the table of known runs is refreshed from the folders of ``output/``
+  and never shrinks, so archived runs stay comparable (BUG-102); the runs are listed in the
+  package's run order (BUG-054); the runcode and
   ``cfg$title`` are Python regular expressions (BUG-072);
 - the ``[ FAIL`` lines of ``test-full.log`` are judged as R did: only a single line counts (BUG-071);
 - a missing ``git log``, runcode or last tested commit stops the step with a message (BUG-083);
@@ -36,7 +38,8 @@ Deviations and fixes (details in PORTING-BUGS.md):
   command line is echoed on stdout as R's ``cat()`` wrote it (BUG-089); a missing user is the
   current user (BUG-090); the Mattermost tables show no ``[1] "No runs found"`` (BUG-041) and
   absolute paths in skipped lines (BUG-092);
-  an earlier run that is gone from disk is not compared (BUG-095); the README always has the
+  an earlier run that is gone from disk is skipped with a warning and the newest earlier run
+  still in ``output/`` or ``archive/`` is compared with (BUG-095); the README always has the
   cluster's columns (BUG-096); a second ``modeltests`` call waits for no one, it does nothing
   (BUG-098); ``selectScenarios()`` and ``addToDataChangelog()`` run in ``Rscript`` bridges
   (BUG-099); publishing without a report repository stops before the wait (BUG-100);
@@ -663,15 +666,16 @@ def _status(run_dir: Path) -> RunStatus | None:
 
 
 def _known_runs(paths: AmtPaths, state: AmtState) -> dict[str, RunStatus | Exception]:
-    """Extend the table of known REMIND runs by the folders not seen before (R's ``gRS.rds``).
+    """Refresh the table of known REMIND runs from the folders of ``output/`` (R's ``gRS.rds``).
 
-    Returns what was read per folder: the status, or the error (BUG-070), so that the evaluation
-    does not read a folder twice. MAgPIE kept no table (R read every folder for nothing).
+    Every folder is read again and a run whose folder is gone, or cannot be read, keeps its entry
+    (BUG-102: refreshed like R's fallback path, never forgotten like its extend path), so archived
+    runs stay comparable. Returns what was read per folder: the status, or the error (BUG-070), so
+    that the evaluation does not read a folder twice. MAgPIE kept no table (R read every folder for
+    nothing).
     """
     read: dict[str, RunStatus | Exception] = {}
     for name in _run_names(paths):
-        if name in state.runs:
-            continue
         try:
             row = _status(paths.output_dir / name)
         except (ModelstatsError, OSError) as error:
@@ -762,14 +766,10 @@ def _compare_with_last_run(
     earlier = [name for name in same_runs if name < this_name]  # not the current run, and before it
     if not earlier:
         return  # BUG-069
-    last_run = max(earlier)
-    last_dir = paths.output_dir / last_run
-    # If it was too long ago, the lastRun may have been moved to the archive in the meantime.
-    if not last_dir.exists():
-        last_dir = paths.archive_dir / last_run  # BUG-082: the job keeps the run's name
-    if not last_dir.is_dir():
-        log.warning("%s is gone from output/ and archive/: not compared with", last_run)  # BUG-095
+    found = _newest_existing(paths, sorted(earlier, reverse=True))  # max(): the newest earlier run
+    if found is None:
         return
+    last_run, last_dir = found
     this_dir = run_dir.resolve()
     last_dir = last_dir.resolve()
     # compare runtime for converged run only (skip if not_converged)
@@ -777,8 +777,9 @@ def _compare_with_last_run(
         try:
             current_hours = _read_runtime(this_dir)
             last_hours = _read_runtime(last_dir)
-        except RDataReadError as error:
-            raise ModelstatsError(f"runtime of {this_dir} or {last_dir}: {error}") from error
+        except RDataReadError as error:  # BUG-070: R stopped the evaluation here
+            log.warning("No runtime check: runtime of %s or %s cannot be read: %s", this_dir, last_dir, error)
+            current_hours = last_hours = None
         if current_hours is not None and last_hours is not None and current_hours > 1.25 * last_hours:
             evaluation.errors.append("Check runtime! Have some scenarios become slower?")
     # run compareScenarios also for runs that are not_converged
@@ -812,6 +813,23 @@ def _compare_with_last_run(
         _console.out.print(Text(" ".join(argv[:-1]) + f' --wrap="{wrap}" '))  # cat(cs2com, "\n") (BUG-089)
         # run_compareScenarios2.R works only if called from the main folder
         _run(argv, cwd=run_dir / _cfg_text(cfg, "remind_folder", config), required=False)
+
+
+def _newest_existing(paths: AmtPaths, candidates: Sequence[str]) -> tuple[str, Path] | None:
+    """The first candidate (newest first) whose folder is in ``output/`` or ``archive/``.
+
+    A candidate whose folder is gone from both is skipped with a warning (BUG-095: the table of
+    known runs never shrinks).
+    """
+    for name in candidates:
+        last_dir = paths.output_dir / name
+        # If it was too long ago, the lastRun may have been moved to the archive in the meantime.
+        if not last_dir.exists():
+            last_dir = paths.archive_dir / name  # BUG-082: the job keeps the run's name
+        if last_dir.is_dir():
+            return name, last_dir
+        log.warning("%s is gone from output/ and archive/: not compared with", name)  # BUG-095
+    return None
 
 
 def _runs_not_started(state: AmtState, evaluation: _Evaluation) -> None:
@@ -1000,7 +1018,9 @@ def evaluate_runs(
     Raises:
         ModelstatsError: The state, the output folder, the runcode or the last tested commit are
             missing or unusable, ``publish`` without a report repository, ``squeue`` keeps failing,
-            a run's runtime cannot be read, or a required program cannot start.
+            a started run's ``config.Rdata`` cannot be read, its ``title``, ``results_folder`` or
+            ``remind_folder`` is not a string or the title is not a valid pattern, or a required
+            program cannot start.
         subprocess.CalledProcessError: ``git log`` failed.
         OSError: ``.testsstatus``, the state file, ``README.md`` or ``test-full.log`` cannot be
             read or written.

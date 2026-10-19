@@ -772,7 +772,7 @@ def test_unreadable_started_run_still_notifies(
 @pytest.mark.usefixtures("clock", "quiet_tables", "statuses")
 def test_empty_user_watches_the_current_users_jobs(paths: AmtPaths, shell: FakeShell) -> None:
     evaluated(paths, shell, user="")  # BUG-090
-    assert shell.argvs[0] == ["squeue", "-h", "-o", amt.SQUEUE_FORMAT, "-u", "alice"]
+    assert shell.argvs[0] == ["squeue", "-u", "alice", "-h", "-o", amt.SQUEUE_FORMAT]
 
 
 @pytest.mark.usefixtures("clock", "quiet_tables")
@@ -845,6 +845,7 @@ def test_unanchored_title_match(paths: AmtPaths, shell: FakeShell, statuses: dic
     current = make_run(paths.output_dir, "SSP2-NPi-AMT_2026-10-18_10.00.00", mif, config="remind")
     other = make_run(paths.output_dir, "SSP2-NPi-AMT-x_2026-10-17_10.00.00", mif)
     statuses[current.name] = good_run(conv="not_converged")
+    statuses[other.name] = good_run()  # still converged when the table is refreshed (BUG-102)
     AmtState(
         runcode="AMT_2026-10-18", last_commit="0", runs={other.name: {"Conv": "converged", "Mif": "yes"}}
     ).save(paths)
@@ -927,6 +928,7 @@ def test_compare_with_the_last_run(
         data_dir / "runstatistics_xz.rda", earlier / "runstatistics.rda"
     )  # no times: no runtime check
     statuses[current.name] = good_run()
+    statuses[earlier.name] = good_run()  # the table is refreshed from disk (BUG-102)
     # the config.Rdata fixture names the run output/SSP2-NPi-AMT_2026-10-18_10.00.00 and the remind folder elsewhere
     AmtState(
         runcode=".*-AMT_2026-10-18",
@@ -977,9 +979,11 @@ def test_compare_with_the_last_run(
     evaluated(paths, shell)
     assert not any(call.argv[0] == "sbatch" for call in shell.calls)  # a mif is missing
     # BUG-069: the earlier runs of the scenario all sort after the current one
+    shutil.rmtree(earlier)  # otherwise the refresh of the table (BUG-102) would bring it back
     later = make_run(
         paths.output_dir, "SSP2-NPi-AMT_2026-10-19_10.00.00", {"REMIND_generic_SSP2-NPi-AMT.mif": "x"}
     )
+    statuses[later.name] = good_run()
     AmtState(
         runcode=".*-AMT_2026-10-18",
         last_commit="0000000",
@@ -1040,11 +1044,30 @@ def test_compare_with_an_archived_run_and_a_failed_run(
         evaluated(paths, shell)
     assert not any(call.argv[0] == "sbatch" for call in shell.calls)
     assert f"{earlier.name} is gone from output/ and archive/: not compared with" in caplog.text
+    # the newest earlier run that still exists is compared with, the stale entry skipped
+    older = make_run(
+        paths.archive_dir, "SSP2-NPi-AMT_2026-06-01_10.00.00", {"REMIND_generic_SSP2-NPi-AMT.mif": "x"}
+    )
+    state = AmtState.load(paths)
+    state.runs[older.name] = {"Conv": "converged", "Mif": "yes"}
+    state.save(paths)
+    shell.calls.clear()
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        evaluated(paths, shell)
+    sbatch = next(call for call in shell.calls if call.argv[0] == "sbatch")
+    assert sbatch.argv[2] == f"--job-name=comp_with_{older.name}"
+    assert f"{earlier.name} is gone from output/ and archive/: not compared with" in caplog.text
 
 
 @pytest.mark.usefixtures("clock", "quiet_tables")
 def test_runtime_regression_is_reported(
-    paths: AmtPaths, shell: FakeShell, statuses: dict[str, RunStatus], data_dir: Path
+    paths: AmtPaths,
+    shell: FakeShell,
+    statuses: dict[str, RunStatus],
+    data_dir: Path,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     current = make_run(
         paths.output_dir, "SSP2-NPi-AMT_2026-10-18_10.00.00", config="remind", stats="remind"
@@ -1053,6 +1076,7 @@ def test_runtime_regression_is_reported(
         paths.output_dir, "SSP2-NPi-AMT_2026-10-11_10.00.00", stats="remind"
     )  # the same 25 h: fine
     statuses[current.name] = good_run()
+    statuses[earlier.name] = good_run()  # the table is refreshed from disk (BUG-102)
     AmtState(
         runcode="SSP2-NPi-AMT_2026-10-18",
         last_commit="0000000",
@@ -1072,9 +1096,29 @@ def test_runtime_regression_is_reported(
     shutil.copy(data_dir / "types.rda", earlier / "runstatistics.rda")  # no stats list: no runtime
     text = evaluated(paths, shell, compare_scenarios=False)
     assert "Check runtime" not in text
-    (earlier / "runstatistics.rda").write_bytes(b"broken")
-    with pytest.raises(ModelstatsError, match="runtime of"):
-        evaluated(paths, shell, compare_scenarios=False)
+    (earlier / "runstatistics.rda").write_bytes(b"broken")  # BUG-070: R stopped; a warning, no runtime check
+    with caplog.at_level(logging.WARNING):
+        text = evaluated(paths, shell, compare_scenarios=False)
+    assert "Check runtime" not in text and "No runtime check" in caplog.text and earlier.name in caplog.text
+    for run in (current, earlier):  # compareScenarios still runs after the warning
+        (run / "REMIND_generic_SSP2-NPi-AMT.mif").write_text("x")
+    shell.calls.clear()
+    evaluated(paths, shell)
+    assert any(call.argv[0] == "sbatch" for call in shell.calls)
+    shutil.copy(data_dir / "runstatistics_remind.rda", earlier / "runstatistics.rda")
+    (current / "runstatistics.rda").unlink()  # the current run without stats: R stopped before the baseline
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        text = evaluated(paths, shell, compare_scenarios=False)
+    assert "Check runtime" not in text and "No runtime check" in caplog.text and current.name in caplog.text
+    # an atomic stats, or times that are not both datetimes: silently no runtime check (R stopped)
+    start = datetime(2026, 10, 18, 10, 0, tzinfo=BERLIN)
+    for stats in ([1.0, 2.0], {"timeGAMSStart": start, "timeGAMSEnd": None}, {"timeGAMSStart": start}):
+        monkeypatch.setattr(amt, "read_rda", lambda path, stats=stats: {"stats": stats})
+        caplog.clear()
+        with caplog.at_level(logging.WARNING):
+            text = evaluated(paths, shell, compare_scenarios=False)
+        assert "Check runtime" not in text and "No runtime check" not in caplog.text
 
 
 @pytest.mark.usefixtures("clock", "quiet_tables")
@@ -1215,10 +1259,11 @@ def test_runcode_is_required_and_validated(paths: AmtPaths, shell: FakeShell) ->
 
 
 @pytest.mark.usefixtures("clock", "quiet_tables")
-def test_known_runs_are_extended_not_recomputed(
+def test_known_runs_are_refreshed_and_never_forgotten(
     paths: AmtPaths, shell: FakeShell, statuses: dict[str, RunStatus], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    make_run(paths.output_dir, "old-AMT_2026-09-01_10.00.00")
+    make_run(paths.output_dir, "old-AMT_2026-09-01_10.00.00", config="remind")
+    statuses["old-AMT_2026-09-01_10.00.00"] = good_run(conv="not_converged")  # changed since stored
     make_run(paths.output_dir, "new-AMT_2026-10-18_10.00.00", config="remind")
     statuses["new-AMT_2026-10-18_10.00.00"] = good_run()
     asked: list[str] = []
@@ -1235,12 +1280,20 @@ def test_known_runs_are_extended_not_recomputed(
     AmtState(
         runcode="new-AMT",
         last_commit="0000000",
-        runs={"old-AMT_2026-09-01_10.00.00": {"Conv": "converged", "Mif": "yes"}},
+        runs={
+            "old-AMT_2026-09-01_10.00.00": {"Conv": "converged", "Mif": "yes"},
+            "gone-AMT_2026-08-01_10.00.00": {"Conv": "converged", "Mif": "yes"},  # archived meanwhile
+            "broken": {"Conv": "converged", "Mif": "yes"},  # cannot be read any more
+        },
     ).save(paths)
     evaluated(paths, shell)
-    assert "old-AMT_2026-09-01_10.00.00" not in asked
+    assert asked.count("old-AMT_2026-09-01_10.00.00") == 1  # BUG-102: every folder is read again
     assert "broken" in asked  # BUG-070: skipped, not fatal
-    assert AmtState.load(paths).runs["new-AMT_2026-10-18_10.00.00"] == {"Conv": "converged", "Mif": "yes"}
+    runs = AmtState.load(paths).runs
+    assert runs["old-AMT_2026-09-01_10.00.00"] == {"Conv": "not_converged", "Mif": "yes"}  # refreshed
+    assert runs["gone-AMT_2026-08-01_10.00.00"] == {"Conv": "converged", "Mif": "yes"}  # never forgotten
+    assert runs["new-AMT_2026-10-18_10.00.00"] == {"Conv": "converged", "Mif": "yes"}
+    assert runs["broken"] == {"Conv": "converged", "Mif": "yes"}  # unreadable: the entry stays (BUG-070)
 
 
 @pytest.mark.usefixtures("clock")

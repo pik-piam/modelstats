@@ -236,7 +236,7 @@ def test_t_lists_the_latest_amts(
     # "-tb" is not the AMT branch: R tested for "-t" before stripping the b (BUG-064), so it ends up
     # searching for the pattern "-t" and then for the runs of a user called "-t"
     prompt_and_run("-tb", user="10-11")
-    assert ["squeue", "-h", "-o", "%j", "-u", "-t"] in shell.argvs
+    assert ["squeue", "-u", "-t", "-h", "-o", "%j"] in shell.argvs
 
 
 @pytest.mark.usefixtures("clock")
@@ -368,7 +368,7 @@ def test_pattern_falls_back_to_the_user(
         "! No runs found for this user. You can change the reporting period (here: 5 days) "
         "by running 'rs2 -c nomatch 5",
     ]
-    assert shell.argvs[0] == ["squeue", "-h", "-o", "%Z", "-u", "nomatch"]
+    assert shell.argvs[0] == ["squeue", "-u", "nomatch", "-h", "-o", "%Z"]
     assert shell.argvs[2] == _shell.sacct_argv("nomatch", date(2026, 10, 16), "WorkDir")
     assert calls == []
     run = make_run(main_folder, "elsewhere")

@@ -99,15 +99,15 @@ def lines(argv: Sequence[str], *, cwd: Path | None = None) -> list[str]:
 
 
 def squeue_argv(fmt: str, *, user: str | None = None) -> list[str]:
-    """``squeue -h -o FMT [-u USER]`` (USER may be a comma separated list)."""
-    argv = ["squeue", "-h", "-o", fmt]
+    """``squeue [-u USER] -h -o FMT`` (USER may be a comma separated list), in R's argument order."""
+    argv = ["squeue"]
     if user:
         argv += ["-u", user]
-    return argv
+    return [*argv, "-h", "-o", fmt]
 
 
 def squeue(fmt: str, *, user: str | None = None) -> list[str]:
-    """The lines of ``squeue -h -o FMT [-u USER]``."""
+    """The lines of ``squeue [-u USER] -h -o FMT``."""
     return lines(squeue_argv(fmt, user=user))
 
 

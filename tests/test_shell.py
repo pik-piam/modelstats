@@ -59,7 +59,7 @@ def test_squeue_and_sacct_argument_lists(monkeypatch: pytest.MonkeyPatch) -> Non
     assert _shell.sacct_argv("alice", date(2026, 10, 15), "WorkDir") == seen[2]
     assert seen == [
         ["squeue", "-h", "-o", "%Z"],
-        ["squeue", "-h", "-o", "%j", "-u", "alice,bob"],
+        ["squeue", "-u", "alice,bob", "-h", "-o", "%j"],
         [
             "sacct",
             "-u",

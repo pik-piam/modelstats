@@ -126,8 +126,8 @@ def test_current_runs(tmp_path: Path, shell: FakeShell, clock: object) -> None:
     )
     assert current_run_dirs("alice") == [coupled, run]  # run order (BUG-054)
     assert shell.argvs == [
-        ["squeue", "-h", "-o", "%Z", "-u", "alice"],
-        ["squeue", "-h", "-o", "%j", "-u", "alice"],
+        ["squeue", "-u", "alice", "-h", "-o", "%Z"],
+        ["squeue", "-u", "alice", "-h", "-o", "%j"],
     ]
 
 
@@ -265,7 +265,7 @@ def test_current_option(
     shell.squeue_answers.extend([[str(output / "PkBudg500")], ["PkBudg500"]])
     assert main(["-C", "-u", "bob"]) == 0
     assert names(calls) == ["PkBudg500"] and calls["user"] == "bob"
-    assert shell.argvs[-1] == ["squeue", "-h", "-o", "%j", "-u", "bob"]
+    assert shell.argvs[-1] == ["squeue", "-u", "bob", "-h", "-o", "%j"]
 
 
 def test_amt_option(
@@ -392,6 +392,21 @@ def test_stdout_carries_only_the_table(
     assert "1: output/archive" in err.lines and err.lines[-2].endswith("Selected: output/archive")
 
 
+def test_prompt_reads_one_line_of_stdin_per_prompt(
+    output: Path,
+    calls: dict[str, Any],
+    shell: FakeShell,
+    err: CapturedConsole,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("p\nPkBudg\n"))  # BUG-106: R's getLine() lost the 2nd line
+    assert main(["-p"]) == 0
+    assert names(calls) == ["PkBudg500", "PkBudg1000"]
+    monkeypatch.setattr(sys, "stdin", io.StringIO("9\n3\n"))  # an answer out of range, then the second line
+    assert main(["-p"]) == 0
+    assert names(calls) == ["C_SSP2-rem-2"]
+
+
 def test_bracketed_folder_names_in_the_prompt(
     output: Path, shell: FakeShell, err: CapturedConsole, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -462,7 +477,7 @@ def test_amt_with_current_asks_for_the_current_user(
     monkeypatch.setattr(_shell, "AMT_RUNCODE", data_dir / "runcode.rds")
     monkeypatch.setattr(_shell, "AMT_OUTPUT", output)
     assert main(["-A", "-C"]) == 0  # BUG-075
-    assert shell.argvs[0] == ["squeue", "-h", "-o", "%Z", "-u", "alice"]
+    assert shell.argvs[0] == ["squeue", "-u", "alice", "-h", "-o", "%Z"]
 
 
 def test_sanity_ignores_nocolor(
@@ -511,7 +526,7 @@ def test_empty_user_means_the_current_user(
 ) -> None:
     shell.squeue_answers.extend([[str(output / "PkBudg500")], ["PkBudg500"]])
     assert main(["-C", "-u", ""]) == 0  # BUG-075
-    assert shell.argvs[0] == ["squeue", "-h", "-o", "%Z", "-u", "alice"]
+    assert shell.argvs[0] == ["squeue", "-u", "alice", "-h", "-o", "%Z"]
     assert calls["user"] == "alice"
 
 
@@ -604,7 +619,7 @@ def test_bundled_short_options(
     assert main(["-Cd2"]) == 0  # BUG-051: optparse read -2 here
     assert shell.argvs[2][:3] == ["sacct", "-u", "alice"]
     assert main(["-Cubob"]) == 0
-    assert shell.argvs[-1][-1] == "bob"
+    assert shell.argvs[-1][1:3] == ["-u", "bob"]
 
 
 def test_posix_classes_are_an_error(

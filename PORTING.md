@@ -238,7 +238,7 @@ monkeypatch its functions (`monkeypatch.setattr(_shell, "lines", fake)`).
 def run(argv: Sequence[str], *, cwd: Path | None = None, check: bool = False,
         input: str | None = None) -> subprocess.CompletedProcess[str]       # text=True, capture_output=True
 def lines(argv: Sequence[str], *, cwd: Path | None = None) -> list[str]    # stdout.splitlines(); [] on failure
-def squeue_argv(fmt: str, *, user: str | None = None) -> list[str]         # ["squeue", "-h", "-o", fmt] (+ ["-u", user])
+def squeue_argv(fmt: str, *, user: str | None = None) -> list[str]         # ["squeue", ("-u", user,) "-h", "-o", fmt] — R's order
 def squeue(fmt: str, *, user: str | None = None) -> list[str]              # lines(squeue_argv(...))
 def sacct_argv(user: str, since: date, fmt: str) -> list[str]              # -s cd,f,cancelled,timeout,oom -S <since> -E now -P -n --format <fmt>
 def sacct(user: str, since: date, fmt: str) -> list[str]                   # lines(sacct_argv(...))
@@ -318,7 +318,7 @@ Everything that sorts run folders calls `sorted(paths, key=run_sort_key)`; nothi
 
 Decision: **port the input grammar** (later task: a typer/rich prompt, see PORTING-TASKS.md).
 
-An invalid answer (a number out of range, `1 2`, a lone `,`, a pattern that does not compile) asks again; an
+An invalid answer (a number out of range, a descending range `3-2`, `1 2`, a lone `,`, a pattern that does not compile) asks again; an
 empty answer selects nothing. An answer of digits, `,`, `:`, `-` and blanks only is read as numbers, never as a
 pattern (`2026-10-18` asks again, `2026-10-18_` is a pattern).
 
@@ -327,9 +327,12 @@ def choose_from_list(items: Sequence[str], *, kind: str = "folders",
                      read: Callable[[str], str] = input, out: Console | None = None) -> list[str]   # None: _console.err at call time
 ```
 
-Prints `1: item` lines, prompts `Choose <kind> (numbers, ranges 1-3, comma lists, 'all', a regex; empty = none): `,
+Prints `1: item` lines, prompts `Choose <kind> (numbers, ranges 1-3, comma lists, 'all'/'a', 'p'/'f' for a pattern prompt, a regex; empty = none): `,
 reads **one line per prompt**, accepts a number, a range `1-4` or `1:4` (spaces allowed around the numbers),
-a comma list `2,5`, `all`, or any other text as a regular expression over the items. Returns the chosen items
+a comma list `2,5`, `all` (or `a`, the shortcut `gms::chooseFromList` printed as `1,a: all`, alone or in a list
+such as `2,a`; a number out of range asks again), a lone `p`/`f` (a second prompt asks for a regular expression /
+a fixed string until it compiles, as in R, without R's match list and confirmation; an empty pattern or the end
+of the input selects nothing), or any other text as a regular expression over the items. Returns the chosen items
 in list order.
 
 ### 3.9 `_timefmt.py` — `lubridate::make_difftime`, `piamutils::niceround`, R number formatting
